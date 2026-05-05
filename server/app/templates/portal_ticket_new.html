@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}New {{ "Issue" if ticket_kind == "incident" else "Service Request" }} — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{% if ticket_kind == "incident" %}Report an Issue{% else %}Request Service{% endif %}</h1>
+  <p class="meta">{% if ticket_kind == "incident" %}Tell us what's broken or behaving unexpectedly.{% else %}Tell us what you need.{% endif %}</p>
+</section>
+
+<form method="post" action="/portal/new" class="card form">
+  <label>Subject
+    <input type="text" name="title" required maxlength="255" placeholder="One-line summary">
+  </label>
+
+  <label>Category
+    <select name="category_id" required>
+      <option value="">Choose…</option>
+      {% for c in categories %}
+      <option value="{{ c.id }}">{{ c.name }}{% if c.requires_approval %} (approval required){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Details
+    <textarea name="description" rows="6" placeholder="The more context you give us, the faster we can help."></textarea>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Submit</button>
+    <a href="/portal" class="link-button">Cancel</a>
+  </div>
+</form>
+{% endblock %}

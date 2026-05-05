@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket_number }} — {{ ticket.title }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ ticket.ticket_number }} <span class="meta-inline">·</span> {{ ticket.title }}</h1>
+      <p class="meta">
+        {{ ticket.kind.value.replace("_", " ") | capitalize }}
+        · {{ ticket.category.name }}
+        · created {{ ticket.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ ticket.reporter.display_name if ticket.reporter else "—" }}
+      </p>
+    </div>
+    <div class="ticket-meta">
+      <span class="prio prio-{{ ticket.priority.value }}">priority: {{ ticket.priority.value }}</span>
+      <span class="status status-{{ ticket.status.value }}">status: {{ ticket.status.value.replace("_", " ") }}</span>
+    </div>
+  </div>
+</section>
+
+<section class="cards">
+  <div class="card">
+    <h3>SLA</h3>
+    {% set resp = time_to_breach(ticket.due_response_at) %}
+    {% set resol = time_to_breach(ticket.due_resolution_at) %}
+    <dl>
+      <dt>Response by</dt><dd>{% if ticket.due_response_at %}{{ ticket.due_response_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>First response</dt><dd>{% if ticket.first_response_at %}{{ ticket.first_response_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}<span class="{% if resp[1] %}breach{% endif %}">{{ resp[0] }}</span>{% endif %}</dd>
+      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Resolved</dt><dd>{% if ticket.resolved_at %}{{ ticket.resolved_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}<span class="{% if resol[1] %}breach{% endif %}">{{ resol[0] }}</span>{% endif %}</dd>
+    </dl>
+  </div>
+
+  {% if not portal %}
+  <div class="card">
+    <h3>Assignment</h3>
+    <form method="post" action="/tickets/{{ ticket.id }}/assign" class="inline-form-stack">
+      <select name="assignee_id">
+        <option value="">— Unassigned —</option>
+        {% for s in staff %}
+        <option value="{{ s.id }}" {% if ticket.assignee_id == s.id %}selected{% endif %}>{{ s.display_name }} ({{ s.role.value }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Assign</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Status</h3>
+    <form method="post" action="/tickets/{{ ticket.id }}/status" class="inline-form-stack">
+      <select name="new_status">
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if ticket.status.value == s %}selected{% endif %}>{{ s.replace("_", " ") }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Set status</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Priority</h3>
+    <form method="post" action="/tickets/{{ ticket.id }}/priority" class="inline-form-stack">
+      <select name="new_priority">
+        {% for p in priorities %}
+        <option value="{{ p }}" {% if ticket.priority.value == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Set priority</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Description</h2>
+  <div class="card prose">{{ ticket.description or "(no description)" }}</div>
+</section>
+
+<section>
+  <h2>Conversation</h2>
+  {% for c in ticket.comments %}
+  <div class="comment {% if c.is_internal %}internal{% endif %}">
+    <div class="comment-head">
+      <strong>{{ c.author.display_name if c.author else "—" }}</strong>
+      <span class="meta-inline">·</span>
+      <span>{{ c.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+      {% if c.is_internal %}<span class="tag-internal">internal note</span>{% endif %}
+    </div>
+    <div class="comment-body prose">{{ c.body }}</div>
+  </div>
+  {% else %}
+  <p class="meta">No comments yet.</p>
+  {% endfor %}
+
+  <form method="post" action="{% if portal %}/portal/ticket/{{ ticket.id }}/comment{% else %}/tickets/{{ ticket.id }}/comment{% endif %}" class="card form">
+    <label>Add a comment
+      <textarea name="body" rows="4" required placeholder="Reply, status update, or note"></textarea>
+    </label>
+    {% if not portal %}
+    <label class="checkbox">
+      <input type="checkbox" name="is_internal" value="1">
+      Internal note (not shown in the end-user portal)
+    </label>
+    {% endif %}
+    <div class="form-actions">
+      <button type="submit" class="primary">Post comment</button>
+    </div>
+  </form>
+</section>
+
+{% if not portal %}
+<section>
+  <h2>Audit log</h2>
+  {% if ticket.events %}
+  <table class="data audit">
+    <thead><tr><th>When</th><th>Who</th><th>Event</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for e in ticket.events %}
+      <tr>
+        <td>{{ e.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ e.actor.display_name if e.actor else "system" }}</td>
+        <td>{{ e.kind.value.replace("_", " ") }}</td>
+        <td>
+          {% if e.before_value %}<code>before: {{ e.before_value }}</code>{% endif %}
+          {% if e.after_value %}<code>after: {{ e.after_value }}</code>{% endif %}
+          {% if e.note %}<em>{{ e.note }}</em>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">No events yet.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

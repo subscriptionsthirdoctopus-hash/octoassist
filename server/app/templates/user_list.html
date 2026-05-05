@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Users — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Users</h1>
+  <p class="meta">Admin-provisioned. End-users can log into the portal to file their own tickets.</p>
+</section>
+
+{% if created_email and created_password %}
+<div class="alert success">
+  <strong>User created.</strong> Share these credentials with <code>{{ created_email }}</code> over a secure channel — they will not be shown again.<br>
+  Temporary password: <code>{{ created_password }}</code>
+</div>
+{% endif %}
+
+<div class="card form">
+  <h3>Create a user</h3>
+  <form method="post" action="/users/new" class="row-form">
+    <label>Email
+      <input type="email" name="email" required>
+    </label>
+    <label>Full name
+      <input type="text" name="full_name">
+    </label>
+    <label>Role
+      <select name="role" required>
+        {% for r in roles %}
+        <option value="{{ r }}" {% if r == "requester" %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Create</button>
+  </form>
+</div>
+
+<table class="data">
+  <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead>
+  <tbody>
+    {% for u in rows %}
+    <tr class="{% if not u.is_active %}row-disabled{% endif %}">
+      <td>{{ u.email }}</td>
+      <td>{{ u.full_name or "—" }}</td>
+      <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
+      <td>{{ "active" if u.is_active else "disabled" }}</td>
+      <td>{% if u.last_login_at %}{{ u.last_login_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</td>
+      <td>
+        {% if u.id != current_user.id %}
+          {% if u.is_active %}
+          <form method="post" action="/users/{{ u.id }}/deactivate" class="inline-form">
+            <button type="submit" class="link-button">deactivate</button>
+          </form>
+          {% else %}
+          <form method="post" action="/users/{{ u.id }}/activate" class="inline-form">
+            <button type="submit" class="link-button">activate</button>
+          </form>
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

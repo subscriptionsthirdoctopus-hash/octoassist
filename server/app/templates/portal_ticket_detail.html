@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket_number }} — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ ticket.ticket_number }} <span class="meta-inline">·</span> {{ ticket.title }}</h1>
+      <p class="meta">{{ ticket.kind.value.replace("_", " ") | capitalize }} · {{ ticket.category.name }} · created {{ ticket.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</p>
+    </div>
+    <div class="ticket-meta">
+      <span class="status status-{{ ticket.status.value }}">{{ ticket.status.value.replace("_", " ") }}</span>
+    </div>
+  </div>
+</section>
+
+<section class="cards">
+  <div class="card">
+    <h3>Status</h3>
+    <p>{{ ticket.status.value.replace("_", " ") | capitalize }}</p>
+    {% if ticket.assignee %}<p class="meta">Handled by {{ ticket.assignee.display_name }}</p>{% endif %}
+  </div>
+  <div class="card">
+    <h3>SLA</h3>
+    {% set ttb = time_to_breach(ticket.due_resolution_at) %}
+    <dl>
+      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Time remaining</dt><dd class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <h2>What you wrote</h2>
+  <div class="card prose">{{ ticket.description or "(no details)" }}</div>
+</section>
+
+<section>
+  <h2>Conversation</h2>
+  {% for c in ticket.comments if not c.is_internal %}
+  <div class="comment">
+    <div class="comment-head">
+      <strong>{{ c.author.display_name if c.author else "—" }}</strong>
+      <span class="meta-inline">·</span>
+      <span>{{ c.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+    </div>
+    <div class="comment-body prose">{{ c.body }}</div>
+  </div>
+  {% else %}
+  <p class="meta">No replies yet.</p>
+  {% endfor %}
+
+  <form method="post" action="/portal/ticket/{{ ticket.id }}/comment" class="card form">
+    <label>Add a comment
+      <textarea name="body" rows="4" required></textarea>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Post comment</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

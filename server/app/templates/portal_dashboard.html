@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}My Tickets — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>My Tickets</h1>
+      <p class="meta">Welcome, {{ current_user.full_name or current_user.email }}. Below are tickets you've logged.</p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/portal/new?kind=incident">+ Report an Issue</a>
+      <a class="button" href="/portal/new?kind=service_request">+ Request Service</a>
+    </div>
+  </div>
+</section>
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Resolve by</th></tr></thead>
+  <tbody>
+    {% for t in rows %}
+    {% set ttb = time_to_breach(t.due_resolution_at) %}
+    <tr>
+      <td><a href="/portal/ticket/{{ t.id }}">{{ t.ticket_number }}</a></td>
+      <td>{{ t.title }}</td>
+      <td>{{ t.kind.value.replace("_", " ") }}</td>
+      <td><span class="status status-{{ t.status.value }}">{{ t.status.value.replace("_", " ") }}</span></td>
+      <td class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>You haven't logged any tickets yet</h2>
+  <p>Use the buttons above to report an issue or request something.</p>
+</div>
+{% endif %}
+{% endblock %}
