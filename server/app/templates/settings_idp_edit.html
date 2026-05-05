@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ idp.display_name }} — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{{ idp.display_name }}</h1>
+  <p class="meta">
+    <a href="/settings">← Back to Settings</a>
+    · Type: {{ idp.kind.value }}
+    · Status: {% if idp.is_enabled %}<span class="status status-resolved">enabled</span>{% else %}<span class="status status-on_hold">disabled</span>{% endif %}
+  </p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+{% if not is_https %}
+<div class="alert error">
+  This server is on plain HTTP. Microsoft Entra ID will reject the redirect URI shown below until you switch to HTTPS.
+</div>
+{% endif %}
+
+<section class="cards">
+  <div class="card">
+    <h3>What to paste into Azure portal</h3>
+    <dl>
+      <dt>Redirect URI</dt><dd><code>{{ redirect_uri }}</code></dd>
+      <dt>Sign-out URL</dt><dd><code>{{ redirect_uri.rsplit('/auth/', 1)[0] }}/login</code></dd>
+      <dt>Token type</dt><dd>ID tokens (used by hybrid flow / authorization code)</dd>
+    </dl>
+    <p class="meta">Step-by-step setup: see <code>docs/SSO-ENTRA-SETUP.md</code> in the repo.</p>
+  </div>
+
+  {% if idp.last_test_at %}
+  <div class="card">
+    <h3>Last test</h3>
+    <p>
+      {% if idp.last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
+      at {{ idp.last_test_at.strftime("%Y-%m-%d %H:%M UTC") }}
+    </p>
+    {% if idp.last_test_message %}<pre class="code">{{ idp.last_test_message }}</pre>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<form method="post" action="/settings/idp/{{ idp.id }}/save" class="card form" autocomplete="off">
+  <h3>Provider configuration</h3>
+
+  <label>Display name <span class="meta">(text shown on the login button)</span>
+    <input type="text" name="display_name" value="{{ idp.display_name }}" required>
+  </label>
+
+  <label>Entra Tenant ID <span class="meta">(GUID like <code>00000000-0000-0000-0000-000000000000</code>, or domain like <code>thirdoctopus.onmicrosoft.com</code>)</span>
+    <input type="text" name="entra_tenant_id" value="{{ idp.config.get('entra_tenant_id', '') }}" required>
+  </label>
+
+  <label>Application (client) ID
+    <input type="text" name="client_id" value="{{ idp.config.get('client_id', '') }}" required>
+  </label>
+
+  <label>Client secret <span class="meta">(leave blank to keep the current secret)</span>
+    <input type="password" name="client_secret" value="" autocomplete="new-password" placeholder="{% if idp.config.get('client_secret') %}•••• already stored — paste new secret to rotate{% else %}paste secret value here{% endif %}">
+  </label>
+
+  <label>Allowed email domains <span class="meta">(comma-separated, blank = allow all)</span>
+    <input type="text" name="allowed_email_domains" value="{{ idp.config.get('allowed_email_domains', '') }}" placeholder="thirdoctopus.com, tema.in">
+  </label>
+
+  <h3>Provisioning</h3>
+
+  <label class="checkbox">
+    <input type="checkbox" name="auto_provision" value="1" {% if idp.auto_provision %}checked{% endif %}>
+    Auto-create OctoAssist users on first sign-in
+  </label>
+
+  <label>Default role for auto-provisioned users
+    <select name="default_role">
+      {% for r in roles %}
+      <option value="{{ r }}" {% if idp.default_role.value == r %}selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <h3>Activation</h3>
+
+  <label class="checkbox">
+    <input type="checkbox" name="is_enabled" value="1" {% if idp.is_enabled %}checked{% endif %}>
+    Enable — show "Sign in with {{ idp.display_name }}" on the login page
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Save</button>
+    <a href="/settings" class="link-button">Cancel</a>
+  </div>
+</form>
+
+<form method="post" action="/settings/idp/{{ idp.id }}/test" class="inline-form">
+  <button type="submit">Test connection</button>
+</form>
+
+<form method="post" action="/settings/idp/{{ idp.id }}/delete" class="inline-form" onsubmit="return confirm('Delete this provider? Users will lose SSO access.');">
+  <button type="submit" class="link-button" style="color: var(--red);">Delete provider</button>
+</form>
+{% endblock %}

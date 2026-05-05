@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User, UserRole
+from ..models import IdentityProvider, User, UserRole
 from ..security import verify_password
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -30,11 +30,24 @@ def _landing_for(user: User) -> str:
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, next: str | None = None, error: str | None = None):
+def login_form(
+    request: Request,
+    next: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
+    enabled_idps = (db.query(IdentityProvider)
+                      .filter(IdentityProvider.is_enabled == True)  # noqa: E712
+                      .order_by(IdentityProvider.display_name).all())
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"next": next or "", "error": error, "tenant": None},
+        context={
+            "next": next or "",
+            "error": error,
+            "tenant": None,
+            "enabled_idps": enabled_idps,
+        },
     )
 
 
@@ -53,10 +66,14 @@ def login_submit(
         user = db.query(User).filter(User.email == email.strip()).first()
 
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
+        enabled_idps = (db.query(IdentityProvider)
+                          .filter(IdentityProvider.is_enabled == True)  # noqa: E712
+                          .order_by(IdentityProvider.display_name).all())
         return templates.TemplateResponse(
             request=request,
             name="login.html",
-            context={"next": next or "", "error": "Invalid email or password.", "tenant": None},
+            context={"next": next or "", "error": "Invalid email or password.",
+                     "tenant": None, "enabled_idps": enabled_idps},
             status_code=401,
         )
 

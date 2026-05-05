@@ -20,6 +20,7 @@
           <a href="/enrolment">Enrolment</a>
           {% if current_user.role.value == 'admin' %}
             <a href="/users">Users</a>
+            <a href="/settings">Settings</a>
           {% endif %}
         {% else %}
           <a href="/portal">My Tickets</a>

@@ -289,6 +289,32 @@ button.primary:hover, .button.primary:hover { background: #1c3760; }
 .auth-card input { padding: 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 14px; }
 .auth-card .meta { color: var(--slate); margin-top: 16px; font-size: 12px; }
 
+.sso-buttons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.sso-buttons .button.sso {
+  text-align: center;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.auth-divider {
+  text-align: center;
+  margin: 12px 0;
+  color: var(--slate);
+  font-size: 12px;
+  position: relative;
+}
+.auth-divider:before, .auth-divider:after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 42%;
+  height: 1px;
+  background: var(--line);
+}
+.auth-divider:before { left: 0; }
+.auth-divider:after  { right: 0; }
+.auth-divider span { background: white; padding: 0 8px; }
+
 /* ---------- Code blocks ---------- */
 code, pre.code {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;

@@ -5,15 +5,27 @@
 <section class="auth-card">
   <h1>Sign in to OctoAssist</h1>
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+  {% if enabled_idps %}
+  <div class="sso-buttons">
+    {% for i in enabled_idps %}
+    <a class="button sso primary" href="/auth/oidc/{{ i.id }}/start{% if next %}?next={{ next }}{% endif %}">
+      Sign in with {{ i.display_name }}
+    </a>
+    {% endfor %}
+  </div>
+  <div class="auth-divider"><span>or</span></div>
+  {% endif %}
+
   <form method="post" action="/login">
     <label>Email
-      <input type="text" name="email" autocomplete="username" required autofocus>
+      <input type="text" name="email" autocomplete="username" required {% if not enabled_idps %}autofocus{% endif %}>
     </label>
     <label>Password
       <input type="password" name="password" autocomplete="current-password" required>
     </label>
     <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit" class="primary">Sign in</button>
+    <button type="submit" class="primary">Sign in with password</button>
   </form>
   <p class="meta">Need an account? Ask your OctoAssist administrator to provision one.</p>
 </section>

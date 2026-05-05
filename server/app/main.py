@@ -14,6 +14,8 @@ from . import seed
 from .web.views import router as web_router
 from .web.views_login import router as login_router
 from .web.views_portal import router as portal_router
+from .web.views_settings import router as settings_router
+from .web.views_sso import router as sso_router
 from .web.views_tickets import router as tickets_router
 from .web.views_users import router as users_router
 
@@ -43,9 +45,11 @@ app.include_router(agent_router)        # /api/v1/agent/*  — Bearer auth (used
 
 # Browser routes
 app.include_router(login_router)        # /login, /logout
+app.include_router(sso_router)          # /auth/oidc/{idp_id}/{start,callback}
 app.include_router(web_router)          # /, /assets, /asset/{id}, /enrolment
 app.include_router(tickets_router)      # /tickets, /tickets/{id}, ...
 app.include_router(users_router)        # /users, /users/new
+app.include_router(settings_router)     # /settings, /settings/idp/*
 app.include_router(portal_router)       # /portal, /portal/...
 
 

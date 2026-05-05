@@ -272,3 +272,51 @@ class TicketEvent(Base):
     __table_args__ = (
         Index("ix_ticket_events_ticket_created", "ticket_id", "created_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — Identity providers (SSO)
+# ---------------------------------------------------------------------------
+
+class IdentityProviderKind(str, enum.Enum):
+    entra = "entra"   # Microsoft Entra ID (Azure AD / M365)
+    # future: ldap (on-prem AD), google, okta
+
+
+class IdentityProvider(Base):
+    """An external identity provider configured for this tenant.
+
+    For Entra ID, `config` carries:
+      - entra_tenant_id  (AAD directory tenant — GUID or domain)
+      - client_id        (app registration's Application (client) ID)
+      - client_secret    (secret value — stored plain; rotate via the UI)
+      - allowed_email_domains  (CSV; "" means "no domain check")
+    """
+    __tablename__ = "identity_providers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[IdentityProviderKind] = mapped_column(
+        Enum(IdentityProviderKind, name="identity_provider_kind"),
+        nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False, default="Microsoft Entra ID")
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    auto_provision: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    default_role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, name="user_role"),
+        nullable=False,
+        default=UserRole.requester,
+    )
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    tenant: Mapped[Tenant] = relationship()
+
+    __table_args__ = (
+        Index("ix_identity_providers_tenant_enabled", "tenant_id", "is_enabled"),
+    )

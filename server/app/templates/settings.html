@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Settings — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Settings</h1>
+  <p class="meta">Tenant: {{ tenant.name }}</p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+
+{% if not is_https %}
+<div class="alert error">
+  <strong>HTTPS required for SSO.</strong> Microsoft Entra ID rejects redirect URIs that aren't HTTPS (except <code>localhost</code>). You can configure SSO here, but real sign-ins will not complete until OctoAssist is served over HTTPS. The recommended path is the subdomain + Let's Encrypt route described in <code>docs/COHOST-DEPLOYMENT.md</code>.
+</div>
+{% endif %}
+
+<section>
+  <h2>Single sign-on (SSO)</h2>
+  <p class="meta">
+    Configure an external identity provider so users sign in with their corporate Microsoft accounts
+    instead of an OctoAssist password. Auto-provisioning creates an OctoAssist user the first time
+    they sign in, with a default role you choose below.
+  </p>
+
+  {% if idps %}
+  <table class="data">
+    <thead>
+      <tr><th>Provider</th><th>Type</th><th>Status</th><th>Last test</th><th>Auto-provision</th><th>Default role</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for i in idps %}
+      <tr>
+        <td><a href="/settings/idp/{{ i.id }}">{{ i.display_name }}</a></td>
+        <td>{{ i.kind.value }}</td>
+        <td>{% if i.is_enabled %}<span class="status status-resolved">enabled</span>{% else %}<span class="status status-on_hold">disabled</span>{% endif %}</td>
+        <td>
+          {% if i.last_test_at %}
+            {% if i.last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
+            <span class="meta-inline">·</span>
+            {{ i.last_test_at.strftime("%Y-%m-%d %H:%M UTC") }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ "yes" if i.auto_provision else "no" }}</td>
+        <td>{{ i.default_role.value }}</td>
+        <td><a href="/settings/idp/{{ i.id }}" class="link-button">configure</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <p>No identity providers configured yet.</p>
+  </div>
+  {% endif %}
+
+  <div class="cards" style="margin-top:16px;">
+    <div class="card">
+      <h3>Microsoft Entra ID</h3>
+      <p>Sign in with M365 / Azure AD (Entra ID). OIDC Authorization Code flow.</p>
+      <form method="post" action="/settings/idp/entra/new" class="inline-form">
+        <button type="submit" class="primary">+ Add Entra ID</button>
+      </form>
+    </div>
+    <div class="card">
+      <h3>On-prem Active Directory (LDAP)</h3>
+      <p class="meta">Coming in a later phase. Requires network reachability from this server to TEMA's domain controllers (LDAP/LDAPS port 389/636).</p>
+      <button class="button" disabled>Not yet available</button>
+    </div>
+    <div class="card">
+      <h3>Other (Google, Okta, …)</h3>
+      <p class="meta">Generic OIDC providers planned. Open a request and tell us which one.</p>
+      <button class="button" disabled>Not yet available</button>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Tenant</h2>
+  <div class="card">
+    <dl>
+      <dt>Name</dt><dd>{{ tenant.name }}</dd>
+      <dt>Created</dt><dd>{{ tenant.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+      <dt>Enrolment key</dt><dd><code>{{ tenant.enrolment_key }}</code></dd>
+    </dl>
+  </div>
+</section>
+{% endblock %}
