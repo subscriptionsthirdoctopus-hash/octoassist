@@ -45,10 +45,11 @@ services:
       OCTOASSIST_BIND_PORT: "8080"
       OCTOASSIST_TENANT_NAME: ${TENANT_NAME:-TEMA India Pvt. Ltd.}
     ports:
-      # Bind to loopback only — accessible from droplet itself + SSH tunnel.
-      # NOT public-internet exposed. The subdomain reverse-proxy is added
-      # later via the HRMS nginx container.
-      - "127.0.0.1:8088:8080"
+      # Public HTTP on TCP/8088. WARNING: HTTP Basic over plaintext —
+      # admin password transits in clear text. Acceptable for early demo;
+      # switch to loopback ("127.0.0.1:8088:8080") and add HTTPS via the
+      # HRMS nginx (subdomain) before any real production use.
+      - "8088:8080"
     networks:
       - octoassist-network
     healthcheck:
