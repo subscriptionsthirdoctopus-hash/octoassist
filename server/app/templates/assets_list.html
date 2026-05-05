@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Asset Register — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Asset Register</h1>
+  <p class="meta">{{ agent_count }} endpoint{{ "" if agent_count == 1 else "s" }} reporting{% if tenant %} • {{ tenant.name }}{% endif %}</p>
+</section>
+
+{% if rows %}
+<table class="data">
+  <thead>
+    <tr>
+      <th>Hostname</th>
+      <th>Operating System</th>
+      <th>CPU</th>
+      <th>RAM</th>
+      <th>Logged-in User</th>
+      <th>Software</th>
+      <th>Last Seen</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><a href="/asset/{{ r.id }}">{{ r.hostname }}</a></td>
+      <td>{{ r.os }}</td>
+      <td>{{ r.cpu }}</td>
+      <td>{% if r.ram_gb %}{{ "%.1f"|format(r.ram_gb) }} GB{% else %}—{% endif %}</td>
+      <td>{{ r.logged_in_user }}</td>
+      <td>{{ r.software_count }}</td>
+      <td>{% if r.last_seen_at %}{{ r.last_seen_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No endpoints yet</h2>
+  <p>Visit <a href="/enrolment">Enrolment</a> for the agent enrolment key and install instructions.</p>
+</div>
+{% endif %}
+{% endblock %}

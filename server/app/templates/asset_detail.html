@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ agent.hostname }} — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{{ agent.hostname }}</h1>
+  <p class="meta">
+    Machine ID: <code>{{ agent.machine_id }}</code> •
+    Registered: {{ agent.registered_at.strftime("%Y-%m-%d %H:%M UTC") }} •
+    Last seen: {% if agent.last_seen_at %}{{ agent.last_seen_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}
+  </p>
+</section>
+
+{% if not snapshot %}
+<div class="empty"><p>No check-in received yet from this agent.</p></div>
+{% else %}
+
+<section class="cards">
+  <div class="card">
+    <h3>Operating System</h3>
+    <dl>
+      <dt>Caption</dt><dd>{{ snapshot.os.caption or "—" }}</dd>
+      <dt>Version</dt><dd>{{ snapshot.os.version or "—" }}</dd>
+      <dt>Build</dt><dd>{{ snapshot.os.build_number or "—" }}</dd>
+      <dt>Architecture</dt><dd>{{ snapshot.os.architecture or "—" }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3>System</h3>
+    <dl>
+      <dt>Manufacturer</dt><dd>{{ snapshot.system.manufacturer or "—" }}</dd>
+      <dt>Model</dt><dd>{{ snapshot.system.model or "—" }}</dd>
+      <dt>Serial</dt><dd>{{ snapshot.bios.serial or "—" }}</dd>
+      <dt>Logged-in user</dt><dd>{{ snapshot.logged_in_user or "—" }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3>CPU & Memory</h3>
+    <dl>
+      <dt>CPU</dt><dd>{{ snapshot.cpu.name or "—" }}</dd>
+      <dt>Cores</dt><dd>{{ snapshot.cpu.cores or "—" }}</dd>
+      <dt>RAM (GB)</dt><dd>{% if snapshot.memory.total_gb %}{{ "%.1f"|format(snapshot.memory.total_gb) }}{% else %}—{% endif %}</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <h2>Disks</h2>
+  <table class="data">
+    <thead><tr><th>Drive</th><th>Filesystem</th><th>Size (GB)</th><th>Free (GB)</th></tr></thead>
+    <tbody>
+      {% for d in snapshot.disks %}
+      <tr>
+        <td>{{ d.drive }}</td>
+        <td>{{ d.filesystem or "—" }}</td>
+        <td>{% if d.size_gb %}{{ "%.1f"|format(d.size_gb) }}{% else %}—{% endif %}</td>
+        <td>{% if d.free_gb %}{{ "%.1f"|format(d.free_gb) }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Network Interfaces</h2>
+  <table class="data">
+    <thead><tr><th>Name</th><th>MAC</th><th>IP</th></tr></thead>
+    <tbody>
+      {% for n in snapshot.network %}
+      <tr>
+        <td>{{ n.name }}</td>
+        <td><code>{{ n.mac or "—" }}</code></td>
+        <td>{{ n.ip or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Installed Software ({{ snapshot.software|length }})</h2>
+  <table class="data">
+    <thead><tr><th>Name</th><th>Version</th><th>Publisher</th><th>Installed</th></tr></thead>
+    <tbody>
+      {% for s in snapshot.software %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ s.version or "—" }}</td>
+        <td>{{ s.publisher or "—" }}</td>
+        <td>{{ s.install_date or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,11 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+  <PropertyGroup>
+    <OutputName>OctoAssistAgent</OutputName>
+    <OutputType>Package</OutputType>
+    <ProductVersion>0.1.0</ProductVersion>
+    <DefineConstants>AgentSourceDir=$(AgentSourceDir)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+  </ItemGroup>
+</Project>

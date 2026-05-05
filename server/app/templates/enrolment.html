@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Agent Enrolment — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Agent Enrolment</h1>
+  <p class="meta">Use the values below when deploying the OctoAssist Asset Agent MSI to TEMA endpoints.</p>
+</section>
+
+<div class="card">
+  <h3>Tenant</h3>
+  <p>{{ tenant.name }}</p>
+
+  <h3>Enrolment Key</h3>
+  <pre class="code">{{ tenant.enrolment_key }}</pre>
+
+  <h3>MSI Install Command</h3>
+  <pre class="code">msiexec /i OctoAssistAgent.msi ^
+  SERVER_URL=https://octoassist.tema.local ^
+  ENROLMENT_KEY={{ tenant.enrolment_key }} ^
+  /qn /l*v %TEMP%\OctoAssistAgent.log</pre>
+
+  <h3>Notes</h3>
+  <ul>
+    <li>Replace <code>SERVER_URL</code> with the actual internal URL of this OctoAssist server.</li>
+    <li>The enrolment key is shared across all endpoints for this tenant. Each agent receives a unique long-lived token after first registration.</li>
+    <li>After install, the agent runs as the Windows Service <strong>OctoAssistAgent</strong> and checks in every 6 hours.</li>
+  </ul>
+</div>
+{% endblock %}

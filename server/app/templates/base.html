@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}OctoAssist{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">THIRD OCTOPUS</span>
+      <span class="brand-product">OctoAssist</span>
+    </div>
+    <nav>
+      <a href="/">Assets</a>
+      <a href="/enrolment">Enrolment</a>
+      <a href="/docs">API</a>
+      <a href="/health">Health</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <span>OctoAssist ITSM • Phase 1 (Asset Discovery)</span>
+    {% if tenant %}<span>{{ tenant.name }}</span>{% endif %}
+  </footer>
+</body>
+</html>
