@@ -47,8 +47,9 @@ def home(
         })
     tenant = db.query(Tenant).first()
     return templates.TemplateResponse(
-        "assets_list.html",
-        {"request": request, "rows": rows, "tenant": tenant, "agent_count": len(rows)},
+        request=request,
+        name="assets_list.html",
+        context={"rows": rows, "tenant": tenant, "agent_count": len(rows)},
     )
 
 
@@ -64,9 +65,9 @@ def asset_detail(
         raise HTTPException(status_code=404, detail="Agent not found")
     snap = _latest_snapshot(db, agent.id)
     return templates.TemplateResponse(
-        "asset_detail.html",
-        {
-            "request": request,
+        request=request,
+        name="asset_detail.html",
+        context={
             "agent": agent,
             "snapshot": snap.payload if snap else None,
             "snapshot_at": snap.snapshot_at if snap else None,
@@ -82,5 +83,7 @@ def enrolment(
 ):
     tenant = db.query(Tenant).first()
     return templates.TemplateResponse(
-        "enrolment.html", {"request": request, "tenant": tenant}
+        request=request,
+        name="enrolment.html",
+        context={"tenant": tenant},
     )
