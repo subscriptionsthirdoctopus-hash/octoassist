@@ -1,0 +1,67 @@
+# OctoAssist Docker Compose stack
+# Designed to co-host on the hrms-erp droplet alongside the HRMS stack.
+# Runs in its own network, on its own DB, with the app port bound only to
+# 127.0.0.1 (loopback) — i.e. NOT public. Access via SSH tunnel until the
+# subdomain is set up.
+
+name: octoassist
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: octoassist-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: octoassist
+      POSTGRES_USER: octoassist
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U octoassist -d octoassist"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - octoassist-network
+
+  app:
+    image: octoassist-server:latest
+    container_name: octoassist-app
+    restart: unless-stopped
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      OCTOASSIST_DATABASE_URL: postgresql+psycopg://octoassist:${POSTGRES_PASSWORD}@postgres:5432/octoassist
+      OCTOASSIST_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      OCTOASSIST_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OCTOASSIST_BIND_HOST: 0.0.0.0
+      OCTOASSIST_BIND_PORT: "8080"
+      OCTOASSIST_TENANT_NAME: ${TENANT_NAME:-TEMA India Pvt. Ltd.}
+    ports:
+      # Bind to loopback only — accessible from droplet itself + SSH tunnel.
+      # NOT public-internet exposed. The subdomain reverse-proxy is added
+      # later via the HRMS nginx container.
+      - "127.0.0.1:8088:8080"
+    networks:
+      - octoassist-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8080/health', timeout=3); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  octoassist-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

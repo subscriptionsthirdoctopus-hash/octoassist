@@ -21,6 +21,9 @@ deploy/out/
 *.pfx
 *.msi
 
+# Docker — generated secrets, never commit
+deploy/docker/.env
+
 # IDE
 .vscode/
 .idea/
