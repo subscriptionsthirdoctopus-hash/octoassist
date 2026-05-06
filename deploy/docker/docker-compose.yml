@@ -38,7 +38,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      OCTOASSIST_DATABASE_URL: postgresql+psycopg://octoassist:${POSTGRES_PASSWORD}@postgres:5432/octoassist
+      # Use the explicit container name, not the unqualified service name
+      # "postgres", because we are connected to the hrms-erp_hrms-network
+      # which also has a "postgres" alias for HRMS's database.
+      OCTOASSIST_DATABASE_URL: postgresql+psycopg://octoassist:${POSTGRES_PASSWORD}@octoassist-postgres:5432/octoassist
       OCTOASSIST_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       OCTOASSIST_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       OCTOASSIST_BIND_HOST: 0.0.0.0
@@ -52,6 +55,11 @@ services:
       - "8088:8080"
     networks:
       - octoassist-network
+      # Also attach to HRMS's network so the hrms-nginx container can
+      # proxy to us by service name (octoassist-app:8080) for the
+      # octoassist.thirdoctopus.com subdomain. The network is owned by
+      # the HRMS compose project — we just declare it as external here.
+      - hrms-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8080/health', timeout=3); sys.exit(0)"]
       interval: 30s
@@ -62,6 +70,9 @@ services:
 networks:
   octoassist-network:
     driver: bridge
+  hrms-network:
+    external: true
+    name: hrms-erp_hrms-network
 
 volumes:
   postgres_data:
