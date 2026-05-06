@@ -94,7 +94,8 @@ def root(request: Request, db: Session = Depends(get_db)):
     if user_id is not None:
         user = db.get(User, int(user_id))
         if user is not None and user.is_active:
-            target = "/portal" if user.role == UserRole.requester else "/tickets"
+            # Staff land on the Dashboard; end-users land on their portal.
+            target = "/portal" if user.role == UserRole.requester else "/reports"
             return RedirectResponse(url=target, status_code=303)
     enabled_idps = (db.query(IdentityProvider)
                       .filter(IdentityProvider.is_enabled == True)  # noqa: E712

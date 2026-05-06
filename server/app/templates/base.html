@@ -8,10 +8,10 @@
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
-    <div class="brand">
+    <a href="/" class="brand brand-link" aria-label="OctoAssist home">
       <span class="brand-mark">THIRD OCTOPUS</span>
       <span class="brand-product">OctoAssist</span>
-    </div>
+    </a>
     <nav>
       {% if current_user %}
         {% if current_user.role.value in ('admin', 'agent') %}
