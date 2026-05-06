@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{% if article %}Edit{% else %}New article{% endif %} — KB{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{% if article %}Edit article{% else %}New article{% endif %}</h1>
+  <p class="meta"><a href="/kb">← Back to Knowledge Base</a></p>
+</section>
+
+<form method="post" action="{% if article %}/kb/{{ article.id }}/edit{% else %}/kb/new{% endif %}" class="card form" style="max-width:900px;">
+  <label>Title
+    <input type="text" name="title" required maxlength="255" value="{{ article.title if article else '' }}" placeholder="One-line clear title — searchers will read this first">
+  </label>
+
+  <label>Summary <span class="meta">(short — shown in lists and search results)</span>
+    <input type="text" name="summary" maxlength="500" value="{{ article.summary if article else '' }}" placeholder="One- or two-sentence summary">
+  </label>
+
+  <label>Category
+    <select name="category_id">
+      <option value="">— Uncategorised —</option>
+      {% for c in categories %}
+      <option value="{{ c.id }}" {% if article and article.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Body <span class="meta">(plain text or markdown — rendered as-is for now)</span>
+    <textarea name="body" rows="16" placeholder="Steps, screenshots (paste links), commands, troubleshooting notes...">{{ article.body if article else '' }}</textarea>
+  </label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Status
+      <select name="status">
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if article and article.status.value == s %}selected{% elif not article and s == "draft" %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Visibility
+      <select name="visibility">
+        {% for v in visibilities %}
+        <option value="{{ v }}" {% if article and article.visibility.value == v %}selected{% elif not article and v == "portal" %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">{% if article %}Save changes{% else %}Create article{% endif %}</button>
+    <a href="{% if article %}/kb/{{ article.id }}{% else %}/kb{% endif %}" class="link-button">Cancel</a>
+  </div>
+</form>
+
+{% if article %}
+<form method="post" action="/kb/{{ article.id }}/delete" class="inline-form" style="margin-top:24px;" onsubmit="return confirm('Delete this article? This cannot be undone.');">
+  <button type="submit" class="link-button" style="color:var(--red);">Delete article</button>
+</form>
+{% endif %}
+{% endblock %}

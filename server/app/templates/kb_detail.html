@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title }} — KB{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta">
+    {% if portal_view %}<a href="/portal/kb">← Knowledge Base</a>{% else %}<a href="/kb">← Knowledge Base</a>{% endif %}
+    {% if article.category %}<span class="meta-inline">·</span> {{ article.category.name }}{% endif %}
+    <span class="meta-inline">·</span> {{ article.view_count }} view{{ "" if article.view_count == 1 else "s" }}
+    <span class="meta-inline">·</span> updated {{ article.updated_at.strftime("%Y-%m-%d") }}
+    {% if not portal_view %}
+      <span class="meta-inline">·</span>
+      <span class="status status-{% if article.status.value == 'published' %}resolved{% elif article.status.value == 'draft' %}on_hold{% else %}cancelled{% endif %}">{{ article.status.value }}</span>
+      <span class="status status-open">{{ article.visibility.value }}</span>
+    {% endif %}
+  </p>
+  <h1>{{ article.title }}</h1>
+  {% if article.summary %}<p class="meta" style="font-size:16px;color:var(--text);max-width:780px;">{{ article.summary }}</p>{% endif %}
+</section>
+
+<article class="card prose" style="max-width:780px;line-height:1.7;font-size:15px;white-space:pre-wrap;">{{ article.body or "(empty)" }}</article>
+
+{% if not portal_view %}
+<div class="form-actions" style="margin-top:24px;max-width:780px;">
+  <a href="/kb/{{ article.id }}/edit" class="button primary">Edit</a>
+  <form method="post" action="/kb/{{ article.id }}/publish" class="inline-form">
+    <button type="submit" class="button">{% if article.status.value == 'published' %}Move to draft{% else %}Publish{% endif %}</button>
+  </form>
+</div>
+{% endif %}
+
+{% if portal_view and article.author %}
+<p class="meta" style="margin-top:24px;max-width:780px;font-size:12px;">Written by {{ article.author.display_name }}{% if article.published_at %} · published {{ article.published_at.strftime("%Y-%m-%d") }}{% endif %}</p>
+{% endif %}
+
+{% endblock %}

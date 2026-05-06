@@ -16,6 +16,7 @@
       {% if current_user %}
         {% if current_user.role.value in ('admin', 'agent') %}
           <a href="/tickets">Tickets</a>
+          <a href="/kb">Knowledge Base</a>
           <a href="/assets">Assets</a>
           <a href="/enrolment">Enrolment</a>
           {% if current_user.role.value == 'admin' %}
@@ -24,6 +25,7 @@
           {% endif %}
         {% else %}
           <a href="/portal">My Tickets</a>
+          <a href="/portal/kb">Knowledge Base</a>
           <a href="/portal/new">New Request</a>
         {% endif %}
         <span class="who">{{ current_user.full_name or current_user.email }} <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>

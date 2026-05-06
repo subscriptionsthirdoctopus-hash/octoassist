@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Base — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Knowledge Base</h1>
+  <p class="meta">Search how-tos, IT policies, and troubleshooting walkthroughs before logging a ticket.</p>
+</section>
+
+<form method="get" action="/portal/kb" class="filters" style="max-width:760px;">
+  <label style="flex:1;">Search<input type="text" name="q" value="{{ q }}" placeholder="What's the issue?"></label>
+  {% if categories %}
+  <label>Category
+    <select name="category_id">
+      <option value="">All</option>
+      {% for c in categories %}
+      <option value="{{ c.id }}" {% if filter_category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit" class="primary">Search</button>
+</form>
+
+{% if rows %}
+<div class="cards" style="margin-top:24px;">
+  {% for a in rows %}
+  <a href="/portal/kb/{{ a.slug }}" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <h3 style="text-transform:none;letter-spacing:0;color:var(--navy);font-size:16px;">{{ a.title }}</h3>
+    <p style="margin:6px 0 10px;color:var(--text);line-height:1.5;font-size:14px;">{{ a.summary or (a.body[:200] + "…" if a.body|length > 200 else a.body) }}</p>
+    <p class="meta" style="font-size:12px;margin:0;">
+      {% if a.category %}{{ a.category.name }} · {% endif %}
+      {{ a.view_count }} view{{ "" if a.view_count == 1 else "s" }}
+      {% if a.published_at %} · {{ a.published_at.strftime("%Y-%m-%d") }}{% endif %}
+    </p>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty" style="margin-top:24px;">
+  <h2>{% if q %}No articles match "{{ q }}".{% else %}No articles yet.{% endif %}</h2>
+  <p>{% if q %}Try a different search.{% else %}Your IT team is still seeding articles. Log a ticket from <a href="/portal/new">the portal</a> in the meantime.{% endif %}</p>
+</div>
+{% endif %}
+
+<p style="margin-top:32px;color:var(--slate);font-size:13px;">
+  Can't find what you need? <a href="/portal/new">Log a ticket</a> and we'll help.
+</p>
+{% endblock %}

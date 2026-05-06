@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Base — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Knowledge Base</h1>
+      <p class="meta">{{ rows|length }} article{{ "" if rows|length == 1 else "s" }} · drafts and archived included</p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/kb/new">+ New article</a>
+      <a class="button" href="/kb/categories">Manage categories</a>
+    </div>
+  </div>
+</section>
+
+<form method="get" action="/kb" class="filters">
+  <label>Search<input type="text" name="q" value="{{ q }}" placeholder="title, summary, body"></label>
+  <label>Category
+    <select name="category_id">
+      <option value="">All</option>
+      {% for c in categories %}
+      <option value="{{ c.id }}" {% if filter_category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Search</button>
+  <a href="/kb" class="link-button">Clear</a>
+</form>
+
+{% if rows %}
+<table class="data">
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Category</th>
+      <th>Status</th>
+      <th>Visibility</th>
+      <th>Author</th>
+      <th>Views</th>
+      <th>Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in rows %}
+    <tr>
+      <td><a href="/kb/{{ a.id }}"><strong>{{ a.title }}</strong></a>{% if a.summary %}<div class="meta-inline" style="display:block;color:var(--slate);font-size:12.5px;margin-top:2px;">{{ a.summary[:140] }}{% if a.summary|length > 140 %}…{% endif %}</div>{% endif %}</td>
+      <td>{{ a.category.name if a.category else "—" }}</td>
+      <td><span class="status status-{% if a.status.value == 'published' %}resolved{% elif a.status.value == 'draft' %}on_hold{% else %}cancelled{% endif %}">{{ a.status.value }}</span></td>
+      <td>{{ a.visibility.value }}</td>
+      <td>{{ a.author.display_name if a.author else "—" }}</td>
+      <td>{{ a.view_count }}</td>
+      <td>{{ a.updated_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No articles yet</h2>
+  <p><a href="/kb/new">Create the first article</a> to start deflecting tickets.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -11,10 +11,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from .api.agent import router as agent_router
 from .auth import NotAuthenticated, login_redirect_for
 from .config import settings
+from .csrf import CsrfMiddleware, get_or_create_token  # noqa: F401  (drafted, not active)
 from .database import Base, SessionLocal, engine, get_db
 from .models import IdentityProvider, Tenant, User, UserRole
 from . import seed
 from .web.views import router as web_router
+from .web.views_kb import router as kb_router
 from .web.views_login import router as login_router
 from .web.views_portal import router as portal_router
 from .web.views_settings import router as settings_router
@@ -31,11 +33,15 @@ app = FastAPI(
     description="Phase 1 Asset Discovery + Phase 2 Ticketing + SSO",
 )
 
+# CSRF middleware drafted in app/csrf.py — not activated yet, requires
+# bulk-updating every form template to include the hidden csrf field.
+# Will land in next turn together with a unified Jinja2 template config.
+# app.add_middleware(CsrfMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key,
     max_age=settings.session_max_age_seconds,
-    same_site="lax",
+    same_site="lax",  # already provides meaningful CSRF defence in modern browsers
     https_only=settings.cookie_secure,
     session_cookie="octoassist_session",
 )
@@ -56,6 +62,7 @@ app.include_router(web_router)          # /assets, /asset/{id}, /enrolment
 app.include_router(tickets_router)      # /tickets, /tickets/{id}, ...
 app.include_router(users_router)        # /users, /users/new
 app.include_router(settings_router)     # /settings, /settings/idp/*
+app.include_router(kb_router)           # /kb/*, /portal/kb/*
 app.include_router(portal_router)       # /portal, /portal/...
 
 

@@ -283,6 +283,69 @@ class IdentityProviderKind(str, enum.Enum):
     # future: ldap (on-prem AD), google, okta
 
 
+class KbCategory(Base):
+    __tablename__ = "kb_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    articles: Mapped[list["KbArticle"]] = relationship(back_populates="category")
+
+    __table_args__ = (
+        Index("ix_kb_categories_tenant", "tenant_id"),
+    )
+
+
+class KbArticleStatus(str, enum.Enum):
+    draft = "draft"
+    published = "published"
+    archived = "archived"
+
+
+class KbArticleVisibility(str, enum.Enum):
+    internal = "internal"   # visible to admin / agent only
+    portal = "portal"       # also visible to requesters in /portal/kb
+
+
+class KbArticle(Base):
+    __tablename__ = "kb_articles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("kb_categories.id", ondelete="SET NULL"), nullable=True,
+    )
+    slug: Mapped[str] = mapped_column(String(160), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[KbArticleStatus] = mapped_column(
+        Enum(KbArticleStatus, name="kb_article_status"),
+        nullable=False, default=KbArticleStatus.draft,
+    )
+    visibility: Mapped[KbArticleVisibility] = mapped_column(
+        Enum(KbArticleVisibility, name="kb_article_visibility"),
+        nullable=False, default=KbArticleVisibility.portal,
+    )
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    category: Mapped[KbCategory | None] = relationship(back_populates="articles")
+    author: Mapped[User | None] = relationship()
+
+    __table_args__ = (
+        Index("ix_kb_articles_tenant_status", "tenant_id", "status"),
+        Index("ix_kb_articles_tenant_visibility", "tenant_id", "visibility"),
+    )
+
+
 class IdentityProvider(Base):
     """An external identity provider configured for this tenant.
 
