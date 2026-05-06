@@ -58,6 +58,11 @@
     <p class="kpi-value">{{ sla.response_pct }}<span class="kpi-unit">%</span></p>
     <p class="kpi-sub">{{ sla.response_within }} of {{ sla.response_total }} within SLA</p>
   </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Patch compliance</p>
+    <p class="kpi-value">{{ patch_kpi.compliance_pct }}<span class="kpi-unit">%</span></p>
+    <p class="kpi-sub">{{ patch_kpi.total_critical }} critical patches outstanding · <a href="/patches">view ›</a></p>
+  </div>
 </section>
 
 <section class="report-row">

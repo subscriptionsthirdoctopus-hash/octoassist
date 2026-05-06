@@ -39,6 +39,8 @@ from .models import (
     KbArticleStatus,
     KbArticleVisibility,
     KbCategory,
+    PatchAvailable,
+    PatchSeverity,
     Problem,
     ProblemStatus,
     ProblemTicketLink,
@@ -1166,6 +1168,90 @@ def seed_changes(db: Session, tenant: Tenant, force: bool) -> None:
 # Top-level
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Patches — fake "missing patches" data on the 25 Windows demo endpoints
+# ---------------------------------------------------------------------------
+
+# Plausible Windows update KBs (real numbers from Microsoft's catalog this year).
+PATCH_CATALOG: list[tuple[str, str, str, str]] = [
+    # (KB, severity, title, source)
+    ("KB5034441", "critical",  "2024-01 Security Update for Windows Recovery Environment",         "windows-update"),
+    ("KB5036853", "critical",  "2024-04 Cumulative Update for Windows 11 22H2",                    "windows-update"),
+    ("KB5039225", "critical",  "2024-06 Cumulative Update — RCE in Wi-Fi driver",                  "windows-update"),
+    ("KB5042103", "critical",  "2024-09 Security Update — Print Spooler RCE",                      "windows-update"),
+    ("KB5048685", "critical",  "2024-12 Cumulative Update for Windows 11",                         "windows-update"),
+    ("KB5037768", "important", "2024-05 .NET Framework Security Update",                           "windows-update"),
+    ("KB5037771", "important", "2024-05 SQL Server CU — denial of service",                        "windows-update"),
+    ("KB5040434", "important", "2024-07 Cumulative Update for Windows 11",                         "windows-update"),
+    ("KB5041587", "important", "2024-08 Cumulative Update for Windows 11",                         "windows-update"),
+    ("KB5043145", "important", "2024-09 Office security update",                                   "windows-update"),
+    ("KB5045405", "important", "2024-10 .NET 8.0 security update",                                 "windows-update"),
+    ("KB5046617", "important", "2024-11 Servicing Stack Update",                                   "windows-update"),
+    ("KB5050173", "important", "2025-01 Cumulative Update for Windows 11",                         "windows-update"),
+    ("KB5037770", "moderate",  "2024-05 Microsoft Edge update",                                    "windows-update"),
+    ("KB5040527", "moderate",  "2024-07 Microsoft Defender Platform update",                       "windows-update"),
+    ("KB5041592", "moderate",  "2024-08 Cumulative Update for .NET 6.0",                           "windows-update"),
+    ("KB5043178", "moderate",  "2024-09 Microsoft Visio security update",                          "windows-update"),
+    ("KB5045411", "moderate",  "2024-10 Microsoft 365 Apps security update",                       "windows-update"),
+    ("KB5048649", "moderate",  "2024-12 Cumulative Update Preview",                                "windows-update"),
+    ("KB5034122", "low",       "2024-01 .NET Framework reliability fix",                          "windows-update"),
+    ("KB5039212", "low",       "2024-06 Microsoft Defender signature definitions",                "windows-update"),
+]
+
+
+def seed_patches(db: Session, tenant: Tenant, force: bool) -> None:
+    """Sprinkle realistic missing-patch counts across the demo Windows endpoints."""
+    existing = (db.query(PatchAvailable)
+                  .join(Agent, Agent.id == PatchAvailable.agent_id)
+                  .filter(Agent.tenant_id == tenant.id)
+                  .count())
+    if existing > 0 and not force:
+        log.info("patches: already %d, skipping", existing)
+        return
+
+    # Only target hostnames matching the demo Windows pattern (LT-* / WS-*) — leave
+    # any real-agent rows (e.g., the droplet's apt-upgradable list) alone.
+    win_agents = (db.query(Agent)
+                    .filter(Agent.tenant_id == tenant.id,
+                            (Agent.hostname.like("LT-%")) | (Agent.hostname.like("WS-%")))
+                    .all())
+    if not win_agents:
+        log.info("patches: no demo Windows endpoints to seed")
+        return
+
+    if force:
+        for a in win_agents:
+            db.query(PatchAvailable).filter(PatchAvailable.agent_id == a.id).delete()
+        db.commit()
+
+    rng = random.Random(42)  # deterministic for reproducibility
+    added = 0
+    for a in win_agents:
+        # 80% of endpoints have at least 1 missing patch; 30% have a critical
+        if rng.random() < 0.20:
+            continue
+        n = rng.randint(2, 12)
+        # Roughly 30% of those n end up being critical
+        sample = rng.sample(PATCH_CATALOG, k=min(n, len(PATCH_CATALOG)))
+        for kb, sev_str, title, source in sample:
+            try:
+                sev = PatchSeverity(sev_str)
+            except ValueError:
+                sev = PatchSeverity.unknown
+            db.add(PatchAvailable(
+                agent_id=a.id,
+                package_name=kb,
+                current_version=None,
+                available_version=None,
+                severity=sev,
+                source=source,
+                title=title,
+            ))
+            added += 1
+    db.commit()
+    log.info("patches: seeded %d rows across %d Windows demo endpoints", added, len(win_agents))
+
+
 def run(force: bool = False) -> None:
     db = SessionLocal()
     try:
@@ -1180,6 +1266,7 @@ def run(force: bool = False) -> None:
         seed_tickets(db, tenant, force=force)
         seed_problems(db, tenant, force=force)
         seed_changes(db, tenant, force=force)
+        seed_patches(db, tenant, force=force)
         log.info("DONE.")
     finally:
         db.close()

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Patches — {{ agent.hostname }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ agent.hostname }} — patches</h1>
+      <p class="meta">
+        <a href="/patches">← All endpoints</a>
+        · last seen {% if agent.last_seen_at %}{{ agent.last_seen_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}
+      </p>
+    </div>
+    <div class="actions">
+      <a class="button" href="/asset/{{ agent.id }}">Asset details ›</a>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Critical</p>
+    <p class="kpi-value" style="color:var(--red);">{{ counts.critical }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Important</p>
+    <p class="kpi-value" style="color:var(--amber);">{{ counts.important }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Moderate</p>
+    <p class="kpi-value">{{ counts.moderate }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Low / unknown</p>
+    <p class="kpi-value">{{ counts.low + counts.unknown }}</p>
+  </div>
+</section>
+
+<section>
+  <h2>Missing patches ({{ patches|length }})</h2>
+  {% if patches %}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Severity</th>
+        <th>Package</th>
+        <th>Current</th>
+        <th>Available</th>
+        <th>Source</th>
+        <th>Detected</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in patches %}
+      <tr>
+        <td>
+          {% set sev = p.severity.value %}
+          {% if sev == 'critical' %}<span class="prio prio-critical">{{ sev }}</span>
+          {% elif sev == 'important' %}<span class="prio prio-high">{{ sev }}</span>
+          {% elif sev == 'moderate' %}<span class="prio prio-medium">{{ sev }}</span>
+          {% else %}<span class="prio prio-low">{{ sev }}</span>{% endif %}
+        </td>
+        <td><strong>{{ p.package_name }}</strong>{% if p.title %}<div class="meta-inline" style="display:block;color:var(--slate);font-size:12px;">{{ p.title[:160] }}</div>{% endif %}</td>
+        <td>{{ p.current_version or "—" }}</td>
+        <td>{{ p.available_version or "—" }}</td>
+        <td>{{ p.source }}</td>
+        <td>{{ p.detected_at.strftime("%Y-%m-%d") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h2>This endpoint is fully patched 🎯</h2>
+    <p>No missing patches reported on the last check-in.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

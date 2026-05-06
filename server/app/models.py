@@ -69,6 +69,48 @@ class AssetSnapshot(Base):
 
 
 # ---------------------------------------------------------------------------
+# Phase 4 — Patch Management
+# ---------------------------------------------------------------------------
+
+class PatchSeverity(str, enum.Enum):
+    critical  = "critical"
+    important = "important"
+    moderate  = "moderate"
+    low       = "low"
+    unknown   = "unknown"
+
+
+class PatchAvailable(Base):
+    """Patches/updates an endpoint reports as available (not yet installed).
+
+    Replaced wholesale on every check-in. We don't track per-patch history yet —
+    that would be a phase-5 enhancement (audit-grade evidence of "patch was
+    available for N days before being installed").
+    """
+    __tablename__ = "patches_available"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    package_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    current_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    available_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    severity: Mapped[PatchSeverity] = mapped_column(
+        Enum(PatchSeverity, name="patch_severity"),
+        nullable=False, default=PatchSeverity.unknown,
+    )
+    source: Mapped[str] = mapped_column(String(60), nullable=False, default="unknown")
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    agent: Mapped[Agent] = relationship()
+
+    __table_args__ = (
+        Index("ix_patches_agent", "agent_id"),
+        Index("ix_patches_severity", "severity"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Phase 2 — Ticketing, users, SLA, audit
 # ---------------------------------------------------------------------------
 

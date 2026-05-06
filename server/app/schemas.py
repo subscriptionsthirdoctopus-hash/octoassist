@@ -26,6 +26,9 @@ class CheckinRequest(BaseModel):
     system: dict[str, Any] = Field(default_factory=dict)
     logged_in_user: str | None = None
     software: list[dict[str, Any]] = Field(default_factory=list)
+    # Phase 4: patches available (not installed yet) on this endpoint.
+    # Each entry: {name, current_version?, available_version?, severity?, source?, title?}
+    patches: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CheckinResponse(BaseModel):

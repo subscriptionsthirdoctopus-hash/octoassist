@@ -539,6 +539,100 @@ def installed_software() -> list[dict]:
     return []
 
 
+def patches_available() -> list[dict]:
+    """Collect patches/updates that haven't been installed on this host."""
+    out: list[dict] = []
+    if platform.system() == "Linux":
+        # apt list --upgradable (Debian/Ubuntu).
+        try:
+            env = {**os.environ, "LANG": "C", "LC_ALL": "C"}
+            # apt-get update first if recent metadata isn't present (best-effort).
+            # We deliberately skip auto-update — it requires root and writes lock files.
+            r = subprocess.run(
+                ["apt", "list", "--upgradable"],
+                capture_output=True, text=True, timeout=60, env=env,
+            )
+            for line in r.stdout.splitlines():
+                # Format:  pkg/repo,suite version arch [upgradable from: oldver]
+                if "upgradable from:" not in line or "/" not in line:
+                    continue
+                parts = line.split()
+                if len(parts) < 4:
+                    continue
+                pkg_repo = parts[0]
+                name = pkg_repo.split("/", 1)[0]
+                repo = pkg_repo.split("/", 1)[1] if "/" in pkg_repo else ""
+                new_ver = parts[1]
+                old_ver = parts[-1].rstrip("]").strip()
+                # Heuristic: anything from a *-security repo is at least "important".
+                sev = "important" if "-security" in repo.lower() else "moderate"
+                out.append({
+                    "name": name,
+                    "current_version": old_ver if old_ver else None,
+                    "available_version": new_ver,
+                    "severity": sev,
+                    "source": "apt:" + (repo.split(",", 1)[0] or "unknown"),
+                    "title": f"Upgrade {name} {old_ver} → {new_ver}",
+                })
+        except Exception as e:
+            log.warning("apt list --upgradable failed: %s", e)
+        # Also try dnf check-update for RHEL-family.
+        if not out:
+            try:
+                r = subprocess.run(
+                    ["dnf", "-q", "check-update"],
+                    capture_output=True, text=True, timeout=60,
+                )
+                # Exit code 100 is "updates available" — not a failure.
+                for line in r.stdout.splitlines():
+                    parts = line.split()
+                    if len(parts) >= 3 and parts[0] and not parts[0].startswith("Last"):
+                        name, ver, repo = parts[0], parts[1], parts[2]
+                        sev = "important" if "security" in repo.lower() else "moderate"
+                        out.append({
+                            "name": name,
+                            "current_version": None,
+                            "available_version": ver,
+                            "severity": sev,
+                            "source": f"dnf:{repo}",
+                            "title": f"Upgrade {name} → {ver}",
+                        })
+            except Exception:
+                pass
+    elif platform.system() == "Windows":
+        # Try PSWindowsUpdate (third-party module) — only present on opted-in hosts.
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "if (Get-Module -ListAvailable PSWindowsUpdate) { "
+                 "Import-Module PSWindowsUpdate; "
+                 "Get-WindowsUpdate -ErrorAction SilentlyContinue | "
+                 "Select-Object KB, Title, MsrcSeverity | ConvertTo-Json -Compress "
+                 "} else { '[]' }"],
+                capture_output=True, text=True, timeout=120,
+            )
+            data = json.loads(r.stdout or "[]")
+            if isinstance(data, dict):
+                data = [data]
+            for u in data:
+                kb = u.get("KB", "") or ""
+                title = u.get("Title", "")
+                sev = (u.get("MsrcSeverity") or "unknown").lower()
+                if sev not in ("critical", "important", "moderate", "low", "unknown"):
+                    sev = "unknown"
+                out.append({
+                    "name": kb or (title[:80] or "update"),
+                    "current_version": None,
+                    "available_version": None,
+                    "severity": sev,
+                    "source": "windows-update",
+                    "title": title,
+                })
+        except Exception:
+            pass
+    return out[:5000]
+
+
 def collect_snapshot() -> dict:
     return {
         "snapshot_at": _now_iso(),
@@ -551,6 +645,7 @@ def collect_snapshot() -> dict:
         "system": system_info(),
         "logged_in_user": logged_in_user(),
         "software": installed_software(),
+        "patches": patches_available(),
     }
 
 

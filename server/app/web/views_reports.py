@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..auth import require_staff
 from ..database import get_db
 from ..models import Agent, AssetSnapshot, Change, Tenant, Ticket, User
-from ..services import charts, reporting
+from ..services import charts, patches as patches_svc, reporting
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -40,6 +40,7 @@ def reports_home(
     by_category = reporting.tickets_by_category(db, tenant_id, days=30, top=8)
     sla = reporting.sla_compliance(db, tenant_id, days=30)
     workload = reporting.workload_by_assignee(db, tenant_id, top=8)
+    patch_kpi = patches_svc.patch_kpis(db, tenant_id)
 
     sparkline_values = [v for _, v in per_day]
 
@@ -47,6 +48,7 @@ def reports_home(
         request=request, name="reports_home.html",
         context=_ctx(user, db,
                      kpi=kpi,
+                     patch_kpi=patch_kpi,
                      spark_tickets=charts.sparkline(sparkline_values, width=160, height=40),
                      chart_status=charts.donut(by_status, size=200),
                      chart_priority=charts.donut(by_priority, size=200),
