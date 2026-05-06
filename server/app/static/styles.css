@@ -29,25 +29,27 @@ a:hover { color: var(--teal); }
 .topbar {
   background: var(--navy);
   color: white;
-  padding: 12px 24px;
+  padding: 16px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.brand { display: flex; align-items: baseline; gap: 12px; }
+.brand { display: flex; align-items: baseline; gap: 14px; }
 .brand-link { text-decoration: none; color: inherit; transition: opacity 0.12s; }
 .brand-link:hover { opacity: 0.85; }
 .brand-link:focus-visible { outline: 2px solid var(--teal); outline-offset: 4px; border-radius: 3px; }
-.brand-mark { font-weight: 700; letter-spacing: 1px; }
-.brand-product { color: var(--teal); font-weight: 500; }
-.topbar nav { display: flex; align-items: center; gap: 18px; }
+.brand-mark { font-weight: 800; letter-spacing: 1.4px; font-size: 17px; }
+.brand-product { color: var(--teal); font-weight: 600; font-size: 17px; }
+.topbar nav { display: flex; align-items: center; gap: 22px; }
 .topbar nav a {
   color: white;
   text-decoration: none;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 .topbar nav a:hover { color: var(--teal); }
-.topbar nav .who { color: rgba(255,255,255,0.85); font-size: 12px; }
+.topbar nav .who { color: rgba(255,255,255,0.85); font-size: 13.5px; }
 .topbar nav .role-pill {
   font-size: 10px;
   padding: 2px 6px;

@@ -115,6 +115,7 @@ def window_create(
     hostname_pattern: str = Form("%"),
     scheduled_for: str = Form(""),
     notes: str = Form(""),
+    auto_execute: int = Form(0),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -133,7 +134,50 @@ def window_create(
         scheduled_for=_parse_dt(scheduled_for),
         notes=notes,
     )
-    return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
+    win.auto_execute = bool(auto_execute)
+    db.commit()
+    return RedirectResponse(url=f"/patches/windows/{win.id}/edit", status_code=303)
+
+
+@router.get("/patches/windows/{window_id}/edit", response_class=HTMLResponse)
+def window_edit(
+    window_id: int,
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    win = db.get(PatchWindow, window_id)
+    if win is None or win.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    # Compute candidate packages = currently-missing patches across this window's
+    # targets, optionally filtered by the window's severity_filter.
+    candidate_packages = patches_svc.window_candidate_packages(db, win)
+    return templates.TemplateResponse(
+        request=request, name="patches_window_edit.html",
+        context=_ctx(user, db,
+                     window=win,
+                     candidate_packages=candidate_packages),
+    )
+
+
+@router.post("/patches/windows/{window_id}/packages")
+def window_save_packages(
+    window_id: int,
+    auto_execute: int = Form(0),
+    package: list[str] = Form(default=[]),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    win = db.get(PatchWindow, window_id)
+    if win is None or win.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    # Sanitise: only accept package names that are in the candidate set
+    candidates = {row["name"] for row in patches_svc.window_candidate_packages(db, win)}
+    chosen = sorted({p for p in (package or []) if p in candidates})
+    win.selected_packages = chosen if chosen else None
+    win.auto_execute = bool(auto_execute)
+    db.commit()
+    return RedirectResponse(url=f"/patches/windows/{window_id}", status_code=303)
 
 
 @router.get("/patches/windows/{window_id}", response_class=HTMLResponse)

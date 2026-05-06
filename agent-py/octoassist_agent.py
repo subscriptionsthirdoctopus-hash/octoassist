@@ -649,6 +649,137 @@ def collect_snapshot() -> dict:
     }
 
 
+# ---------------------------------------------------------- Phase 6 — auto-install
+
+def _install_apt(pkg: str) -> dict:
+    """apt-get install -y <pkg>. Returns attempt dict ready to POST."""
+    started = _now_iso()
+    proc = subprocess.run(
+        ["apt-get", "-q", "-y", "-o", "Dpkg::Options::=--force-confold",
+         "-o", "Dpkg::Options::=--force-confdef", "install", pkg],
+        capture_output=True, text=True, timeout=900,
+        env={**os.environ, "DEBIAN_FRONTEND": "noninteractive", "LANG": "C", "LC_ALL": "C"},
+    )
+    finished = _now_iso()
+    needs_reboot = Path("/var/run/reboot-required").exists()
+    return {
+        "package_name": pkg,
+        "started_at": started,
+        "finished_at": finished,
+        "exit_code": proc.returncode,
+        "success": proc.returncode == 0,
+        "needs_reboot": needs_reboot,
+        "stdout": (proc.stdout or "")[-7000:],
+        "stderr": (proc.stderr or "")[-1000:],
+        "method": "apt",
+    }
+
+
+def _install_windows_update(kb_or_name: str) -> dict:
+    """PSWindowsUpdate path. Endpoint must have the module installed."""
+    started = _now_iso()
+    if kb_or_name.upper().startswith("KB"):
+        ps_arg = f"-KBArticleID '{kb_or_name}'"
+    else:
+        ps_arg = f"-Title '{kb_or_name}'"
+    proc = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "if (-not (Get-Module -ListAvailable PSWindowsUpdate)) { "
+         "  Write-Error 'PSWindowsUpdate module not installed'; exit 2 }; "
+         "Import-Module PSWindowsUpdate; "
+         f"Install-WindowsUpdate {ps_arg} -AcceptAll -IgnoreReboot -Confirm:$false"],
+        capture_output=True, text=True, timeout=1200,
+    )
+    finished = _now_iso()
+    return {
+        "package_name": kb_or_name,
+        "started_at": started,
+        "finished_at": finished,
+        "exit_code": proc.returncode,
+        "success": proc.returncode == 0,
+        "needs_reboot": "reboot" in (proc.stdout + proc.stderr).lower(),
+        "stdout": (proc.stdout or "")[-7000:],
+        "stderr": (proc.stderr or "")[-1000:],
+        "method": "windows-update",
+    }
+
+
+def execute_pending_deployments(cfg: dict) -> int:
+    """Pull pending deployments from the server, execute, post results.
+
+    Returns the number of targets fully processed (succeeded or failed).
+    """
+    base = cfg["server_url"].rstrip("/")
+    token = cfg["agent_token"]
+    code, body = _http(base + "/api/v1/agent/deployments", method="GET", token=token)
+    if code != 200:
+        log.warning("deployments: pickup failed %s %s", code, body[:200])
+        return 0
+    try:
+        deployments = json.loads(body)
+    except Exception:
+        log.warning("deployments: bad JSON in response")
+        return 0
+    if not deployments:
+        return 0
+
+    is_linux = platform.system() == "Linux"
+    is_windows = platform.system() == "Windows"
+    if not (is_linux or is_windows):
+        log.warning("deployments: unsupported OS %s — skipping all", platform.system())
+        return 0
+
+    # Linux: must be root for apt-get install. EUID=0 check — if not, log + skip.
+    if is_linux and os.geteuid() != 0:
+        log.warning("deployments: not running as root, cannot apt-get install")
+        return 0
+
+    processed = 0
+    for d in deployments:
+        target_id = d["target_id"]
+        win_name = d.get("window_name", "")
+        packages = d.get("selected_packages") or []
+        log.info("Executing deployment target=%s window=%r packages=%d",
+                 target_id, win_name, len(packages))
+
+        # Mark target as in_progress server-side
+        _http(f"{base}/api/v1/agent/deployments/{target_id}/start", method="POST", token=token)
+
+        any_failed = False
+        for pkg in packages:
+            try:
+                if is_linux:
+                    attempt = _install_apt(pkg)
+                else:
+                    attempt = _install_windows_update(pkg)
+            except subprocess.TimeoutExpired:
+                attempt = {"package_name": pkg, "started_at": _now_iso(), "finished_at": _now_iso(),
+                           "exit_code": 124, "success": False, "needs_reboot": False,
+                           "stdout": None, "stderr": "timeout", "method": "apt" if is_linux else "windows-update"}
+            except Exception as e:  # noqa: BLE001
+                attempt = {"package_name": pkg, "started_at": _now_iso(), "finished_at": _now_iso(),
+                           "exit_code": 1, "success": False, "needs_reboot": False,
+                           "stdout": None, "stderr": f"{type(e).__name__}: {e}",
+                           "method": "apt" if is_linux else "windows-update"}
+
+            log.info("  %s → exit=%s success=%s",
+                     pkg, attempt["exit_code"], attempt["success"])
+            if not attempt["success"]:
+                any_failed = True
+            _http(f"{base}/api/v1/agent/deployments/{target_id}/attempt",
+                  method="POST", body=attempt, token=token)
+
+        # Finish marker — server reads attempts table to compute final status
+        _http(f"{base}/api/v1/agent/deployments/{target_id}/finish",
+              method="POST",
+              body={"note": ("Linux apt-get" if is_linux else "Windows Update via PSWindowsUpdate"),
+                    "needs_reboot": Path("/var/run/reboot-required").exists() if is_linux else False},
+              token=token)
+        processed += 1
+
+    return processed
+
+
 # ---------------------------------------------------------- registration
 
 def register_if_needed(cfg: dict) -> dict:
@@ -678,8 +809,9 @@ def register_if_needed(cfg: dict) -> dict:
 
 def checkin_once(cfg: dict) -> bool:
     snap = collect_snapshot()
-    log.info("Collected snapshot: OS=%s, CPU=%s, software=%d",
-             snap["os"].get("caption"), snap["cpu"].get("name"), len(snap["software"]))
+    log.info("Collected snapshot: OS=%s, CPU=%s, software=%d, patches=%d",
+             snap["os"].get("caption"), snap["cpu"].get("name"),
+             len(snap["software"]), len(snap.get("patches") or []))
     code, body = _http(
         cfg["server_url"].rstrip("/") + "/api/v1/agent/checkin",
         method="POST",
@@ -690,6 +822,20 @@ def checkin_once(cfg: dict) -> bool:
         log.error("Check-in failed: %s %s", code, body[:300])
         return False
     log.info("Check-in OK")
+
+    # Phase 6: pull and execute any pending deployments. Best-effort —
+    # never let a deployment failure block the next check-in cycle.
+    try:
+        n = execute_pending_deployments(cfg)
+        if n:
+            log.info("Processed %d deployment target(s)", n)
+            # Re-collect so the server's patch state reflects what we just installed
+            snap2 = collect_snapshot()
+            _http(cfg["server_url"].rstrip("/") + "/api/v1/agent/checkin",
+                  method="POST", body=snap2, token=cfg["agent_token"])
+    except Exception as e:  # noqa: BLE001
+        log.exception("deployments pickup loop failed: %s", e)
+
     return True
 
 

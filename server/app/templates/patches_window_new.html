@@ -40,8 +40,15 @@
     <textarea name="notes" rows="3"></textarea>
   </label>
 
+  <h3 style="margin:8px 0 4px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Execution</h3>
+  <label class="checkbox">
+    <input type="checkbox" name="auto_execute" value="1">
+    <strong>Enable auto-execution</strong>
+    <span class="meta" style="display:block;margin-left:24px;">When the window is <em>in_progress</em>, agents pull the package list and run <code>apt-get install</code> (Linux) / Windows Update (best-effort) themselves. You'll pick the exact packages on the next screen.</span>
+  </label>
+
   <div class="form-actions">
-    <button type="submit" class="primary">Create window (status: draft)</button>
+    <button type="submit" class="primary">Create + choose packages →</button>
     <a href="/patches/windows" class="link-button">Cancel</a>
   </div>
 </form>

@@ -210,3 +210,57 @@ def regenerate_enrolment_key(
         url="/settings?flash=New+enrolment+key+generated.+Existing+agents+keep+working;+only+new+MSI+installs+need+the+new+key.",
         status_code=303,
     )
+
+
+# Allowed domains for the notification email — Microsoft accounts only,
+# per the spec ("considering its only Microsoft email id").
+ALLOWED_NOTIFICATION_DOMAINS = (
+    "thirdoctopus.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+)
+ALLOWED_NOTIFICATION_DOMAIN_SUFFIXES = (
+    ".onmicrosoft.com",
+)
+
+
+def _is_microsoft_email(email: str) -> bool:
+    email = email.strip().lower()
+    if "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[1]
+    if domain in ALLOWED_NOTIFICATION_DOMAINS:
+        return True
+    return any(domain.endswith(suf) for suf in ALLOWED_NOTIFICATION_DOMAIN_SUFFIXES)
+
+
+@router.post("/settings/tenant/notification-email")
+def set_notification_email(
+    notification_email: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+
+    raw = (notification_email or "").strip()
+    if not raw:
+        # Empty = remove
+        tenant.notification_email = None
+        db.commit()
+        return RedirectResponse(url="/settings?flash=Notification+email+cleared.", status_code=303)
+
+    if not _is_microsoft_email(raw):
+        msg = ("Only+Microsoft+email+addresses+are+accepted:+thirdoctopus.com,+"
+               "outlook.com,+hotmail.com,+live.com,+msn.com,+or+*.onmicrosoft.com.")
+        return RedirectResponse(url=f"/settings?flash={msg}", status_code=303)
+
+    tenant.notification_email = raw.lower()
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings?flash=Notification+email+set+to+{tenant.notification_email}",
+        status_code=303,
+    )

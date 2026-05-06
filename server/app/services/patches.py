@@ -298,3 +298,55 @@ def window_progress(window: PatchWindow) -> dict:
     done = counts.get("succeeded", 0) + counts.get("skipped", 0) + counts.get("failed", 0)
     pct = round(100 * done / total) if total else 0
     return {"counts": counts, "total": total, "done": done, "pct": pct}
+
+
+def window_candidate_packages(db: Session, window: PatchWindow) -> list[dict]:
+    """Distinct missing packages across this window's targets.
+
+    Each row: {name, severity, count, sources, hostnames_sample, selected}.
+    Sorted by severity (critical first) then count descending.
+    """
+    target_agent_ids = [t.agent_id for t in window.targets]
+    if not target_agent_ids:
+        return []
+
+    q = (db.query(PatchObservation)
+           .filter(PatchObservation.agent_id.in_(target_agent_ids),
+                   PatchObservation.resolved_at.is_(None)))
+    if window.severity_filter is not None:
+        q = q.filter(PatchObservation.severity == window.severity_filter)
+
+    by_pkg: dict[str, dict] = {}
+    for o in q.all():
+        d = by_pkg.setdefault(o.package_name, {
+            "name": o.package_name,
+            "severity": o.severity.value,
+            "count": 0,
+            "sources": set(),
+            "hostnames": [],
+            "title": o.title,
+        })
+        d["count"] += 1
+        d["sources"].add(o.source)
+        if o.agent and o.agent.hostname not in d["hostnames"]:
+            d["hostnames"].append(o.agent.hostname)
+        # Promote severity to most-severe seen across endpoints
+        sev_rank = {"critical": 0, "important": 1, "moderate": 2, "low": 3, "unknown": 4}
+        if sev_rank.get(o.severity.value, 9) < sev_rank.get(d["severity"], 9):
+            d["severity"] = o.severity.value
+
+    selected_set = set(window.selected_packages or [])
+    out = []
+    for d in by_pkg.values():
+        out.append({
+            "name": d["name"],
+            "severity": d["severity"],
+            "count": d["count"],
+            "sources": ", ".join(sorted(d["sources"])),
+            "hostnames_sample": ", ".join(d["hostnames"][:5]) + ("…" if len(d["hostnames"]) > 5 else ""),
+            "title": d["title"] or "",
+            "selected": d["name"] in selected_set,
+        })
+    sev_rank = {"critical": 0, "important": 1, "moderate": 2, "low": 3, "unknown": 4}
+    out.sort(key=lambda r: (sev_rank.get(r["severity"], 9), -r["count"], r["name"]))
+    return out

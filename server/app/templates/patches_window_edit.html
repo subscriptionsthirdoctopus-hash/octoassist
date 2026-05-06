@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Choose packages — {{ window.name }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Choose packages to deploy</h1>
+      <p class="meta">
+        <a href="/patches/windows/{{ window.id }}">← {{ window.name }}</a>
+        · {{ window.targets|length }} target endpoint{{ "" if window.targets|length == 1 else "s" }}
+        · {{ candidate_packages|length }} candidate package{{ "" if candidate_packages|length == 1 else "s" }}
+      </p>
+    </div>
+  </div>
+</section>
+
+<form method="post" action="/patches/windows/{{ window.id }}/packages" class="card form" style="max-width:none;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">
+    <div>
+      <h3 style="margin:0 0 4px;font-size:14px;color:var(--slate);">1. Pick packages</h3>
+      <p class="meta" style="margin:0 0 12px;font-size:13px;">
+        Tick which packages should be installed by the agent on each matching endpoint.
+        Packages are deduplicated across endpoints; one tick = install everywhere it's missing.
+      </p>
+    </div>
+    <div>
+      <h3 style="margin:0 0 4px;font-size:14px;color:var(--slate);">2. Decide execution</h3>
+      <label class="checkbox" style="margin-bottom:8px;">
+        <input type="checkbox" name="auto_execute" value="1" {% if window.auto_execute %}checked{% endif %}>
+        <strong>Enable auto-execution</strong>
+        <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">
+          When the window is in_progress, agents will pull this list, run
+          <code>apt-get install</code> (Linux) / Windows Update (best-effort), and post results.
+        </span>
+      </label>
+      <p class="meta" style="font-size:12.5px;">
+        With auto-execute <strong>off</strong>, you continue to track per-endpoint outcomes manually
+        on the window detail page (Phase 5 behaviour).
+      </p>
+    </div>
+  </div>
+
+  <div style="margin-top:8px;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>c.checked=true);return false;" class="link-button">Select all</button>
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>c.checked=false);return false;" class="link-button">Select none</button>
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>{c.checked=c.dataset.sev==='critical'});return false;" class="link-button">Critical only</button>
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>{c.checked=(c.dataset.sev==='critical'||c.dataset.sev==='important')});return false;" class="link-button">Critical + Important</button>
+    </div>
+    {% if candidate_packages %}
+    <table class="data" style="max-width:none;">
+      <thead>
+        <tr>
+          <th style="width:36px;">✓</th>
+          <th>Package</th>
+          <th>Severity</th>
+          <th>Endpoints</th>
+          <th>Source</th>
+          <th>Title / KB</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in candidate_packages %}
+        <tr>
+          <td><input type="checkbox" class="pkg-cb" name="package" value="{{ p.name }}" data-sev="{{ p.severity }}" {% if p.selected %}checked{% elif window.selected_packages is none %}checked{% endif %}></td>
+          <td><strong>{{ p.name }}</strong></td>
+          <td>
+            {% if p.severity == 'critical' %}<span class="prio prio-critical">{{ p.severity }}</span>
+            {% elif p.severity == 'important' %}<span class="prio prio-high">{{ p.severity }}</span>
+            {% elif p.severity == 'moderate' %}<span class="prio prio-medium">{{ p.severity }}</span>
+            {% else %}<span class="prio prio-low">{{ p.severity }}</span>{% endif %}
+          </td>
+          <td>{{ p.count }} <span style="color:var(--slate);font-size:12px;">({{ p.hostnames_sample }})</span></td>
+          <td><code>{{ p.sources }}</code></td>
+          <td style="max-width:340px;color:var(--slate);font-size:12.5px;">{{ p.title }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <h3 style="margin:0 0 8px;">No candidate packages</h3>
+      <p>The targeted endpoints have no currently-missing patches that match this window's severity filter.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="form-actions" style="margin-top:16px;">
+    <button type="submit" class="primary">Save</button>
+    <a href="/patches/windows/{{ window.id }}" class="link-button">Cancel</a>
+  </div>
+
+  <p class="meta" style="margin:0;font-size:12px;color:var(--slate);">
+    Linux endpoints execute via <code>apt-get install -y</code>.
+    Windows endpoints attempt <code>Install-WindowsUpdate -KBArticleID</code> via PSWindowsUpdate (must be installed on the endpoint; UI marks Windows targets as best-effort).
+    Generic Windows software (Chrome, Adobe etc.) is Phase 7 — needs Chocolatey/winget integration.
+  </p>
+</form>
+{% endblock %}

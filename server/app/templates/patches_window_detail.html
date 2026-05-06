@@ -9,10 +9,25 @@
         <a href="/patches/windows">← All windows</a>
         · <span class="status status-{% if window.status.value == 'completed' %}resolved{% elif window.status.value == 'cancelled' %}cancelled{% elif window.status.value == 'in_progress' %}in_progress{% else %}on_hold{% endif %}">{{ window.status.value.replace("_", " ") }}</span>
         · created {{ window.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ window.created_by.display_name if window.created_by else "—" }}
+        {% if window.auto_execute %}<span class="prio prio-critical" style="margin-left:8px;">auto-execute ON</span>{% endif %}
       </p>
+    </div>
+    <div class="actions">
+      {% if window.status.value in ('draft', 'scheduled') %}
+      <a class="button primary" href="/patches/windows/{{ window.id }}/edit">Choose packages ›</a>
+      {% endif %}
     </div>
   </div>
 </section>
+
+{% if window.selected_packages is not none %}
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Approved packages ({{ window.selected_packages|length }})</h3>
+  <p style="margin:0;font-size:13px;line-height:1.5;">
+    {% for pkg in window.selected_packages %}<code style="margin-right:6px;">{{ pkg }}</code>{% endfor %}
+  </p>
+</section>
+{% endif %}
 
 <section class="cards">
   <div class="card">
@@ -108,7 +123,25 @@
     <tbody>
       {% for t in window.targets %}
       <tr>
-        <td><a href="/patches/{{ t.agent_id }}">{{ t.agent.hostname if t.agent else "—" }}</a></td>
+        <td><a href="/patches/{{ t.agent_id }}">{{ t.agent.hostname if t.agent else "—" }}</a>
+          {% if t.attempts %}
+          <details style="margin-top:4px;">
+            <summary style="cursor:pointer;font-size:11px;color:var(--teal);">{{ t.attempts|length }} attempt{{ "" if t.attempts|length == 1 else "s" }}</summary>
+            <table style="font-size:11px;margin-top:4px;border:1px solid var(--line);border-collapse:collapse;">
+              <thead><tr><th style="padding:3px 6px;background:#eef2f7;">Package</th><th style="padding:3px 6px;background:#eef2f7;">Exit</th><th style="padding:3px 6px;background:#eef2f7;">When</th></tr></thead>
+              <tbody>
+                {% for a in t.attempts %}
+                <tr>
+                  <td style="padding:2px 6px;border-top:1px solid var(--line);"><code>{{ a.package_name }}</code></td>
+                  <td style="padding:2px 6px;border-top:1px solid var(--line);color:{% if a.success %}var(--green){% else %}var(--red){% endif %};">{{ a.exit_code if a.exit_code is not none else "—" }}</td>
+                  <td style="padding:2px 6px;border-top:1px solid var(--line);">{{ a.started_at.strftime("%H:%M") }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </details>
+          {% endif %}
+        </td>
         <td>{{ t.missing_at_plan }}</td>
         <td>
           {% set s = t.status.value %}

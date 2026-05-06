@@ -30,6 +30,10 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     enrolment_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, default=_new_token)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    # Microsoft-only email address (acceptable domains: thirdoctopus.com,
+    # outlook.com, hotmail.com, live.com, msn.com, or *.onmicrosoft.com)
+    # used as the destination for OctoAssist notifications.
+    notification_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
     agents: Mapped[list["Agent"]] = relationship(back_populates="tenant")
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
@@ -131,8 +135,11 @@ class PatchWindowStatus(str, enum.Enum):
 class PatchWindow(Base):
     """A scheduled patch-deployment window (maintenance window record).
 
-    Phase 5 covers SCHEDULING + TRACKING + AUDIT. Actual auto-execution
-    on Linux endpoints is Phase 6.
+    Phase 5 — scheduling + manual tracking.
+    Phase 6 — auto_execute=True turns on agent-driven install. Server lists
+    pending deployments per agent; agent pulls list, runs apt-get / Windows
+    Update, posts results back. Linux is fully wired; Windows requires the
+    PSWindowsUpdate PowerShell module on the endpoint.
     """
     __tablename__ = "patch_windows"
 
@@ -151,6 +158,12 @@ class PatchWindow(Base):
     )
     hostname_pattern: Mapped[str] = mapped_column(String(120), nullable=False, default="%")
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # Phase 6 — agent-driven auto-execution.
+    auto_execute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Subset of package names approved by the admin. Empty list = "all matching
+    # the severity filter at planning time"; explicit list = only these.
+    selected_packages: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
@@ -198,10 +211,37 @@ class PatchWindowTarget(Base):
     window: Mapped["PatchWindow"] = relationship(back_populates="targets")
     agent: Mapped["Agent"] = relationship()
     actor: Mapped["User | None"] = relationship()
+    attempts: Mapped[list["PatchDeploymentAttempt"]] = relationship(
+        back_populates="target", cascade="all, delete-orphan",
+        order_by="PatchDeploymentAttempt.started_at.desc()",
+    )
 
     __table_args__ = (
         Index("ix_patch_window_targets_window", "window_id"),
         Index("ix_patch_window_targets_agent_status", "agent_id", "status"),
+    )
+
+
+class PatchDeploymentAttempt(Base):
+    """Append-only execution log — one row per agent-side install attempt."""
+    __tablename__ = "patch_deployment_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("patch_window_targets.id", ondelete="CASCADE"), nullable=False)
+    package_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    needs_reboot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stdout: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stderr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(String(32), nullable=False, default="apt")  # apt | dnf | windows-update | manual
+
+    target: Mapped[PatchWindowTarget] = relationship(back_populates="attempts")
+
+    __table_args__ = (
+        Index("ix_patch_attempts_target", "target_id"),
     )
 
 

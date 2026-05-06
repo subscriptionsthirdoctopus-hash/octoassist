@@ -99,6 +99,34 @@
   </div>
 </section>
 
+<section>
+  <h2>Notifications</h2>
+  <div class="card">
+    <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Notification email</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      Microsoft email address for OctoAssist outbound notifications.
+      Accepted domains: <code>thirdoctopus.com</code>, <code>outlook.com</code>,
+      <code>hotmail.com</code>, <code>live.com</code>, <code>msn.com</code>,
+      and any <code>*.onmicrosoft.com</code> tenant.
+    </p>
+    <form method="post" action="/settings/tenant/notification-email" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="email" name="notification_email" value="{{ tenant.notification_email or '' }}"
+             placeholder="alerts@thirdoctopus.com"
+             style="flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      <button type="submit" class="button primary">Save</button>
+      {% if tenant.notification_email %}
+        <button type="submit" name="notification_email" value="" class="link-button"
+                onclick="return confirm('Remove the notification email?');">Remove</button>
+      {% endif %}
+    </form>
+    <p class="meta" style="margin:8px 0 0;font-size:12px;">
+      Outbound SMTP/Graph wiring is the next step (Phase 7). For now this address
+      is stored and surfaced on system-event pages; live email delivery requires
+      tenant credentials (Graph app registration or O365 app password).
+    </p>
+  </div>
+</section>
+
 <script>
 function copyEnrolKey() {
   const el = document.getElementById('enrol-key');

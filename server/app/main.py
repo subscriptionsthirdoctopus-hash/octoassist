@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .api.agent import router as agent_router
+from .api.agent_deploy import router as agent_deploy_router
 from .auth import NotAuthenticated, login_redirect_for
 from .config import settings
 from .csrf import CsrfMiddleware, get_or_create_token  # noqa: F401  (drafted, not active)
@@ -59,6 +60,7 @@ _root_templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 # JSON API
 app.include_router(agent_router)        # /api/v1/agent/*  — Bearer (used by OctoAssistAgent.exe)
+app.include_router(agent_deploy_router) # /api/v1/agent/deployments/* — Phase 6 auto-install
 
 # Browser routes
 app.include_router(login_router)        # /login, /logout
