@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ window.name }} — Patch window{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ window.name }}</h1>
+      <p class="meta">
+        <a href="/patches/windows">← All windows</a>
+        · <span class="status status-{% if window.status.value == 'completed' %}resolved{% elif window.status.value == 'cancelled' %}cancelled{% elif window.status.value == 'in_progress' %}in_progress{% else %}on_hold{% endif %}">{{ window.status.value.replace("_", " ") }}</span>
+        · created {{ window.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ window.created_by.display_name if window.created_by else "—" }}
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="cards">
+  <div class="card">
+    <h3>Filter</h3>
+    <dl>
+      <dt>Hostname pattern</dt><dd><code>{{ window.hostname_pattern }}</code></dd>
+      <dt>Severity filter</dt><dd>{{ window.severity_filter.value if window.severity_filter else "all severities" }}</dd>
+      <dt>Targets matched</dt><dd>{{ progress.total }} endpoint{{ "" if progress.total == 1 else "s" }}</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h3>Schedule</h3>
+    <dl>
+      <dt>Scheduled for</dt><dd>{% if window.scheduled_for %}{{ window.scheduled_for.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Started</dt><dd>{% if window.started_at %}{{ window.started_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Completed</dt><dd>{% if window.completed_at %}{{ window.completed_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h3>Progress</h3>
+    <p style="font-size:24px;font-weight:700;color:var(--navy);margin:0 0 4px;">{{ progress.pct }}%</p>
+    <p class="meta" style="margin:0;">
+      {{ progress.counts.succeeded }} succeeded ·
+      {{ progress.counts.failed }} failed ·
+      {{ progress.counts.skipped }} skipped ·
+      {{ progress.counts.in_progress }} in progress ·
+      {{ progress.counts.planned }} planned
+    </p>
+  </div>
+</section>
+
+{% if window.description %}
+<section class="card prose" style="max-width:880px;white-space:pre-wrap;">{{ window.description }}</section>
+{% endif %}
+
+{# ---------- Workflow controls ---------- #}
+<section class="cards">
+  {% if window.status.value == 'draft' %}
+  <div class="card">
+    <h3>Schedule this wave</h3>
+    <p class="meta">Locks targets in. Move to <em>scheduled</em> once the maintenance window is committed.</p>
+    <form method="post" action="/patches/windows/{{ window.id }}/transition" class="inline-form">
+      <input type="hidden" name="new_status" value="scheduled">
+      <button type="submit" class="primary">Mark scheduled</button>
+    </form>
+  </div>
+  {% elif window.status.value == 'scheduled' %}
+  <div class="card">
+    <h3>Start the window</h3>
+    <p class="meta">Click when the maintenance window opens. Targets become editable.</p>
+    <form method="post" action="/patches/windows/{{ window.id }}/transition" class="inline-form">
+      <input type="hidden" name="new_status" value="in_progress">
+      <button type="submit" class="primary">Start</button>
+    </form>
+  </div>
+  {% elif window.status.value == 'in_progress' %}
+  <div class="card">
+    <h3>Close out</h3>
+    <p class="meta">Mark every target above first, then close.</p>
+    <form method="post" action="/patches/windows/{{ window.id }}/transition" class="inline-form">
+      <input type="hidden" name="new_status" value="completed">
+      <button type="submit" class="primary">Mark completed</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if window.status.value not in ('completed', 'cancelled') %}
+  <div class="card">
+    <h3>Cancel</h3>
+    <form method="post" action="/patches/windows/{{ window.id }}/transition" class="inline-form">
+      <input type="hidden" name="new_status" value="cancelled">
+      <button type="submit" style="color:var(--red);">Cancel window</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+{# ---------- Per-target table ---------- #}
+<section>
+  <h2>Targets ({{ window.targets|length }})</h2>
+  {% if window.targets %}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Hostname</th>
+        <th>Missing at plan</th>
+        <th>Status</th>
+        <th>Note</th>
+        <th>Updated by</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in window.targets %}
+      <tr>
+        <td><a href="/patches/{{ t.agent_id }}">{{ t.agent.hostname if t.agent else "—" }}</a></td>
+        <td>{{ t.missing_at_plan }}</td>
+        <td>
+          {% set s = t.status.value %}
+          {% if s == 'succeeded' %}<span class="status status-resolved">{{ s }}</span>
+          {% elif s == 'failed' %}<span class="status status-cancelled">{{ s }}</span>
+          {% elif s == 'skipped' %}<span class="status status-on_hold">{{ s }}</span>
+          {% elif s == 'in_progress' %}<span class="status status-in_progress">{{ s.replace("_", " ") }}</span>
+          {% else %}<span class="status status-open">{{ s }}</span>{% endif %}
+        </td>
+        <td>{{ t.note or "—" }}</td>
+        <td>{{ t.actor.display_name if t.actor else "—" }}</td>
+        <td>
+          {% if window.status.value == 'in_progress' %}
+          <form method="post" action="/patches/windows/{{ window.id }}/targets/{{ t.id }}" class="inline-form-stack" style="gap:4px;">
+            <select name="new_status">
+              {% for ts in target_statuses %}
+              <option value="{{ ts }}" {% if t.status.value == ts %}selected{% endif %}>{{ ts.replace("_", " ") }}</option>
+              {% endfor %}
+            </select>
+            <input type="text" name="note" placeholder="optional note" style="width:160px;font-size:12px;">
+            <button type="submit" style="font-size:12px;padding:4px 8px;">Update</button>
+          </form>
+          {% else %}
+          <span class="meta-inline" style="font-size:12px;color:var(--slate);">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <p>No targets matched the filters at planning time. (Either no endpoints match the hostname pattern, or none of them have currently-missing patches at the requested severity.)</p>
+  </div>
+  {% endif %}
+</section>
+
+{% if window.notes %}
+<section class="card prose" style="margin-top:24px;max-width:880px;white-space:pre-wrap;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Notes</h3>
+  {{ window.notes }}
+</section>
+{% endif %}
+{% endblock %}

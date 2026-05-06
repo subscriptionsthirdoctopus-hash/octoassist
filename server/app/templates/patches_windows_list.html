@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Patch deployment windows — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Patch deployment windows</h1>
+      <p class="meta">Scheduled patch waves with per-endpoint outcome tracking · audit-grade evidence trail</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="/patches">← Fleet view</a>
+      <a class="button primary" href="/patches/windows/new">+ New window</a>
+    </div>
+  </div>
+</section>
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>Name</th><th>Status</th><th>Scheduled</th><th>Targets</th><th>Progress</th><th>Created</th><th>By</th></tr></thead>
+  <tbody>
+    {% for w in rows %}
+    {% set p = window_progress(w) %}
+    <tr>
+      <td><a href="/patches/windows/{{ w.id }}"><strong>{{ w.name }}</strong></a>
+          {% if w.severity_filter %}<div style="color:var(--slate);font-size:12px;">severity: {{ w.severity_filter.value }}</div>{% endif %}
+      </td>
+      <td><span class="status status-{% if w.status.value == 'completed' %}resolved{% elif w.status.value == 'cancelled' %}cancelled{% elif w.status.value == 'in_progress' %}in_progress{% else %}on_hold{% endif %}">{{ w.status.value.replace("_", " ") }}</span></td>
+      <td>{% if w.scheduled_for %}{{ w.scheduled_for.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</td>
+      <td>{{ p.total }}</td>
+      <td>{{ p.done }} / {{ p.total }} ({{ p.pct }}%)</td>
+      <td>{{ w.created_at.strftime("%Y-%m-%d") }}</td>
+      <td>{{ w.created_by.display_name if w.created_by else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No patch windows scheduled yet</h2>
+  <p>Plan a patch wave with <a href="/patches/windows/new">+ New window</a>. Targets are auto-computed from your hostname pattern + severity filter at creation time.</p>
+</div>
+{% endif %}
+
+<p class="meta" style="margin-top:24px;font-size:12px;">
+  Phase 5 covers <strong>scheduling + tracking</strong>. Per-endpoint outcomes are marked manually.
+  Auto-execution on Linux endpoints is planned for Phase 6 (will require sudo escalation in the agent + a new agent → server pull-deployment endpoint).
+</p>
+{% endblock %}

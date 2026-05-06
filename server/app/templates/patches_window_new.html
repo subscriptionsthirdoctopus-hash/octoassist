@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}New patch window — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Schedule a patch window</h1>
+  <p class="meta"><a href="/patches/windows">← Back to deployment windows</a> · Targets are computed at creation time from the filters below.</p>
+</section>
+
+<form method="post" action="/patches/windows/new" class="card form" style="max-width:880px;">
+  <label>Name
+    <input type="text" name="name" required maxlength="160" placeholder="e.g. April Critical Patch Wave — Mumbai HQ">
+  </label>
+
+  <label>Description
+    <textarea name="description" rows="3" placeholder="What this wave covers, change-management ticket reference, etc."></textarea>
+  </label>
+
+  <h3 style="margin:8px 0 4px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Target selection</h3>
+
+  <label>Hostname pattern <span class="meta">(SQL LIKE — use % as wildcard. <code>%</code> = all endpoints; <code>LT-FIN-%</code> = Finance laptops only)</span>
+    <input type="text" name="hostname_pattern" value="%" required>
+  </label>
+
+  <label>Severity filter <span class="meta">(target only patches at or above this severity; blank = all severities)</span>
+    <select name="severity_filter">
+      <option value="">All severities</option>
+      {% for s in severities %}
+      <option value="{{ s }}" {% if s == 'critical' %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <h3 style="margin:8px 0 4px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Schedule</h3>
+
+  <label>Scheduled for <span class="meta">(maintenance window start)</span>
+    <input type="datetime-local" name="scheduled_for">
+  </label>
+
+  <label>Notes <span class="meta">(rollback plan, expected duration, comms recipients)</span>
+    <textarea name="notes" rows="3"></textarea>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Create window (status: draft)</button>
+    <a href="/patches/windows" class="link-button">Cancel</a>
+  </div>
+</form>
+{% endblock %}

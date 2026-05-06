@@ -80,14 +80,20 @@ class PatchSeverity(str, enum.Enum):
     unknown   = "unknown"
 
 
-class PatchAvailable(Base):
-    """Patches/updates an endpoint reports as available (not yet installed).
+class PatchObservation(Base):
+    """Append-only observation log for missing patches.
 
-    Replaced wholesale on every check-in. We don't track per-patch history yet —
-    that would be a phase-5 enhancement (audit-grade evidence of "patch was
-    available for N days before being installed").
+    Each (agent, package, available_version) combination gets ONE row that
+    is upserted on every check-in:
+      - first_seen_at — when the patch was first reported missing (audit anchor)
+      - last_seen_at  — most recent check-in that still saw it as missing
+      - resolved_at   — null until a check-in stops reporting it (= installed)
+
+    Currently-missing patches → resolved_at IS NULL.
+    Aging report → now() - first_seen_at, grouped into 0-7/8-30/31-90/>90 buckets.
+    Audit "patch was available for N days before installation" → resolved_at - first_seen_at.
     """
-    __tablename__ = "patches_available"
+    __tablename__ = "patch_observations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
@@ -100,13 +106,102 @@ class PatchAvailable(Base):
     )
     source: Mapped[str] = mapped_column(String(60), nullable=False, default="unknown")
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
-    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    last_seen_at: Mapped[datetime]  = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     agent: Mapped[Agent] = relationship()
 
     __table_args__ = (
-        Index("ix_patches_agent", "agent_id"),
-        Index("ix_patches_severity", "severity"),
+        Index("ix_patch_obs_agent_active",   "agent_id", "resolved_at"),
+        Index("ix_patch_obs_severity_active", "severity", "resolved_at"),
+        Index("ix_patch_obs_first_seen",     "first_seen_at"),
+    )
+
+
+class PatchWindowStatus(str, enum.Enum):
+    draft        = "draft"
+    scheduled    = "scheduled"
+    in_progress  = "in_progress"
+    completed    = "completed"
+    cancelled    = "cancelled"
+
+
+class PatchWindow(Base):
+    """A scheduled patch-deployment window (maintenance window record).
+
+    Phase 5 covers SCHEDULING + TRACKING + AUDIT. Actual auto-execution
+    on Linux endpoints is Phase 6.
+    """
+    __tablename__ = "patch_windows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[PatchWindowStatus] = mapped_column(
+        Enum(PatchWindowStatus, name="patch_window_status"),
+        nullable=False, default=PatchWindowStatus.draft,
+    )
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    severity_filter: Mapped[PatchSeverity | None] = mapped_column(
+        Enum(PatchSeverity, name="patch_severity"),
+        nullable=True,
+    )
+    hostname_pattern: Mapped[str] = mapped_column(String(120), nullable=False, default="%")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_by: Mapped["User | None"] = relationship()
+    targets: Mapped[list["PatchWindowTarget"]] = relationship(
+        back_populates="window", cascade="all, delete-orphan",
+        order_by="PatchWindowTarget.id",
+    )
+
+    __table_args__ = (
+        Index("ix_patch_windows_tenant_status", "tenant_id", "status"),
+    )
+
+
+class PatchWindowTargetStatus(str, enum.Enum):
+    planned     = "planned"
+    in_progress = "in_progress"
+    succeeded   = "succeeded"
+    failed      = "failed"
+    skipped     = "skipped"
+
+
+class PatchWindowTarget(Base):
+    """One row per (window, agent). Tracks per-endpoint outcome of the window."""
+    __tablename__ = "patch_window_targets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    window_id: Mapped[int] = mapped_column(ForeignKey("patch_windows.id", ondelete="CASCADE"), nullable=False)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[PatchWindowTargetStatus] = mapped_column(
+        Enum(PatchWindowTargetStatus, name="patch_window_target_status"),
+        nullable=False, default=PatchWindowTargetStatus.planned,
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Snapshot of how many missing patches the agent had at planning time
+    missing_at_plan: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    window: Mapped["PatchWindow"] = relationship(back_populates="targets")
+    agent: Mapped["Agent"] = relationship()
+    actor: Mapped["User | None"] = relationship()
+
+    __table_args__ = (
+        Index("ix_patch_window_targets_window", "window_id"),
+        Index("ix_patch_window_targets_agent_status", "agent_id", "status"),
     )
 
 

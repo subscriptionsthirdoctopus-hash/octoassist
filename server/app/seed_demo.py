@@ -39,8 +39,12 @@ from .models import (
     KbArticleStatus,
     KbArticleVisibility,
     KbCategory,
-    PatchAvailable,
+    PatchObservation,
     PatchSeverity,
+    PatchWindow,
+    PatchWindowStatus,
+    PatchWindowTarget,
+    PatchWindowTargetStatus,
     Problem,
     ProblemStatus,
     ProblemTicketLink,
@@ -1200,17 +1204,19 @@ PATCH_CATALOG: list[tuple[str, str, str, str]] = [
 
 
 def seed_patches(db: Session, tenant: Tenant, force: bool) -> None:
-    """Sprinkle realistic missing-patch counts across the demo Windows endpoints."""
-    existing = (db.query(PatchAvailable)
-                  .join(Agent, Agent.id == PatchAvailable.agent_id)
+    """Sprinkle realistic missing-patch observations with varied ages.
+
+    Ages range from 1 day to 120 days so the /patches/aging report shows
+    something interesting in every bucket (0-7d, 8-30d, 31-90d, >90d).
+    """
+    existing = (db.query(PatchObservation)
+                  .join(Agent, Agent.id == PatchObservation.agent_id)
                   .filter(Agent.tenant_id == tenant.id)
                   .count())
     if existing > 0 and not force:
-        log.info("patches: already %d, skipping", existing)
+        log.info("patches: already %d observations, skipping", existing)
         return
 
-    # Only target hostnames matching the demo Windows pattern (LT-* / WS-*) — leave
-    # any real-agent rows (e.g., the droplet's apt-upgradable list) alone.
     win_agents = (db.query(Agent)
                     .filter(Agent.tenant_id == tenant.id,
                             (Agent.hostname.like("LT-%")) | (Agent.hostname.like("WS-%")))
@@ -1220,25 +1226,32 @@ def seed_patches(db: Session, tenant: Tenant, force: bool) -> None:
         return
 
     if force:
+        # Wipe demo Windows endpoints' observations; leave real-agent rows alone.
         for a in win_agents:
-            db.query(PatchAvailable).filter(PatchAvailable.agent_id == a.id).delete()
+            db.query(PatchObservation).filter(PatchObservation.agent_id == a.id).delete()
         db.commit()
 
-    rng = random.Random(42)  # deterministic for reproducibility
+    rng = random.Random(42)
+    now = NOW()
     added = 0
     for a in win_agents:
-        # 80% of endpoints have at least 1 missing patch; 30% have a critical
         if rng.random() < 0.20:
             continue
         n = rng.randint(2, 12)
-        # Roughly 30% of those n end up being critical
         sample = rng.sample(PATCH_CATALOG, k=min(n, len(PATCH_CATALOG)))
         for kb, sev_str, title, source in sample:
             try:
                 sev = PatchSeverity(sev_str)
             except ValueError:
                 sev = PatchSeverity.unknown
-            db.add(PatchAvailable(
+            # Spread first-seen across 1–120 days to populate every aging bucket.
+            age_days = rng.choices(
+                [rng.randint(1, 7), rng.randint(8, 30), rng.randint(31, 90), rng.randint(91, 120)],
+                weights=[0.30, 0.35, 0.25, 0.10],
+                k=1,
+            )[0]
+            first_seen = now - timedelta(days=age_days)
+            db.add(PatchObservation(
                 agent_id=a.id,
                 package_name=kb,
                 current_version=None,
@@ -1246,10 +1259,127 @@ def seed_patches(db: Session, tenant: Tenant, force: bool) -> None:
                 severity=sev,
                 source=source,
                 title=title,
+                first_seen_at=first_seen,
+                last_seen_at=now - timedelta(hours=rng.randint(1, 12)),
+                resolved_at=None,
             ))
             added += 1
     db.commit()
-    log.info("patches: seeded %d rows across %d Windows demo endpoints", added, len(win_agents))
+    log.info("patches: seeded %d aged observations across %d Windows demo endpoints",
+             added, len(win_agents))
+
+
+# ---------------------------------------------------------------------------
+# Sample patch windows — one of each status to demonstrate the workflow
+# ---------------------------------------------------------------------------
+
+def seed_patch_windows(db: Session, tenant: Tenant, force: bool) -> None:
+    existing = db.query(PatchWindow).filter(PatchWindow.tenant_id == tenant.id).count()
+    if existing > 0 and not force:
+        log.info("patch_windows: already %d, skipping", existing)
+        return
+    if force:
+        db.query(PatchWindow).filter(PatchWindow.tenant_id == tenant.id).delete()
+        db.commit()
+
+    admin = (db.query(User)
+               .filter(User.tenant_id == tenant.id, User.role == UserRole.admin)
+               .order_by(User.id).first())
+    if admin is None:
+        return
+
+    now = NOW()
+    rng = random.Random(7)
+
+    # Helper: build a window + targets for a hostname pattern + severity filter
+    def _mk(name, desc, status, sev, hostname, scheduled_offset_days, started_offset=None,
+            completed_offset=None, target_status_dist=None):
+        win = PatchWindow(
+            tenant_id=tenant.id,
+            name=name, description=desc,
+            status=status,
+            severity_filter=sev,
+            hostname_pattern=hostname,
+            scheduled_for=now + timedelta(days=scheduled_offset_days),
+            notes="Auto-generated by seeder for demo purposes.",
+            created_by_id=admin.id,
+            started_at=(now + timedelta(days=started_offset)) if started_offset is not None else None,
+            completed_at=(now + timedelta(days=completed_offset)) if completed_offset is not None else None,
+        )
+        db.add(win)
+        db.flush()
+
+        # Materialise targets
+        agents_q = (db.query(Agent)
+                      .filter(Agent.tenant_id == tenant.id,
+                              Agent.hostname.like(hostname))
+                      .all())
+        for a in agents_q:
+            obs_q = (db.query(PatchObservation)
+                       .filter(PatchObservation.agent_id == a.id,
+                               PatchObservation.resolved_at.is_(None)))
+            if sev is not None:
+                obs_q = obs_q.filter(PatchObservation.severity == sev)
+            count = obs_q.count()
+            if count == 0:
+                continue
+            # Per-target status: depends on overall window status
+            t_status = PatchWindowTargetStatus.planned
+            if status == PatchWindowStatus.in_progress and target_status_dist:
+                t_status = rng.choices(*zip(*target_status_dist))[0]
+            elif status == PatchWindowStatus.completed:
+                # 80% succeeded, 10% failed, 10% skipped
+                t_status = rng.choices(
+                    [PatchWindowTargetStatus.succeeded,
+                     PatchWindowTargetStatus.failed,
+                     PatchWindowTargetStatus.skipped],
+                    weights=[0.8, 0.1, 0.1],
+                )[0]
+            db.add(PatchWindowTarget(
+                window_id=win.id,
+                agent_id=a.id,
+                status=t_status,
+                missing_at_plan=count,
+                actor_id=admin.id if t_status != PatchWindowTargetStatus.planned else None,
+                note=("Patched via apt unattended-upgrades"
+                      if t_status == PatchWindowTargetStatus.succeeded else None),
+            ))
+        return win
+
+    _mk("April Critical Patch Wave — All Endpoints",
+        "Critical Microsoft updates from April CU. Cleared the high-CVE backlog.",
+        PatchWindowStatus.completed, PatchSeverity.critical, "%",
+        scheduled_offset_days=-21, started_offset=-21, completed_offset=-20)
+
+    _mk("Finance laptops — Important security updates",
+        "Office security update + .NET CVE-2026-XXXX. Finance laptops only.",
+        PatchWindowStatus.completed, PatchSeverity.important, "LT-FIN-%",
+        scheduled_offset_days=-12, started_offset=-12, completed_offset=-11)
+
+    _mk("Engineering — May Critical Wave",
+        "Pushed alongside the May Office update. Engineering tier first.",
+        PatchWindowStatus.in_progress, PatchSeverity.critical, "LT-DEV-%",
+        scheduled_offset_days=-1, started_offset=-1,
+        target_status_dist=[
+            (PatchWindowTargetStatus.succeeded,   0.5),
+            (PatchWindowTargetStatus.in_progress, 0.2),
+            (PatchWindowTargetStatus.planned,     0.2),
+            (PatchWindowTargetStatus.failed,      0.1),
+        ])
+
+    _mk("Operations workstations — June Critical Wave",
+        "Scheduled for next week's after-hours window.",
+        PatchWindowStatus.scheduled, PatchSeverity.critical, "WS-OPS-%",
+        scheduled_offset_days=4)
+
+    _mk("Marketing laptops — Quarterly important",
+        "Quarterly important-and-above wave. Draft pending change-board approval.",
+        PatchWindowStatus.draft, PatchSeverity.important, "LT-MKT-%",
+        scheduled_offset_days=10)
+
+    db.commit()
+    total = db.query(PatchWindow).filter(PatchWindow.tenant_id == tenant.id).count()
+    log.info("patch_windows: seeded — total now %d", total)
 
 
 def run(force: bool = False) -> None:
@@ -1267,6 +1397,7 @@ def run(force: bool = False) -> None:
         seed_problems(db, tenant, force=force)
         seed_changes(db, tenant, force=force)
         seed_patches(db, tenant, force=force)
+        seed_patch_windows(db, tenant, force=force)
         log.info("DONE.")
     finally:
         db.close()

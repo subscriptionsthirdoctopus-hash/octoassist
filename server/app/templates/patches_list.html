@@ -5,9 +5,11 @@
   <div class="row-between">
     <div>
       <h1>Patch Management</h1>
-      <p class="meta">Endpoint patch posture across the fleet · agents report on every check-in</p>
+      <p class="meta">Endpoint patch posture across the fleet</p>
     </div>
     <div class="actions">
+      <a class="button" href="/patches/aging">Aging report ›</a>
+      <a class="button" href="/patches/windows">Deployment windows ›</a>
       <a class="button primary" href="/patches/export.csv">Export CSV</a>
     </div>
   </div>
@@ -53,6 +55,7 @@
         <th>Important</th>
         <th>Moderate</th>
         <th>Total missing</th>
+        <th>Oldest</th>
         <th>Last seen</th>
       </tr>
     </thead>
@@ -60,10 +63,11 @@
       {% for r in rows %}
       <tr>
         <td><a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a></td>
-        <td>{% if r.critical > 0 %}<span class="prio prio-critical">{{ r.critical }}</span>{% else %}<span class="meta-inline" style="color:var(--green);font-weight:600;">0</span>{% endif %}</td>
+        <td>{% if r.critical > 0 %}<span class="prio prio-critical">{{ r.critical }}</span>{% else %}<span style="color:var(--green);font-weight:600;">0</span>{% endif %}</td>
         <td>{% if r.important > 0 %}<span class="prio prio-high">{{ r.important }}</span>{% else %}0{% endif %}</td>
         <td>{% if r.moderate > 0 %}<span class="prio prio-medium">{{ r.moderate }}</span>{% else %}0{% endif %}</td>
         <td><strong>{{ r.total }}</strong></td>
+        <td>{% if r.oldest_age_days is not none %}{% if r.oldest_age_days > 90 %}<span class="breach">{{ r.oldest_age_days }}d</span>{% else %}{{ r.oldest_age_days }}d{% endif %}{% else %}—{% endif %}</td>
         <td>{% if r.last_seen %}{{ r.last_seen.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}</td>
       </tr>
       {% endfor %}
@@ -72,7 +76,7 @@
   {% else %}
   <div class="empty">
     <h2>No patch data yet</h2>
-    <p>Endpoints report missing patches on each check-in. Newly-installed agents may take an hour to populate this view.</p>
+    <p>Endpoints report missing patches on each check-in.</p>
   </div>
   {% endif %}
 </section>

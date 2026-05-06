@@ -36,7 +36,7 @@
 </section>
 
 <section>
-  <h2>Missing patches ({{ patches|length }})</h2>
+  <h2>Currently missing ({{ patches|length }})</h2>
   {% if patches %}
   <table class="data">
     <thead>
@@ -45,12 +45,15 @@
         <th>Package</th>
         <th>Current</th>
         <th>Available</th>
+        <th>First seen</th>
+        <th>Age</th>
         <th>Source</th>
-        <th>Detected</th>
       </tr>
     </thead>
     <tbody>
+      {% set now = patches[0].last_seen_at if patches else None %}
       {% for p in patches %}
+      {% set age_days = ((p.last_seen_at - p.first_seen_at).total_seconds() / 86400) | round(0, 'floor') | int %}
       <tr>
         <td>
           {% set sev = p.severity.value %}
@@ -59,11 +62,12 @@
           {% elif sev == 'moderate' %}<span class="prio prio-medium">{{ sev }}</span>
           {% else %}<span class="prio prio-low">{{ sev }}</span>{% endif %}
         </td>
-        <td><strong>{{ p.package_name }}</strong>{% if p.title %}<div class="meta-inline" style="display:block;color:var(--slate);font-size:12px;">{{ p.title[:160] }}</div>{% endif %}</td>
+        <td><strong>{{ p.package_name }}</strong>{% if p.title %}<div style="color:var(--slate);font-size:12px;">{{ p.title[:160] }}</div>{% endif %}</td>
         <td>{{ p.current_version or "—" }}</td>
         <td>{{ p.available_version or "—" }}</td>
+        <td>{{ p.first_seen_at.strftime("%Y-%m-%d") }}</td>
+        <td>{% if age_days > 90 %}<span class="breach">{{ age_days }}d</span>{% else %}{{ age_days }}d{% endif %}</td>
         <td>{{ p.source }}</td>
-        <td>{{ p.detected_at.strftime("%Y-%m-%d") }}</td>
       </tr>
       {% endfor %}
     </tbody>
