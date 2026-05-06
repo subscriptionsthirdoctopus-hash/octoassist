@@ -37,7 +37,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=$ADMIN_PASSWORD
-TENANT_NAME=TEMA India Pvt. Ltd.
+TENANT_NAME=Third Octopus
 EOF
   chmod 600 "$ENV_FILE"
 else
@@ -82,7 +82,7 @@ cat <<EOF
 
   Admin:           admin
   Admin password:  $ADMIN_PASSWORD_PRINT
-  Tenant:          TEMA India Pvt. Ltd.
+  Tenant:          Third Octopus
   Enrolment key:   ${ENROL_KEY:-<DB still bootstrapping — re-check in 30s>}
 
   Stored in:       $(pwd)/$ENV_FILE   (root-only, mode 600)

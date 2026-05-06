@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     admin_email: str = "admin@thirdoctopus.local"
     bind_host: str = "0.0.0.0"
     bind_port: int = 8080
-    tenant_name: str = "TEMA India Pvt. Ltd."
+    tenant_name: str = "Third Octopus"
 
     # Session cookie signing key. Must be stable across restarts so existing
     # cookies remain valid. If not set in env, a fresh random key is generated

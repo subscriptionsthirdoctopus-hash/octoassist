@@ -46,7 +46,7 @@ services:
       OCTOASSIST_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       OCTOASSIST_BIND_HOST: 0.0.0.0
       OCTOASSIST_BIND_PORT: "8080"
-      OCTOASSIST_TENANT_NAME: ${TENANT_NAME:-TEMA India Pvt. Ltd.}
+      OCTOASSIST_TENANT_NAME: ${TENANT_NAME:-Third Octopus}
     ports:
       # Public HTTP on TCP/8088. WARNING: HTTP Basic over plaintext —
       # admin password transits in clear text. Acceptable for early demo;
