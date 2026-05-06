@@ -15,6 +15,7 @@
     <nav>
       {% if current_user %}
         {% if current_user.role.value in ('admin', 'agent') %}
+          <a href="/reports">Dashboard</a>
           <a href="/tickets">Tickets</a>
           <a href="/problems">Problems</a>
           <a href="/changes">Changes</a>

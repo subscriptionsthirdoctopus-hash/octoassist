@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Tickets Report — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Tickets Report</h1>
+      <p class="meta">Window: last {{ days }} days · <a href="/reports">← Dashboard</a></p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/reports/export/tickets.csv">Export CSV</a>
+      <a class="button" href="?days=7">7d</a>
+      <a class="button" href="?days=30">30d</a>
+      <a class="button" href="?days=90">90d</a>
+    </div>
+  </div>
+</section>
+
+<section class="report-row">
+  <div class="report-card">
+    <h3>Tickets created — last {{ days }} days</h3>
+    {{ chart_per_day|safe }}
+  </div>
+</section>
+
+<section class="report-row charts-grid-3">
+  <div class="report-card">
+    <h3>By status</h3>
+    {{ chart_status|safe }}
+  </div>
+  <div class="report-card">
+    <h3>By kind</h3>
+    {{ chart_kind|safe }}
+  </div>
+  <div class="report-card">
+    <h3>Open by priority</h3>
+    {{ chart_priority_open|safe }}
+  </div>
+</section>
+
+<section class="report-row two-col-charts">
+  <div class="report-card">
+    <h3>Top categories — last {{ days }} days</h3>
+    {{ chart_category|safe }}
+  </div>
+  <div class="report-card">
+    <h3>All-time, by priority</h3>
+    {{ chart_priority_all|safe }}
+  </div>
+</section>
+
+<section class="report-row two-col-charts">
+  <div class="report-card">
+    <h3>Workload — open tickets per assignee</h3>
+    {{ chart_workload|safe }}
+  </div>
+  <div class="report-card">
+    <h3>Top reporters — last {{ days }} days</h3>
+    {{ chart_top_reps|safe }}
+  </div>
+</section>
+{% endblock %}

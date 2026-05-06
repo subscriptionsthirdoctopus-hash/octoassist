@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Asset Report — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Asset Report</h1>
+      <p class="meta">{{ total }} endpoint{{ "" if total == 1 else "s" }} reporting · <a href="/reports">← Dashboard</a></p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/reports/export/assets.csv">Export CSV</a>
+      <a class="button" href="/assets">Asset register ›</a>
+    </div>
+  </div>
+</section>
+
+<section class="report-row two-col-charts">
+  <div class="report-card">
+    <h3>Operating system distribution</h3>
+    {{ chart_os|safe }}
+  </div>
+  <div class="report-card">
+    <h3>RAM distribution</h3>
+    {{ chart_ram|safe }}
+  </div>
+</section>
+
+<section class="report-row">
+  <div class="report-card">
+    <h3>Top installed software (across all endpoints)</h3>
+    {{ chart_sw|safe }}
+  </div>
+</section>
+
+<section>
+  <h2>Software inventory — top {{ sw_top|length }}</h2>
+  <table class="data" style="max-width:720px;">
+    <thead><tr><th>Software</th><th>Endpoints</th><th>Penetration</th></tr></thead>
+    <tbody>
+      {% for name, count in sw_top %}
+      <tr>
+        <td>{{ name }}</td>
+        <td>{{ count }}</td>
+        <td>{{ "%.0f"|format(100 * count / total) if total else 0 }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
