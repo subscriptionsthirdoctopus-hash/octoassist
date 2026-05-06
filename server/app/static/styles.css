@@ -125,6 +125,24 @@ table.data.audit code {
   border-radius: 6px;
   padding: 16px 18px;
 }
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.key-value {
+  flex: 1;
+  min-width: 200px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  background: #f3f5fa;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  word-break: break-all;
+}
 .card h3 {
   margin: 0 0 10px 0;
   font-size: 13px;

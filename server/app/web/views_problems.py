@@ -1,0 +1,175 @@
+"""Problem Management views — staff only."""
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from ..auth import require_staff
+from ..database import get_db
+from ..models import (
+    Problem, ProblemStatus, ProblemTicketLink, Tenant, Ticket, TicketPriority,
+    User, UserRole,
+)
+from ..services import problem as problem_svc
+
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+
+router = APIRouter(tags=["problems"])
+
+
+def _ctx(user: User, db: Session, **extra) -> dict:
+    return {"current_user": user, "tenant": db.query(Tenant).first(), **extra}
+
+
+@router.get("/problems", response_class=HTMLResponse)
+def list_problems(
+    request: Request,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    qy = db.query(Problem).filter(Problem.tenant_id == user.tenant_id)
+    if status:
+        try:
+            qy = qy.filter(Problem.status == ProblemStatus(status))
+        except ValueError:
+            pass
+    rows = qy.order_by(Problem.created_at.desc()).limit(200).all()
+    return templates.TemplateResponse(
+        request=request, name="problems_list.html",
+        context=_ctx(user, db, rows=rows, statuses=[s.value for s in ProblemStatus], filter_status=status or ""),
+    )
+
+
+@router.get("/problems/new", response_class=HTMLResponse)
+def new_problem_form(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return templates.TemplateResponse(
+        request=request, name="problem_new.html",
+        context=_ctx(user, db, priorities=[p.value for p in TicketPriority]),
+    )
+
+
+@router.post("/problems/new")
+def new_problem_submit(
+    title: str = Form(...),
+    description: str = Form(""),
+    priority: str = Form("medium"),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    try:
+        prio = TicketPriority(priority)
+    except ValueError:
+        prio = TicketPriority.medium
+    p = problem_svc.create_problem(
+        db, tenant_id=user.tenant_id, reporter=user,
+        title=title, description=description, priority=prio,
+    )
+    return RedirectResponse(url=f"/problems/{p.id}", status_code=303)
+
+
+@router.get("/problems/{problem_id}", response_class=HTMLResponse)
+def problem_detail(
+    problem_id: int,
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    p = db.get(Problem, problem_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    open_tickets = (db.query(Ticket)
+                      .filter(Ticket.tenant_id == user.tenant_id)
+                      .order_by(Ticket.created_at.desc()).limit(50).all())
+    staff = (db.query(User)
+               .filter(User.tenant_id == user.tenant_id, User.is_active == True,  # noqa: E712
+                       User.role.in_([UserRole.admin, UserRole.agent]))
+               .order_by(User.full_name, User.email).all())
+    return templates.TemplateResponse(
+        request=request, name="problem_detail.html",
+        context=_ctx(user, db, problem=p, open_tickets=open_tickets, staff=staff,
+                     statuses=[s.value for s in ProblemStatus],
+                     priorities=[p.value for p in TicketPriority]),
+    )
+
+
+@router.post("/problems/{problem_id}/edit")
+def problem_edit(
+    problem_id: int,
+    title: str = Form(...),
+    description: str = Form(""),
+    root_cause: str = Form(""),
+    workaround: str = Form(""),
+    priority: str = Form("medium"),
+    assignee_id: str = Form(""),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    p = db.get(Problem, problem_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    p.title = title.strip()[:255]
+    p.description = description.strip()
+    p.root_cause = root_cause.strip()
+    p.workaround = workaround.strip()
+    try:
+        p.priority = TicketPriority(priority)
+    except ValueError:
+        pass
+    p.assignee_id = int(assignee_id) if assignee_id.strip() else None
+    db.commit()
+    return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
+
+
+@router.post("/problems/{problem_id}/status")
+def problem_status(
+    problem_id: int,
+    new_status: str = Form(...),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    p = db.get(Problem, problem_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    try:
+        ns = ProblemStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=400)
+    problem_svc.transition_status(db, problem=p, new_status=ns)
+    return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
+
+
+@router.post("/problems/{problem_id}/link")
+def problem_link_ticket(
+    problem_id: int,
+    ticket_id: int = Form(...),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    p = db.get(Problem, problem_id)
+    t = db.get(Ticket, ticket_id)
+    if p is None or t is None or p.tenant_id != user.tenant_id or t.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    problem_svc.link_ticket(db, problem=p, ticket=t, by=user)
+    return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
+
+
+@router.post("/problems/{problem_id}/unlink/{ticket_id}")
+def problem_unlink(
+    problem_id: int,
+    ticket_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    p = db.get(Problem, problem_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    problem_svc.unlink_ticket(db, problem_id=problem_id, ticket_id=ticket_id)
+    return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)

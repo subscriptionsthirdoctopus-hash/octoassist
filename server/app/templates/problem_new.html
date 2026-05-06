@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}New Problem — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>New Problem</h1>
+  <p class="meta">Open a problem when an underlying issue may be causing multiple incidents.</p>
+</section>
+
+<form method="post" action="/problems/new" class="card form" style="max-width:760px;">
+  <label>Title
+    <input type="text" name="title" required maxlength="255" placeholder="One-line summary of the underlying issue">
+  </label>
+  <label>Description
+    <textarea name="description" rows="6" placeholder="What you've observed across multiple tickets, hypotheses, scope of impact..."></textarea>
+  </label>
+  <label>Priority
+    <select name="priority">
+      <option value="low">low</option>
+      <option value="medium" selected>medium</option>
+      <option value="high">high</option>
+      <option value="critical">critical</option>
+    </select>
+  </label>
+  <div class="form-actions">
+    <button type="submit" class="primary">Open problem</button>
+    <a href="/problems" class="link-button">Cancel</a>
+  </div>
+</form>
+{% endblock %}

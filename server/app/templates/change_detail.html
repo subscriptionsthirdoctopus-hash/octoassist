@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ change.change_number }} — {{ change.title }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ change.change_number }} <span class="meta-inline">·</span> {{ change.title }}</h1>
+      <p class="meta">
+        {{ change.change_type.value | capitalize }} · risk: {{ change.risk.value }}
+        · created {{ change.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ change.requester.display_name }}
+      </p>
+    </div>
+    <div class="ticket-meta">
+      <span class="status status-{{ 'resolved' if change.status.value in ('approved','completed') else ('cancelled' if change.status.value in ('rejected','failed','cancelled') else 'in_progress') }}">{{ change.status.value.replace("_", " ") }}</span>
+    </div>
+  </div>
+</section>
+
+{# ---------- Workflow actions ---------- #}
+<section class="cards">
+  {% if change.status.value == 'draft' %}
+  <div class="card">
+    <h3>Submit for review</h3>
+    <p class="meta">Routes the change to CAB for approval.</p>
+    <form method="post" action="/changes/{{ change.id }}/submit" class="inline-form">
+      <button type="submit" class="primary">Submit</button>
+    </form>
+  </div>
+  {% elif change.status.value == 'under_review' %}
+    {% if current_user.id != change.requester_id %}
+    <div class="card">
+      <h3>CAB decision</h3>
+      <form method="post" action="/changes/{{ change.id }}/approve" class="inline-form-stack">
+        <textarea name="note" rows="2" placeholder="Approval note (optional)"></textarea>
+        <button type="submit" class="primary">Approve</button>
+      </form>
+      <form method="post" action="/changes/{{ change.id }}/reject" class="inline-form-stack" style="margin-top:10px;">
+        <textarea name="note" rows="2" placeholder="Reason for rejection"></textarea>
+        <button type="submit" style="color:var(--red);">Reject</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="card">
+      <p class="meta">Awaiting CAB. You can't approve your own change — another admin/agent must.</p>
+    </div>
+    {% endif %}
+  {% elif change.status.value == 'approved' %}
+  <div class="card">
+    <h3>Implementation</h3>
+    <form method="post" action="/changes/{{ change.id }}/start" class="inline-form">
+      <button type="submit" class="primary">Start</button>
+    </form>
+  </div>
+  {% elif change.status.value == 'in_progress' %}
+  <div class="card">
+    <h3>Close out</h3>
+    <form method="post" action="/changes/{{ change.id }}/complete" class="inline-form-stack">
+      <textarea name="note" rows="2" placeholder="Completion note"></textarea>
+      <button type="submit" class="primary">Mark completed</button>
+    </form>
+    <form method="post" action="/changes/{{ change.id }}/fail" class="inline-form-stack" style="margin-top:10px;">
+      <textarea name="note" rows="2" placeholder="Failure reason / rollback notes"></textarea>
+      <button type="submit" style="color:var(--red);">Mark failed</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if change.status.value not in ('completed','failed','cancelled','rejected') %}
+  <div class="card">
+    <h3>Cancel</h3>
+    <form method="post" action="/changes/{{ change.id }}/cancel" class="inline-form-stack">
+      <textarea name="note" rows="2" placeholder="Reason"></textarea>
+      <button type="submit" style="color:var(--red);">Cancel change</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if change.cab_decision_at %}
+  <div class="card">
+    <h3>CAB decision</h3>
+    <dl>
+      <dt>By</dt><dd>{{ change.cab_approver.display_name if change.cab_approver else "—" }}</dd>
+      <dt>At</dt><dd>{{ change.cab_decision_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+      <dt>Note</dt><dd>{{ change.cab_decision_note or "—" }}</dd>
+    </dl>
+  </div>
+  {% endif %}
+</section>
+
+{# ---------- Edit form (only valid until CAB decision) ---------- #}
+{% if change.status.value in ('draft', 'under_review') %}
+<form method="post" action="/changes/{{ change.id }}/edit" class="card form" style="max-width:880px;">
+  <h3 style="margin:0 0 4px;font-size:14px;color:var(--slate);">Change record</h3>
+  <label>Title<input type="text" name="title" required value="{{ change.title }}"></label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Type
+      <select name="change_type">
+        {% for t in types %}<option value="{{ t }}" {% if change.change_type.value == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Risk
+      <select name="risk">
+        {% for r in risks %}<option value="{{ r }}" {% if change.risk.value == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+
+  <label>Description<textarea name="description" rows="4">{{ change.description }}</textarea></label>
+  <label>Impact<textarea name="impact" rows="3">{{ change.impact }}</textarea></label>
+  <label>Rollback plan<textarea name="rollback_plan" rows="4">{{ change.rollback_plan }}</textarea></label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Planned start<input type="datetime-local" name="planned_start" value="{{ change.planned_start.strftime('%Y-%m-%dT%H:%M') if change.planned_start else '' }}"></label>
+    <label>Planned end<input type="datetime-local" name="planned_end" value="{{ change.planned_end.strftime('%Y-%m-%dT%H:%M') if change.planned_end else '' }}"></label>
+  </div>
+
+  <label>Implementer
+    <select name="implementer_id">
+      <option value="">— Unassigned —</option>
+      {% for s in staff %}<option value="{{ s.id }}" {% if change.implementer_id == s.id %}selected{% endif %}>{{ s.display_name }} ({{ s.role.value }})</option>{% endfor %}
+    </select>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Save</button>
+  </div>
+</form>
+{% else %}
+<section>
+  <h2>Change record (read-only after CAB decision)</h2>
+  <div class="cards">
+    <div class="card"><h3>Description</h3><p style="white-space:pre-wrap;">{{ change.description or "—" }}</p></div>
+    <div class="card"><h3>Impact</h3><p style="white-space:pre-wrap;">{{ change.impact or "—" }}</p></div>
+    <div class="card"><h3>Rollback plan</h3><p style="white-space:pre-wrap;">{{ change.rollback_plan or "—" }}</p></div>
+  </div>
+  <div class="cards">
+    <div class="card"><h3>Window</h3><dl>
+      <dt>Planned start</dt><dd>{% if change.planned_start %}{{ change.planned_start.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Planned end</dt><dd>{% if change.planned_end %}{{ change.planned_end.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Actual start</dt><dd>{% if change.actual_start %}{{ change.actual_start.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Actual end</dt><dd>{% if change.actual_end %}{{ change.actual_end.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+    </dl></div>
+    <div class="card"><h3>People</h3><dl>
+      <dt>Requester</dt><dd>{{ change.requester.display_name }}</dd>
+      <dt>Implementer</dt><dd>{{ change.implementer.display_name if change.implementer else "—" }}</dd>
+      <dt>CAB approver</dt><dd>{{ change.cab_approver.display_name if change.cab_approver else "—" }}</dd>
+    </dl></div>
+  </div>
+</section>
+{% endif %}
+
+{# ---------- Audit log ---------- #}
+<section>
+  <h2>Audit log</h2>
+  {% if change.events %}
+  <table class="data audit">
+    <thead><tr><th>When</th><th>Who</th><th>Event</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for e in change.events %}
+      <tr>
+        <td>{{ e.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ e.actor.display_name if e.actor else "system" }}</td>
+        <td>{{ e.kind.value.replace("_", " ") }}</td>
+        <td>
+          {% if e.note %}<em>{{ e.note }}</em>{% endif %}
+          {% if e.before_value %}<code>before: {{ e.before_value }}</code>{% endif %}
+          {% if e.after_value %}<code>after: {{ e.after_value }}</code>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">No events yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

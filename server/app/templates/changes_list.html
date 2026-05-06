@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Changes — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Changes</h1>
+      <p class="meta">{{ rows|length }} change{{ "" if rows|length == 1 else "s" }} · normal, standard, and emergency</p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/changes/new">+ New Change</a>
+    </div>
+  </div>
+</section>
+
+<form method="get" action="/changes" class="filters">
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in statuses %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_", " ") }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Apply</button>
+  <a href="/changes" class="link-button">Clear</a>
+</form>
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Risk</th><th>Status</th><th>Planned</th><th>Requester</th></tr></thead>
+  <tbody>
+    {% for c in rows %}
+    <tr>
+      <td><a href="/changes/{{ c.id }}">{{ c.change_number }}</a></td>
+      <td>{{ c.title }}</td>
+      <td>{{ c.change_type.value }}</td>
+      <td><span class="prio prio-{{ 'critical' if c.risk.value == 'high' else ('high' if c.risk.value == 'medium' else 'low') }}">{{ c.risk.value }}</span></td>
+      <td><span class="status status-{{ 'resolved' if c.status.value in ('approved','completed') else ('cancelled' if c.status.value in ('rejected','failed','cancelled') else 'in_progress') }}">{{ c.status.value.replace("_", " ") }}</span></td>
+      <td>{% if c.planned_start %}{{ c.planned_start.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+      <td>{{ c.requester.display_name if c.requester else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No changes logged yet</h2>
+  <p>Open a change record before doing anything that touches production — get it through CAB, log the rollback plan, capture the audit trail.</p>
+</div>
+{% endif %}
+{% endblock %}

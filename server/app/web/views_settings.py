@@ -7,6 +7,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+import secrets
+
 from ..auth import require_admin
 from ..database import get_db
 from ..models import IdentityProvider, IdentityProviderKind, Tenant, User, UserRole
@@ -186,3 +188,25 @@ def delete_idp(
     db.delete(idp)
     db.commit()
     return RedirectResponse(url="/settings?flash=Provider+removed", status_code=303)
+
+
+@router.post("/settings/tenant/regenerate-enrolment-key")
+def regenerate_enrolment_key(
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Generate a fresh tenant enrolment key.
+
+    Existing agents that have already registered are unaffected — they hold
+    their own long-lived bearer tokens. Only future MSI deployments will need
+    the new key.
+    """
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+    tenant.enrolment_key = secrets.token_urlsafe(32)
+    db.commit()
+    return RedirectResponse(
+        url="/settings?flash=New+enrolment+key+generated.+Existing+agents+keep+working;+only+new+MSI+installs+need+the+new+key.",
+        status_code=303,
+    )

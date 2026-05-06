@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}New Change — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>New Change</h1>
+  <p class="meta">Created as Draft. Submit for CAB review when ready.</p>
+</section>
+
+<form method="post" action="/changes/new" class="card form" style="max-width:880px;">
+  <label>Title
+    <input type="text" name="title" required maxlength="255" placeholder="One-line summary of the change">
+  </label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Type
+      <select name="change_type">
+        <option value="normal" selected>normal — needs CAB approval</option>
+        <option value="standard">standard — pre-approved low-risk</option>
+        <option value="emergency">emergency — post-implementation review</option>
+      </select>
+    </label>
+    <label>Risk
+      <select name="risk">
+        <option value="low">low</option>
+        <option value="medium" selected>medium</option>
+        <option value="high">high</option>
+      </select>
+    </label>
+  </div>
+
+  <label>Description<textarea name="description" rows="4" placeholder="What's changing, where, and why."></textarea></label>
+  <label>Impact <span class="meta">(who/what is affected; downtime expected)</span>
+    <textarea name="impact" rows="3" placeholder="Systems / users impacted, expected window of disruption"></textarea>
+  </label>
+  <label>Rollback plan <span class="meta">(this is what makes it CAB-approvable)</span>
+    <textarea name="rollback_plan" rows="4" placeholder="Step-by-step procedure to revert if implementation fails"></textarea>
+  </label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Planned start<input type="datetime-local" name="planned_start"></label>
+    <label>Planned end<input type="datetime-local" name="planned_end"></label>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Create draft</button>
+    <a href="/changes" class="link-button">Cancel</a>
+  </div>
+</form>
+{% endblock %}

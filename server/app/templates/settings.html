@@ -80,8 +80,43 @@
     <dl>
       <dt>Name</dt><dd>{{ tenant.name }}</dd>
       <dt>Created</dt><dd>{{ tenant.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
-      <dt>Enrolment key</dt><dd><code>{{ tenant.enrolment_key }}</code></dd>
+      <dt>Enrolment key</dt>
+      <dd>
+        <div class="key-row">
+          <code id="enrol-key" class="key-value">{{ tenant.enrolment_key }}</code>
+          <button type="button" class="button" onclick="copyEnrolKey()">Copy</button>
+          <form method="post" action="/settings/tenant/regenerate-enrolment-key" class="inline-form" onsubmit="return confirm('Generate a NEW enrolment key?\n\nExisting agents already registered will continue to work normally.\nOnly future MSI installs will need this new key.\n\nContinue?');">
+            <button type="submit" class="button">Regenerate</button>
+          </form>
+        </div>
+        <p class="meta" style="margin:6px 0 0;font-size:12px;">
+          The enrolment key is shared across all endpoints in this tenant. After first check-in
+          each agent receives its own long-lived bearer token, so regenerating the key does
+          <strong>not</strong> log out existing endpoints — only new MSI installs need it.
+        </p>
+      </dd>
     </dl>
   </div>
 </section>
+
+<script>
+function copyEnrolKey() {
+  const el = document.getElementById('enrol-key');
+  const text = el.innerText.trim();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = event.target;
+      const orig = btn.innerText;
+      btn.innerText = 'Copied!';
+      setTimeout(() => { btn.innerText = orig; }, 1200);
+    });
+  } else {
+    // Fallback: select the code element so the user can ctrl-c manually
+    const range = document.createRange();
+    range.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  }
+}
+</script>
 {% endblock %}

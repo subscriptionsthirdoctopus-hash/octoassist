@@ -16,9 +16,10 @@
       {% if current_user %}
         {% if current_user.role.value in ('admin', 'agent') %}
           <a href="/tickets">Tickets</a>
+          <a href="/problems">Problems</a>
+          <a href="/changes">Changes</a>
           <a href="/kb">Knowledge Base</a>
           <a href="/assets">Assets</a>
-          <a href="/enrolment">Enrolment</a>
           {% if current_user.role.value == 'admin' %}
             <a href="/users">Users</a>
             <a href="/settings">Settings</a>
@@ -41,8 +42,8 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <span>OctoAssist ITSM • Phase 1 Asset Discovery + Phase 2 Ticketing</span>
-    {% if tenant %}<span>{{ tenant.name }}</span>{% endif %}
+    <span>&copy; 2026 Third Octopus &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes</span>
+    <span><a href="https://thirdoctopus.com" target="_blank" rel="noopener">thirdoctopus.com</a></span>
   </footer>
 </body>
 </html>

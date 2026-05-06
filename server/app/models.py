@@ -283,6 +283,182 @@ class IdentityProviderKind(str, enum.Enum):
     # future: ldap (on-prem AD), google, okta
 
 
+class ProblemStatus(str, enum.Enum):
+    investigating = "investigating"
+    root_cause_identified = "root_cause_identified"
+    workaround_in_place = "workaround_in_place"
+    resolved = "resolved"
+    closed = "closed"
+
+
+class Problem(Base):
+    __tablename__ = "problems"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    problem_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[ProblemStatus] = mapped_column(
+        Enum(ProblemStatus, name="problem_status"),
+        nullable=False, default=ProblemStatus.investigating,
+    )
+    priority: Mapped[TicketPriority] = mapped_column(
+        Enum(TicketPriority, name="ticket_priority"),
+        nullable=False, default=TicketPriority.medium,
+    )
+    root_cause: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    workaround: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    tenant: Mapped[Tenant] = relationship()
+    reporter: Mapped[User] = relationship(foreign_keys=[reporter_id])
+    assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id])
+    linked_tickets: Mapped[list["ProblemTicketLink"]] = relationship(
+        back_populates="problem", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_problems_tenant_status", "tenant_id", "status"),
+    )
+
+
+class ProblemTicketLink(Base):
+    """Link table connecting problems to the incidents they explain."""
+    __tablename__ = "problem_ticket_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    problem_id: Mapped[int] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), nullable=False)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    linked_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    problem: Mapped[Problem] = relationship(back_populates="linked_tickets")
+    ticket: Mapped[Ticket] = relationship()
+
+    __table_args__ = (
+        Index("ix_pt_link_unique", "problem_id", "ticket_id", unique=True),
+    )
+
+
+class ChangeType(str, enum.Enum):
+    normal = "normal"          # planned change requiring CAB approval
+    standard = "standard"      # pre-approved low-risk change
+    emergency = "emergency"    # urgent, post-implementation review
+
+
+class ChangeRisk(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class ChangeStatus(str, enum.Enum):
+    draft = "draft"
+    under_review = "under_review"
+    approved = "approved"
+    rejected = "rejected"
+    in_progress = "in_progress"
+    completed = "completed"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
+class Change(Base):
+    __tablename__ = "changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    change_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    change_type: Mapped[ChangeType] = mapped_column(
+        Enum(ChangeType, name="change_type"),
+        nullable=False, default=ChangeType.normal,
+    )
+    risk: Mapped[ChangeRisk] = mapped_column(
+        Enum(ChangeRisk, name="change_risk"),
+        nullable=False, default=ChangeRisk.medium,
+    )
+    status: Mapped[ChangeStatus] = mapped_column(
+        Enum(ChangeStatus, name="change_status"),
+        nullable=False, default=ChangeStatus.draft,
+    )
+    rollback_plan: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    impact: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    planned_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    planned_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    actual_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    actual_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    implementer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    cab_approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    cab_decision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cab_decision_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    tenant: Mapped[Tenant] = relationship()
+    requester: Mapped[User] = relationship(foreign_keys=[requester_id])
+    implementer: Mapped[User | None] = relationship(foreign_keys=[implementer_id])
+    cab_approver: Mapped[User | None] = relationship(foreign_keys=[cab_approver_id])
+    events: Mapped[list["ChangeEvent"]] = relationship(
+        back_populates="change", cascade="all, delete-orphan",
+        order_by="ChangeEvent.created_at",
+    )
+
+    __table_args__ = (
+        Index("ix_changes_tenant_status", "tenant_id", "status"),
+    )
+
+    @property
+    def needs_cab_approval(self) -> bool:
+        return self.change_type in (ChangeType.normal,) and self.status in (
+            ChangeStatus.under_review,
+        )
+
+
+class ChangeEventKind(str, enum.Enum):
+    created = "created"
+    submitted_for_review = "submitted_for_review"
+    approved = "approved"
+    rejected = "rejected"
+    started = "started"
+    completed = "completed"
+    failed = "failed"
+    cancelled = "cancelled"
+    field_changed = "field_changed"
+
+
+class ChangeEvent(Base):
+    __tablename__ = "change_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    change_id: Mapped[int] = mapped_column(ForeignKey("changes.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    kind: Mapped[ChangeEventKind] = mapped_column(
+        Enum(ChangeEventKind, name="change_event_kind"), nullable=False,
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    before_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    after_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    change: Mapped[Change] = relationship(back_populates="events")
+    actor: Mapped[User | None] = relationship()
+
+    __table_args__ = (
+        Index("ix_change_events_change_created", "change_id", "created_at"),
+    )
+
+
 class KbCategory(Base):
     __tablename__ = "kb_categories"
 
