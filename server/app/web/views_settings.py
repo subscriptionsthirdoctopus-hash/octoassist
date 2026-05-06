@@ -236,6 +236,71 @@ def _is_microsoft_email(email: str) -> bool:
     return any(domain.endswith(suf) for suf in ALLOWED_NOTIFICATION_DOMAIN_SUFFIXES)
 
 
+@router.post("/settings/tenant/smtp")
+def save_smtp_config(
+    smtp_host: str = Form(""),
+    smtp_port: str = Form("587"),
+    smtp_username: str = Form(""),
+    smtp_password: str = Form(""),
+    smtp_from: str = Form(""),
+    smtp_use_tls: int = Form(1),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+    tenant.smtp_host = (smtp_host or "").strip() or None
+    try:
+        tenant.smtp_port = int(smtp_port) if str(smtp_port).strip() else None
+    except (TypeError, ValueError):
+        tenant.smtp_port = None
+    tenant.smtp_username = (smtp_username or "").strip() or None
+    if smtp_password and smtp_password.strip():
+        tenant.smtp_password = smtp_password
+    tenant.smtp_from = (smtp_from or "").strip() or None
+    tenant.smtp_use_tls = bool(smtp_use_tls)
+    db.commit()
+    return RedirectResponse(url="/settings?flash=SMTP+settings+saved.", status_code=303)
+
+
+@router.post("/settings/tenant/smtp/test")
+def smtp_test(
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime as _dt, timezone as _tz
+    from ..services.email import send_email, EmailError
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+    if not tenant.notification_email:
+        return RedirectResponse(
+            url="/settings?flash=Set+a+Notification+email+first+(Microsoft+address+only).",
+            status_code=303,
+        )
+    now = _dt.now(_tz.utc)
+    tenant.smtp_last_test_at = now
+    try:
+        msg = send_email(
+            tenant=tenant,
+            to=tenant.notification_email,
+            subject="OctoAssist — SMTP test",
+            body_text=("This is a test email from OctoAssist confirming that "
+                       "outbound SMTP is configured correctly for "
+                       f"tenant '{tenant.name}'. Sent {now.isoformat()}."),
+        )
+        tenant.smtp_last_test_ok = True
+        tenant.smtp_last_test_message = msg[:1000]
+        flash = f"Test+email+sent+to+{tenant.notification_email}+OK"
+    except EmailError as e:
+        tenant.smtp_last_test_ok = False
+        tenant.smtp_last_test_message = str(e)[:1000]
+        flash = f"Test+failed:+{str(e)[:80]}"
+    db.commit()
+    return RedirectResponse(url=f"/settings?flash={flash}", status_code=303)
+
+
 @router.post("/settings/tenant/notification-email")
 def set_notification_email(
     notification_email: str = Form(""),

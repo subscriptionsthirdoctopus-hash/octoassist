@@ -600,7 +600,9 @@ def patches_available() -> list[dict]:
             except Exception:
                 pass
     elif platform.system() == "Windows":
-        # Try PSWindowsUpdate (third-party module) — only present on opted-in hosts.
+        # Two sources on Windows:
+        #   1. Windows Update via PSWindowsUpdate (KBs)
+        #   2. Generic third-party software via winget (Chrome, Adobe, Zoom, etc.)
         try:
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
@@ -630,7 +632,95 @@ def patches_available() -> list[dict]:
                 })
         except Exception:
             pass
+        # Phase 7: winget — generic third-party software updates.
+        out.extend(_winget_available_updates())
     return out[:5000]
+
+
+def _winget_available_updates() -> list[dict]:
+    """List packages with upgrades available via winget.
+
+    winget output is (sadly) text-mode. We parse the table:
+        Name      Id                  Version  Available  Source
+        --------  ------------------  -------  ---------  ------
+        Chrome    Google.Chrome       130.0.x  131.0.y    winget
+
+    severity is `moderate` for everything (winget doesn't surface CVE info);
+    admin can re-classify in OctoAssist if needed.
+    """
+    if platform.system() != "Windows":
+        return []
+    out: list[dict] = []
+    try:
+        # Auto-accept source agreements so first-run doesn't prompt.
+        r = subprocess.run(
+            ["winget", "upgrade",
+             "--include-unknown",
+             "--accept-source-agreements"],
+            capture_output=True, text=True, timeout=120,
+        )
+        # Find the header separator line ("---  ---  ...") and parse fixed-width columns.
+        lines = r.stdout.splitlines()
+        header_idx = None
+        for i, line in enumerate(lines):
+            if line.strip().startswith("---"):
+                header_idx = i
+                break
+        if header_idx is None or header_idx == 0:
+            return out
+        header = lines[header_idx - 1]
+        # Discover column starts by scanning the dash line
+        sep = lines[header_idx]
+        # Build (start, end) ranges from the header line
+        starts = []
+        in_dash = False
+        for j, ch in enumerate(sep):
+            if ch == "-" and not in_dash:
+                starts.append(j); in_dash = True
+            elif ch != "-" and in_dash:
+                in_dash = False
+        starts.append(len(sep) + 1)
+        ranges = list(zip(starts, starts[1:]))
+
+        def col(line: str, idx: int) -> str:
+            s, e = ranges[idx] if idx < len(ranges) else (0, 0)
+            return line[s:e].strip() if s < len(line) else ""
+
+        # Determine column-name → idx
+        cols = [col(header, i) for i in range(len(ranges))]
+        try:
+            i_name      = cols.index("Name")
+            i_id        = cols.index("Id")
+            i_version   = cols.index("Version")
+            i_available = cols.index("Available")
+            i_source    = cols.index("Source") if "Source" in cols else -1
+        except ValueError:
+            return out
+
+        for line in lines[header_idx + 1:]:
+            if not line.strip() or line.startswith("Total ") or line.startswith("upgrades"):
+                break
+            name      = col(line, i_name)
+            pkg_id    = col(line, i_id)
+            ver       = col(line, i_version)
+            available = col(line, i_available)
+            source    = col(line, i_source) if i_source >= 0 else "winget"
+            if not pkg_id or available in ("", "<", ">"):
+                continue
+            out.append({
+                "name":             pkg_id,            # use Id (unique) as the key
+                "current_version":  ver or None,
+                "available_version": available,
+                "severity":         "moderate",        # winget doesn't surface CVE/severity
+                "source":           f"winget:{source}" if source else "winget",
+                "title":            f"Upgrade {name or pkg_id} {ver} → {available}",
+            })
+    except FileNotFoundError:
+        # winget not installed — Win10 < 1809 or not yet installed via Store
+        pass
+    except Exception as e:
+        log.warning("winget upgrade parse failed: %s", e)
+    return out
 
 
 def collect_snapshot() -> dict:
@@ -704,6 +794,56 @@ def _install_windows_update(kb_or_name: str) -> dict:
     }
 
 
+def _install_winget(package_id: str) -> dict:
+    """winget upgrade --silent path. Generic third-party software (Chrome / Adobe / Zoom etc.)."""
+    started = _now_iso()
+    try:
+        proc = subprocess.run(
+            ["winget", "upgrade",
+             "--id", package_id,
+             "--silent",
+             "--accept-source-agreements",
+             "--accept-package-agreements",
+             "--disable-interactivity"],
+            capture_output=True, text=True, timeout=1800,
+        )
+    except FileNotFoundError:
+        return {
+            "package_name": package_id,
+            "started_at": started, "finished_at": _now_iso(),
+            "exit_code": 127, "success": False, "needs_reboot": False,
+            "stdout": None, "stderr": "winget not installed on this host",
+            "method": "winget",
+        }
+    finished = _now_iso()
+    return {
+        "package_name": package_id,
+        "started_at": started,
+        "finished_at": finished,
+        "exit_code": proc.returncode,
+        "success": proc.returncode == 0,
+        "needs_reboot": False,  # winget doesn't surface this clearly
+        "stdout": (proc.stdout or "")[-7000:],
+        "stderr": (proc.stderr or "")[-1000:],
+        "method": "winget",
+    }
+
+
+def _install_dispatch(package_name: str) -> dict:
+    """Pick install method based on package name + OS heuristics.
+
+    Linux           → apt-get
+    Windows + KB    → PSWindowsUpdate
+    Windows + other → winget (Vendor.Product Id like Google.Chrome)
+    """
+    if platform.system() == "Linux":
+        return _install_apt(package_name)
+    # Windows
+    if package_name.upper().startswith("KB"):
+        return _install_windows_update(package_name)
+    return _install_winget(package_name)
+
+
 def execute_pending_deployments(cfg: dict) -> int:
     """Pull pending deployments from the server, execute, post results.
 
@@ -748,19 +888,17 @@ def execute_pending_deployments(cfg: dict) -> int:
         any_failed = False
         for pkg in packages:
             try:
-                if is_linux:
-                    attempt = _install_apt(pkg)
-                else:
-                    attempt = _install_windows_update(pkg)
+                attempt = _install_dispatch(pkg)
             except subprocess.TimeoutExpired:
                 attempt = {"package_name": pkg, "started_at": _now_iso(), "finished_at": _now_iso(),
                            "exit_code": 124, "success": False, "needs_reboot": False,
-                           "stdout": None, "stderr": "timeout", "method": "apt" if is_linux else "windows-update"}
+                           "stdout": None, "stderr": "timeout",
+                           "method": "apt" if is_linux else ("windows-update" if pkg.upper().startswith("KB") else "winget")}
             except Exception as e:  # noqa: BLE001
                 attempt = {"package_name": pkg, "started_at": _now_iso(), "finished_at": _now_iso(),
                            "exit_code": 1, "success": False, "needs_reboot": False,
                            "stdout": None, "stderr": f"{type(e).__name__}: {e}",
-                           "method": "apt" if is_linux else "windows-update"}
+                           "method": "apt" if is_linux else ("windows-update" if pkg.upper().startswith("KB") else "winget")}
 
             log.info("  %s → exit=%s success=%s",
                      pkg, attempt["exit_code"], attempt["success"])

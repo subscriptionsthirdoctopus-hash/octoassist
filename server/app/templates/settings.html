@@ -120,10 +120,71 @@
       {% endif %}
     </form>
     <p class="meta" style="margin:8px 0 0;font-size:12px;">
-      Outbound SMTP/Graph wiring is the next step (Phase 7). For now this address
-      is stored and surfaced on system-event pages; live email delivery requires
-      tenant credentials (Graph app registration or O365 app password).
+      Outbound delivery uses the SMTP settings below.
     </p>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">SMTP — outbound email</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      Microsoft 365 default: host <code>smtp.office365.com</code>, port <code>587</code>, STARTTLS, AUTH with a
+      service-account mailbox. Modern M365 tenants block SMTP AUTH per-mailbox by default — enable it via
+      <strong>Mail flow → SMTP AUTH per-mailbox</strong> first, or use an app password (outlook.com personal accounts).
+      Password is stored as plain text — use a low-privilege service account, not your daily login.
+    </p>
+
+    <form method="post" action="/settings/tenant/smtp" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:760px;">
+      <label>Host
+        <input type="text" name="smtp_host" value="{{ tenant.smtp_host or 'smtp.office365.com' }}"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label>Port
+        <input type="number" name="smtp_port" value="{{ tenant.smtp_port or 587 }}"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label>Username
+        <input type="text" name="smtp_username" value="{{ tenant.smtp_username or '' }}"
+               placeholder="serviceaccount@thirdoctopus.com" autocomplete="off"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label>Password <span class="meta" style="font-weight:normal;">(blank to keep existing)</span>
+        <input type="password" name="smtp_password" value="" autocomplete="new-password"
+               placeholder="{% if tenant.smtp_password %}•••••• stored — type a new password to rotate{% else %}paste app password / SMTP token{% endif %}"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label style="grid-column:1/-1;">From address
+        <input type="email" name="smtp_from" value="{{ tenant.smtp_from or '' }}"
+               placeholder="OctoAssist Alerts &lt;noreply@thirdoctopus.com&gt;"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label class="checkbox" style="grid-column:1/-1;">
+        <input type="checkbox" name="smtp_use_tls" value="1" {% if tenant.smtp_use_tls or tenant.smtp_use_tls is none %}checked{% endif %}>
+        Use STARTTLS (port 587). Uncheck for implicit TLS on port 465; uncheck both for plaintext (don't).
+      </label>
+      <div class="form-actions" style="grid-column:1/-1;">
+        <button type="submit" class="button primary">Save SMTP settings</button>
+      </div>
+    </form>
+
+    <form method="post" action="/settings/tenant/smtp/test" style="margin-top:12px;">
+      <button type="submit" class="button">Send test email</button>
+      <span class="meta" style="margin-left:8px;font-size:12.5px;">
+        Sends a one-line test message to <strong>{{ tenant.notification_email or "(set Notification email above)" }}</strong>.
+      </span>
+    </form>
+
+    {% if tenant.smtp_last_test_at %}
+    <div style="margin-top:14px;padding:10px 12px;border-radius:4px;border:1px solid var(--line);background:#f8fafc;font-size:13px;">
+      <strong>Last test:</strong>
+      {% if tenant.smtp_last_test_ok %}
+        <span class="status status-resolved">OK</span>
+      {% else %}
+        <span class="status status-cancelled">FAIL</span>
+      {% endif %}
+      <span class="meta">at {{ tenant.smtp_last_test_at.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+      {% if tenant.smtp_last_test_message %}<pre class="code" style="margin-top:8px;font-size:11.5px;">{{ tenant.smtp_last_test_message }}</pre>{% endif %}
+    </div>
+    {% endif %}
   </div>
 </section>
 

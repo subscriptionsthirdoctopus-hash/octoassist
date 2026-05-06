@@ -34,6 +34,17 @@ class Tenant(Base):
     # outlook.com, hotmail.com, live.com, msn.com, or *.onmicrosoft.com)
     # used as the destination for OctoAssist notifications.
     notification_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # Phase 7: outbound SMTP for OctoAssist → admin notifications.
+    # Defaults pre-fill for Microsoft 365 (smtp.office365.com:587, STARTTLS).
+    smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    smtp_username: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    smtp_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_from: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    smtp_use_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    smtp_last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    smtp_last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    smtp_last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     agents: Mapped[list["Agent"]] = relationship(back_populates="tenant")
     users: Mapped[list["User"]] = relationship(back_populates="tenant")
