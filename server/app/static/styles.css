@@ -242,6 +242,15 @@ table.data.audit code {
 .chart-bars { display: block; }
 .chart-line { display: block; }
 
+/* SVG charts inherit the page sans-serif stack so text matches the rest
+   of the UI (browsers default to a serif font inside <svg> otherwise). */
+.chart-bars text,
+.chart-donut svg text,
+.chart-line  text,
+.sparkline   text {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
 @media (max-width: 900px) {
   .report-row.two-col-charts,
   .report-row.charts-grid-3 { grid-template-columns: 1fr; }

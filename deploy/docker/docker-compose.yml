@@ -32,8 +32,9 @@ services:
     container_name: octoassist-app
     restart: unless-stopped
     build:
-      context: ../../server
-      dockerfile: Dockerfile
+      # Repo root so we can bundle both server/ and agent-py/.
+      context: ../../
+      dockerfile: server/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
