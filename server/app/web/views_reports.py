@@ -40,7 +40,6 @@ def reports_home(
     by_category = reporting.tickets_by_category(db, tenant_id, days=30, top=8)
     sla = reporting.sla_compliance(db, tenant_id, days=30)
     workload = reporting.workload_by_assignee(db, tenant_id, top=8)
-    top_reps = reporting.top_reporters(db, tenant_id, top=8)
 
     sparkline_values = [v for _, v in per_day]
 
@@ -54,7 +53,6 @@ def reports_home(
                      chart_per_day=charts.line_series(per_day, height=220),
                      chart_category=charts.bars_h(by_category, width=520, label_w=180),
                      chart_workload=charts.bars_h(workload, width=520, label_w=200),
-                     chart_top_reps=charts.bars_h(top_reps, width=520, label_w=200),
                      sla=sla),
     )
 
