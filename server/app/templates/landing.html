@@ -1,110 +1,481 @@
 {% extends "base.html" %}
-{% block title %}OctoAssist — ITIL-aligned ITSM for the mid-market{% endblock %}
-{% block body_class %}landing-page{% endblock %}
+{% block title %}OctoAssist — ITIL-aligned ITSM for the mid-market | Third Octopus{% endblock %}
+{% block body_class %}landing-v2{% endblock %}
 {% block content %}
 
-<section class="hero">
-  <div class="hero-text">
-    <p class="eyebrow">Third Octopus · OctoAssist</p>
-    <h1>Modern ITSM, without the suite-vendor cost.</h1>
-    <p class="lede">
-      Incident, problem, change, service request, knowledge base, asset discovery,
-      patch governance and self-service — in one platform built for mid-market enterprises.
-      Five-week deployment, three-year bug-fix coverage, six months of hypercare.
+{# ──────────────────────────────  HERO  ────────────────────────────── #}
+<section class="lh-hero">
+  <div class="lh-container hero-grid">
+    <div>
+      <p class="lh-eyebrow">Third Octopus presents</p>
+      <h1 class="lh-h1">
+        ITIL-aligned IT Service Management.
+        <span class="accent">Without the suite-vendor cost.</span>
+      </h1>
+      <p class="lh-lede">
+        Incident, problem, change, service request, knowledge base, asset discovery, patch
+        governance and self-service — one platform purpose-built for mid-market enterprises
+        in regulated industries.
+      </p>
+
+      <ul class="lh-hero-bullets">
+        <li>Improve helpdesk experience and cut ticket volume</li>
+        <li>Manage assets across distributed offices</li>
+        <li>Stay audit-ready for ISO 27001, DPDP Act, SEBI CSCRF</li>
+        <li>Tighten patch hygiene without an MDM build-out</li>
+        <li>Cut tool sprawl and per-seat licensing</li>
+        <li>Five-week deployment, three-year bug-fix coverage</li>
+      </ul>
+
+      <div class="lh-cta-row">
+        <a href="/login" class="lh-button primary">Sign in</a>
+        {% for i in enabled_idps %}
+          <a href="/auth/oidc/{{ i.id }}/start" class="lh-button">Sign in with {{ i.display_name }}</a>
+        {% endfor %}
+        <a href="#contact" class="lh-button ghost">Book a walk-through</a>
+      </div>
+    </div>
+
+    <div class="lh-hero-art" aria-hidden="true">
+      {# Abstract mock-dashboard, all SVG, no images. #}
+      <svg viewBox="0 0 480 380" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%"  stop-color="#1aa6b7"/>
+            <stop offset="100%" stop-color="#11233f"/>
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="480" height="380" rx="14" fill="#0f1b30"/>
+        <rect x="20" y="20" width="440" height="44" rx="6" fill="#11233f"/>
+        <circle cx="38" cy="42" r="6" fill="#ff5f57"/>
+        <circle cx="58" cy="42" r="6" fill="#febc2e"/>
+        <circle cx="78" cy="42" r="6" fill="#28c840"/>
+        <text x="100" y="46" fill="#1aa6b7" font-family="ui-monospace,monospace" font-size="13">octoassist • tickets</text>
+
+        <rect x="20" y="80"  width="135" height="80" rx="8" fill="#152744"/>
+        <text x="32" y="102" fill="#9aacc8" font-family="ui-sans-serif" font-size="11">OPEN</text>
+        <text x="32" y="138" fill="#fff"     font-family="ui-sans-serif" font-size="28" font-weight="700">128</text>
+
+        <rect x="172" y="80"  width="135" height="80" rx="8" fill="#152744"/>
+        <text x="184" y="102" fill="#9aacc8" font-family="ui-sans-serif" font-size="11">SLA AT RISK</text>
+        <text x="184" y="138" fill="#ff7a59" font-family="ui-sans-serif" font-size="28" font-weight="700">7</text>
+
+        <rect x="324" y="80"  width="136" height="80" rx="8" fill="#152744"/>
+        <text x="336" y="102" fill="#9aacc8" font-family="ui-sans-serif" font-size="11">RESOLVED 7D</text>
+        <text x="336" y="138" fill="#28c840" font-family="ui-sans-serif" font-size="28" font-weight="700">214</text>
+
+        <rect x="20" y="180" width="440" height="180" rx="8" fill="#152744"/>
+        <text x="32" y="204" fill="#9aacc8" font-family="ui-sans-serif" font-size="11">RESOLUTION TIME · LAST 30 DAYS</text>
+        <polyline points="32,330 80,300 130,310 180,260 230,280 280,220 330,235 380,200 440,180"
+                  stroke="url(#g1)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="32" y1="345" x2="448" y2="345" stroke="#2a3e62" stroke-width="1"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+{# ─────────────────────────  TRUST STRIP  ─────────────────────── #}
+<section class="lh-trust">
+  <div class="lh-container">
+    <p class="lh-trust-tag">Built for regulated mid-market enterprises across</p>
+    <div class="lh-trust-row">
+      <span>BFSI</span><span>Manufacturing</span><span>Pharma</span>
+      <span>Capital Markets</span><span>Professional Services</span>
+    </div>
+  </div>
+</section>
+
+{# ──────────────────────  WHAT YOU'RE LOOKING FOR  ────────────────── #}
+<section class="lh-section">
+  <div class="lh-container two-col">
+    <div>
+      <p class="lh-eyebrow lh-eyebrow-dark">The state of IT operations</p>
+      <h2 class="lh-h2">Most mid-market IT teams are running ITSM out of email and spreadsheets.</h2>
+      <p class="lh-prose">
+        That's fine until you face an audit, an outage, or a wave of new joiners. The tools that fix it
+        — ServiceNow, BMC Helix, Ivanti — solve enterprise-scale problems with enterprise-scale
+        licences. OctoAssist is built for the gap in the middle: ITIL rigor, audit-ready evidence,
+        and asset visibility, at a price that doesn't require a board paper.
+      </p>
+    </div>
+
+    <ul class="lh-pain-list">
+      <li><strong>Tickets get lost</strong> in shared inboxes and WhatsApp groups</li>
+      <li><strong>SLAs are aspirational</strong> with no breach detection or audit trail</li>
+      <li><strong>Asset inventory is stale</strong> and built on quarterly spreadsheets</li>
+      <li><strong>Patch posture is unknown</strong> until something gets exploited</li>
+      <li><strong>Audits become fire-drills</strong> because evidence isn't continuous</li>
+      <li><strong>Per-seat licences scale faster than headcount</strong> on legacy ITSM</li>
+    </ul>
+  </div>
+</section>
+
+{# ────────────────────────  WHAT WE DELIVER  ──────────────────────── #}
+<section class="lh-section lh-band">
+  <div class="lh-container">
+    <p class="lh-eyebrow">How OctoAssist solves it</p>
+    <h2 class="lh-h2 center">Five focus areas. One platform.</h2>
+
+    <div class="lh-pillars">
+      <div class="lh-pillar">
+        <div class="lh-pillar-icon" data-i="bolt">{# bolt icon #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <h3>Efficiency</h3>
+        <p>Auto-classification, templated service catalogue, smart routing, and a self-service portal that deflects 25–40% of repeat tickets.</p>
+      </div>
+
+      <div class="lh-pillar">
+        <div class="lh-pillar-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3>Responsiveness</h3>
+        <p>Configurable SLA matrix by priority, category, and business calendar. Breach detection in real time, with a recent-breaches view that doubles as your audit evidence.</p>
+      </div>
+
+      <div class="lh-pillar">
+        <div class="lh-pillar-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Security</h3>
+        <p>Role-based access, full audit trail with before/after values, Microsoft Entra SSO, and a hardened container deployment under your control.</p>
+      </div>
+
+      <div class="lh-pillar">
+        <div class="lh-pillar-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="9 14 11 16 15 12"/></svg>
+        </div>
+        <h3>Compliance</h3>
+        <p>Audit-ready paper trail for ISO 27001:2022, DPDP Act 2023, and SEBI CSCRF. Change-management evidence assessors actually sample, available without a fire-drill.</p>
+      </div>
+
+      <div class="lh-pillar">
+        <div class="lh-pillar-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h3>Visibility</h3>
+        <p>Lightweight asset agent on every endpoint auto-inventories hardware, installed software, OS, and the logged-in user. Unlimited installs, no per-seat fee.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ────────────────────  PLATFORM CAPABILITIES  ─────────────────────── #}
+<section class="lh-section">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">Platform capabilities</p>
+    <h2 class="lh-h2">Everything a mid-market service desk needs, on day one.</h2>
+
+    <div class="lh-cap-grid">
+      <ul class="lh-checks">
+        <li>Unified ticket model — incident + service request</li>
+        <li>ITIL workflows — open → in progress → on hold → resolved → closed</li>
+        <li>Configurable categories with default priority + SLA per category</li>
+        <li>Multi-channel intake — portal, email, REST API</li>
+        <li>Role-based access — admin, agent, requester</li>
+        <li>Microsoft Entra ID single sign-on</li>
+      </ul>
+      <ul class="lh-checks">
+        <li>Append-only audit log with before/after values</li>
+        <li>Asset auto-discovery — hardware, software, network, BIOS, user</li>
+        <li>Patch baselines and compliance dashboards (phase 4)</li>
+        <li>Branded self-service portal for end users</li>
+        <li>Knowledge base with categorisation and search (phase 3)</li>
+        <li>Pre-built reports + exportable to PDF / XLSX (phase 3)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+{# ─────────────────────  MODULE CARDS  ──────────────────────── #}
+<section class="lh-section lh-band">
+  <div class="lh-container">
+    <p class="lh-eyebrow">Modules included</p>
+    <h2 class="lh-h2 center">Eleven modules. One licence. Unlimited end-users.</h2>
+    <p class="lh-section-sub center">No per-module, per-user, or per-endpoint licensing fee — ever.</p>
+
+    <div class="lh-module-grid">
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# ticket #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><line x1="13" y1="5" x2="13" y2="19"/></svg>
+        </div>
+        <h3>Incident Management</h3>
+        <p>End-user incident logging via portal, email, or agent entry. Auto-classification, priority routing, SLA tracking.</p>
+        <ul>
+          <li>List view with status, priority, assignee, reporter</li>
+          <li>Full-text search on title and description</li>
+          <li>Threaded comments — public and internal-only</li>
+          <li>First-response and resolution SLA timers</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# tools #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </div>
+        <h3>Service Request Management</h3>
+        <p>Pre-built service catalogue covering common IT requests with templated workflows and stated turnaround times.</p>
+        <ul>
+          <li>New laptop, software install, VPN access, password reset</li>
+          <li>Onboarding, offboarding, meeting room setup</li>
+          <li>Approval-required tagging visible to requesters</li>
+          <li>Per-category SLA matrix with priority adjustments</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# search-document #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <h3>Problem Management <span class="lh-soon">phase 3</span></h3>
+        <p>Root-cause analysis with a Known Error Database linking related incidents to underlying problem records.</p>
+        <ul>
+          <li>Status: Investigating → Root Cause Identified → Resolved</li>
+          <li>Linked-incident roll-up</li>
+          <li>Reduces repeat-incident volume measurably</li>
+          <li>Surfaces systemic issues vs one-offs</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# git-branch #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        </div>
+        <h3>Change Management <span class="lh-soon">phase 3</span></h3>
+        <p>Normal, Standard, and Emergency change types with CAB approval workflows and risk scoring.</p>
+        <ul>
+          <li>Status: Draft → Under Review → Approved → Completed</li>
+          <li>Built-in risk score</li>
+          <li>Audit-ready evidence trail</li>
+          <li>The exact paper trail ISO/SEBI assessors sample</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card lh-card-featured">
+        <div class="lh-module-icon">{# laptop #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+        </div>
+        <h3>Asset Discovery Agent <span class="lh-tag-included">included</span></h3>
+        <p>Lightweight Windows agent auto-inventories every endpoint. Unlimited installs, no per-seat fee, ever.</p>
+        <ul>
+          <li>Hardware: CPU, RAM, disks, BIOS, manufacturer</li>
+          <li>Installed software with version + publisher</li>
+          <li>OS, network interfaces, logged-in user</li>
+          <li>MSI installer, deployable via GPO / Intune</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# shield-check #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        </div>
+        <h3>Patch Management <span class="lh-soon">phase 4</span></h3>
+        <p>Endpoint patch compliance with missing-patch detection, severity tagging, and audit-ready reporting.</p>
+        <ul>
+          <li>Per-asset-class baselines (workstations, laptops, servers)</li>
+          <li>Deployment scheduling</li>
+          <li>Compliance dashboard with drift detection</li>
+          <li>Bundled in product cost — no per-endpoint fee</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# book #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        </div>
+        <h3>Knowledge Base <span class="lh-soon">phase 3</span></h3>
+        <p>Categorised, searchable articles for IT policies, how-tos, troubleshooting, FAQs, and best practices.</p>
+        <ul>
+          <li>Article view counts and last-updated timestamps</li>
+          <li>Author attribution</li>
+          <li>Full-text search</li>
+          <li>Reduces ticket volume by 25–40%</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# bar-chart #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+        </div>
+        <h3>Reporting &amp; Dashboards <span class="lh-soon">phase 3</span></h3>
+        <p>50+ pre-built reports across ticket volumes, SLA performance, asset coverage, and patch posture.</p>
+        <ul>
+          <li>PDF and XLSX export</li>
+          <li>Scheduled email delivery (daily / weekly / monthly)</li>
+          <li>Saved custom report definitions</li>
+          <li>Drill-through from chart to underlying tickets</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# user-circle #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <h3>Self-Service Portal</h3>
+        <p>End-users access OctoAssist through a branded portal. Mobile and desktop.</p>
+        <ul>
+          <li>Log a ticket, track status, comment</li>
+          <li>SLA countdown view for in-flight tickets</li>
+          <li>Approve service requests for managers</li>
+          <li>Knowledge-base access</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# clock #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3>SLA Management</h3>
+        <p>Configurable SLA matrices by category, priority, and business calendar.</p>
+        <ul>
+          <li>Separate response and resolution targets</li>
+          <li>Real-time breach detection</li>
+          <li>Recent-breaches view + historical trend</li>
+          <li>Annexed to the master agreement at signing</li>
+        </ul>
+      </article>
+
+      <article class="lh-module-card">
+        <div class="lh-module-icon">{# clipboard-list #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="12" y1="11" x2="16" y2="11"/><line x1="12" y1="16" x2="16" y2="16"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="8" y1="16" x2="8.01" y2="16"/></svg>
+        </div>
+        <h3>Audit &amp; Compliance Logging</h3>
+        <p>Every action is logged with user, timestamp, and before/after values.</p>
+        <ul>
+          <li>Ticket creation, assignment, status, priority changes</li>
+          <li>Asset modification, KB edits, configuration changes</li>
+          <li>ISO 27001:2022 / DPDP / SEBI CSCRF evidence-ready</li>
+          <li>Append-only — entries cannot be edited or deleted</li>
+        </ul>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+{# ─────────────  COMPLIANCE & STANDARDS  ─────────────── #}
+<section class="lh-section">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">Built for regulated industries</p>
+    <h2 class="lh-h2">Audit-ready by default — not by fire-drill.</h2>
+    <p class="lh-section-sub">
+      OctoAssist's data model is designed around the artefacts ISO assessors and regulators actually
+      ask for — change records, role-based access, SLA evidence, asset inventory with software state.
     </p>
-    <div class="hero-cta">
-      <a href="/login" class="button primary big">Sign in</a>
-      {% for i in enabled_idps %}
-      <a href="/auth/oidc/{{ i.id }}/start" class="button big">Sign in with {{ i.display_name }}</a>
-      {% endfor %}
-      <a href="mailto:info@thirdoctopus.com?subject=OctoAssist%20demo" class="button big ghost">Request a demo</a>
-    </div>
-    <p class="hero-meta">ITIL-aligned · ISO 27001:2022 · DPDP Act 2023 · SEBI CSCRF audit-ready</p>
-  </div>
-</section>
 
-<section class="modules">
-  <h2>What's inside</h2>
-  <div class="module-grid">
-
-    <div class="module-card">
-      <h3>Incident &amp; Service Request</h3>
-      <p>Email, portal, or agent-entry ticketing with auto-classification, priority routing, and SLA tracking against
-         a configurable matrix. Built-in audit trail every assessor will recognise.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Self-Service Portal</h3>
-      <p>End-users log tickets, track status, read KB articles, and approve requests from a clean branded portal.
-         Reduces ticket volume by 25–40% in deployments where the KB is seeded well.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Asset Discovery Agent</h3>
-      <p>Lightweight Windows agent auto-inventories hardware, installed software, OS, BIOS, network, and the
-         logged-in user. Unlimited endpoints — no per-seat fee, ever.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Patch Management <span class="tag-soon">phase 4</span></h3>
-      <p>Endpoint patch compliance dashboard with missing-patch detection, severity tagging, deployment scheduling,
-         and audit-ready reporting.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Change Management <span class="tag-soon">phase 3</span></h3>
-      <p>Normal, Standard, and Emergency change types with CAB approval workflows and risk scoring.
-         The audit-ready paper trail ISO 27001 / SEBI CSCRF assessments routinely sample.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Knowledge Base <span class="tag-soon">phase 3</span></h3>
-      <p>Categorised, searchable articles for IT policies, how-tos, troubleshooting, FAQs, and best practices.
-         View counts, last-updated timestamps, and author attribution baked in.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Reporting &amp; Dashboards <span class="tag-soon">phase 3</span></h3>
-      <p>50+ pre-built reports across ticket volumes, SLA performance, asset coverage, and patch posture.
-         PDF / XLSX export, scheduled email delivery.</p>
-    </div>
-
-    <div class="module-card">
-      <h3>Audit &amp; Compliance Logging</h3>
-      <p>Every action — creation, assignment, status change, comment, configuration edit — is logged with user,
-         timestamp, and before/after values. Surfaces directly on the ticket detail.</p>
-    </div>
-
-  </div>
-</section>
-
-<section class="why">
-  <div class="why-grid">
-    <div>
-      <h3>Five-week deployment</h3>
-      <p>Discovery &amp; design, platform provisioning, module configuration &amp; integration,
-         user acceptance testing, training &amp; go-live. Concrete milestones every week.</p>
-    </div>
-    <div>
-      <h3>Bundled, not metered</h3>
-      <p>Asset Agent, Patch Management, and unlimited end-users are all included in the platform cost.
-         No per-module, per-user, or per-endpoint fees.</p>
-    </div>
-    <div>
-      <h3>Coverage you can plan around</h3>
-      <p>Three years of bug-fix coverage and six months of hypercare from go-live, included.
-         Specific SLAs agreed at contract signing.</p>
+    <div class="lh-comp-grid">
+      <div class="lh-comp-card">
+        <h3>ISO 27001:2022</h3>
+        <ul>
+          <li>A.5.18 Access rights — RBAC with audit log</li>
+          <li>A.5.32 IPR &amp; software inventory</li>
+          <li>A.6.3 Awareness &amp; training — KB</li>
+          <li>A.8.16 Monitoring activities — append-only events</li>
+          <li>A.8.32 Change management — full lifecycle</li>
+        </ul>
+      </div>
+      <div class="lh-comp-card">
+        <h3>DPDP Act 2023</h3>
+        <ul>
+          <li>Personal data minimisation in tickets</li>
+          <li>Role-based access on portal data</li>
+          <li>Auditable consent trail for service requests</li>
+          <li>Right-to-erasure operational pattern</li>
+          <li>Data Fiduciary record-keeping</li>
+        </ul>
+      </div>
+      <div class="lh-comp-card">
+        <h3>SEBI CSCRF</h3>
+        <ul>
+          <li>Continuous asset inventory of regulated endpoints</li>
+          <li>Patch posture dashboard for systems supporting REs</li>
+          <li>Change-management evidence sampling</li>
+          <li>Incident response timelines and audit log</li>
+          <li>VAPT integration for finding-tracking</li>
+        </ul>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="cta-band">
-  <div>
-    <h2>Ready to see it?</h2>
-    <p>Walk-through call, sandbox access, or a costed proposal — whichever's most useful.</p>
+{# ───────────  WHY THIRD OCTOPUS (BRAND PROMISE)  ───────────── #}
+<section class="lh-section lh-band-dark">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-light">Why Third Octopus</p>
+    <h2 class="lh-h2 center light">Modern Cloud · Trusted Security · Managed Outcomes</h2>
+    <p class="lh-section-sub center light">
+      Big-Four-quality consulting rigor with the agility, accountability, and accessibility of a focused boutique partner.
+    </p>
+
+    <div class="lh-promise-grid">
+      <div>
+        <h3>Modern Cloud</h3>
+        <p>Microsoft Azure, Microsoft 365, and modern cloud-infrastructure deployments. We build the foundation our own ITSM product runs on.</p>
+      </div>
+      <div>
+        <h3>Trusted Security</h3>
+        <p>SEBI CSCRF, ISO 27001:2022, DPDP Act 2023, VAPT, Zero Trust, and security operations. Compliance is our day job, not a marketing badge.</p>
+      </div>
+      <div>
+        <h3>Managed Outcomes</h3>
+        <p>Outcome-led delivery with measurable KPIs, monthly governance reviews, and clear accountability. The opposite of T&amp;M billing surprise.</p>
+      </div>
+    </div>
   </div>
-  <div>
-    <a href="mailto:info@thirdoctopus.com?subject=OctoAssist%20-%20Walk-through%20request" class="button primary big">Email Third Octopus</a>
+</section>
+
+{# ───────────  ENGAGEMENT MODEL (timeline)  ────────── #}
+<section class="lh-section">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">How a deployment runs</p>
+    <h2 class="lh-h2">Five weeks from kick-off to go-live.</h2>
+    <p class="lh-section-sub">
+      Then six months of post-go-live hypercare and three years of bug-fix coverage — both included.
+    </p>
+
+    <ol class="lh-timeline">
+      <li><span>Week 1</span><strong>Discovery &amp; Design</strong><p>Workshop, service catalogue, SLA matrix, role design</p></li>
+      <li><span>Week 2</span><strong>Provisioning</strong><p>Environment setup, branding, RBAC, categories, workflows</p></li>
+      <li><span>Week 3</span><strong>Module Configuration</strong><p>Asset Agent rollout, patch baselines, KB seeding, Entra integration</p></li>
+      <li><span>Week 4</span><strong>UAT</strong><p>Test scripts, end-user validation, defect closure, performance</p></li>
+      <li><span>Week 5</span><strong>Go-Live</strong><p>Admin &amp; end-user training, cutover, knowledge transfer</p></li>
+    </ol>
+
+    <div class="lh-engagement-tail">
+      <div><strong>6 months hypercare</strong> — priority response, weekly health checks, monthly governance review</div>
+      <div><strong>3 years bug-fix coverage</strong> — code-level fixes, regression testing, patch deployment</div>
+      <div><strong>Unlimited end-users</strong> — no per-seat licensing, ever</div>
+    </div>
+  </div>
+</section>
+
+{# ─────────────────────────  CTA BAND  ─────────────────────── #}
+<section class="lh-section lh-cta-band-section" id="contact">
+  <div class="lh-container">
+    <div class="lh-cta-band">
+      <div>
+        <h2 class="lh-h2 light">Ready to see it?</h2>
+        <p class="lh-section-sub light">Walk-through call, sandbox access, or a costed proposal — whichever's most useful.</p>
+
+        <ul class="lh-contact-list">
+          <li><span>Email</span> <a href="mailto:info@thirdoctopus.com?subject=OctoAssist%20-%20Walk-through%20request">info@thirdoctopus.com</a></li>
+          <li><span>Web</span> <a href="https://thirdoctopus.com" target="_blank" rel="noopener">thirdoctopus.com</a></li>
+          <li><span>HQ</span> Mumbai, India</li>
+        </ul>
+      </div>
+
+      <form class="lh-cta-form" method="post" action="/contact">
+        <h3>Talk to us</h3>
+        <label>Name<input type="text" name="name" required></label>
+        <label>Work email<input type="email" name="email" required></label>
+        <label>Organisation<input type="text" name="org"></label>
+        <label>Phone<input type="tel" name="phone"></label>
+        <label>What are you looking for?<textarea name="message" rows="3"></textarea></label>
+        <button type="submit" class="lh-button primary big">Request a walk-through</button>
+        <p class="lh-form-fineprint">By submitting, you agree to be contacted by Third Octopus about OctoAssist. We respect your inbox.</p>
+      </form>
+    </div>
   </div>
 </section>
 

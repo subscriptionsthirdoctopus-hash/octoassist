@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -90,6 +90,30 @@ def root(request: Request, db: Session = Depends(get_db)):
     return _root_templates.TemplateResponse(
         request=request, name="landing.html",
         context={"current_user": None, "tenant": tenant, "enabled_idps": enabled_idps},
+    )
+
+
+@app.post("/contact", response_class=HTMLResponse)
+def contact_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    org: str = Form(""),
+    phone: str = Form(""),
+    message: str = Form(""),
+):
+    """Demo-request form on the landing page.
+
+    No SMTP wired up yet — log the inquiry server-side so we don't lose it,
+    then render a thank-you page. Phase 4 wires this to email.
+    """
+    log.info(
+        "DEMO_REQUEST name=%r email=%r org=%r phone=%r message=%r",
+        name, email, org, phone, message,
+    )
+    return _root_templates.TemplateResponse(
+        request=request, name="contact_thanks.html",
+        context={"current_user": None, "tenant": None, "name": name},
     )
 
 
