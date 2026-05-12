@@ -90,3 +90,36 @@ def run(db: Session) -> None:
             ))
         db.commit()
         log.info("Seeded %d default categories", len(DEFAULT_CATEGORIES))
+
+    # Seed 4 technician (agent) licences. Idempotent — only creates if the
+    # email isn't already present. Initial password follows a predictable
+    # pattern so the admin can communicate it to each tech for first login;
+    # they must change it themselves on first sign-in (manual flow for now).
+    DEFAULT_TECHNICIANS = [
+        ("rohit.patil@thirdoctopus.com",   "Rohit Patil",   "OctoAssist!Rohit#2026"),
+        ("priya.sharma@thirdoctopus.com",  "Priya Sharma",  "OctoAssist!Priya#2026"),
+        ("karthik.iyer@thirdoctopus.com",  "Karthik Iyer",  "OctoAssist!Karthik#2026"),
+        ("anjali.desai@thirdoctopus.com",  "Anjali Desai",  "OctoAssist!Anjali#2026"),
+    ]
+    created = 0
+    for email, full_name, pwd in DEFAULT_TECHNICIANS:
+        existing_u = db.query(User).filter(User.email == email).first()
+        if existing_u is not None:
+            continue
+        db.add(User(
+            tenant_id=tenant.id,
+            email=email,
+            password_hash=hash_password(pwd),
+            full_name=full_name,
+            role=UserRole.agent,
+            is_active=True,
+        ))
+        created += 1
+    if created:
+        db.commit()
+        log.info("Seeded %d technician licences (role=agent). Default passwords follow OctoAssist!<First>#2026", created)
+
+    # Seed TEMA India-flavoured KB articles (heavy-engineering / manufacturing
+    # IT context). Idempotent — keyed by slug.
+    from .seed_kb_tema import seed_tema_kb
+    seed_tema_kb(db, tenant)

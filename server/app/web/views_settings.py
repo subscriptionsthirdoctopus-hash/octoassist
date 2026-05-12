@@ -12,7 +12,10 @@ import secrets
 
 from ..auth import require_admin
 from ..database import get_db
-from ..models import IdentityProvider, IdentityProviderKind, Tenant, User, UserRole
+from ..models import (
+    Category, IdentityProvider, IdentityProviderKind, Tenant,
+    TicketKind, TicketPriority, User, UserRole,
+)
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -343,6 +346,79 @@ def smtp_test(
         flash = f"Test+failed:+{str(e)[:80]}"
     db.commit()
     return RedirectResponse(url=f"/settings?flash={flash}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# SLA matrix — edit response + resolution targets per category
+# ---------------------------------------------------------------------------
+
+@router.get("/settings/sla", response_class=HTMLResponse)
+def sla_matrix(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
+    tenant = db.query(Tenant).first()
+    cats = (db.query(Category)
+              .filter(Category.tenant_id == user.tenant_id)
+              .order_by(Category.kind, Category.name).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_sla.html",
+        context={
+            "current_user": user, "tenant": tenant,
+            "categories": cats,
+            "priorities": [p.value for p in TicketPriority],
+            "kinds": [k.value for k in TicketKind],
+            "flash": flash,
+        },
+    )
+
+
+@router.post("/settings/sla")
+async def sla_save(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Bulk-save the SLA matrix. Form fields are namespaced:
+        cat_{id}_priority      = "low" | "medium" | "high" | "critical"
+        cat_{id}_response_min  = int
+        cat_{id}_resolution_min = int
+        cat_{id}_requires_approval = "1" or absent
+        cat_{id}_is_active     = "1" or absent
+    """
+    form = await request.form()
+    cats = (db.query(Category)
+              .filter(Category.tenant_id == user.tenant_id).all())
+    updated = 0
+    for c in cats:
+        pri_raw = form.get(f"cat_{c.id}_priority", c.default_priority.value)
+        try:
+            c.default_priority = TicketPriority(pri_raw)
+        except ValueError:
+            pass
+
+        for attr, field in (("sla_response_minutes",   "response_min"),
+                            ("sla_resolution_minutes", "resolution_min")):
+            raw = form.get(f"cat_{c.id}_{field}")
+            if raw is None or str(raw).strip() == "":
+                continue
+            try:
+                v = int(raw)
+                if v > 0:
+                    setattr(c, attr, v)
+            except (TypeError, ValueError):
+                pass
+
+        c.requires_approval = form.get(f"cat_{c.id}_requires_approval") == "1"
+        c.is_active         = form.get(f"cat_{c.id}_is_active") == "1"
+        updated += 1
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/sla?flash=Saved+SLA+matrix+for+{updated}+categories.",
+        status_code=303,
+    )
 
 
 @router.post("/settings/tenant/notification-email")

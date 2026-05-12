@@ -69,8 +69,6 @@ def software_home(
     # Chart data — derived from FILTERED rows so the charts respond to filters
     cat_data = sam.category_breakdown(rows)
     pub_data = sam.publisher_breakdown(rows, top=15)
-    lic_data_raw = sam.license_breakdown(rows)
-    lic_data = [(LICENSE_LABEL.get(k, k), v) for k, v in lic_data_raw]
 
     # Distinct filter lists drawn from the FULL, unfiltered roll-up so the
     # user can always pivot back out.
@@ -91,8 +89,7 @@ def software_home(
                          "publisher": publisher, "q": q,
                      },
                      chart_categories=charts.bars_h(cat_data,  width=540, label_w=220),
-                     chart_publishers=charts.bars_h(pub_data, width=540, label_w=220),
-                     chart_licenses=charts.bars_h(lic_data,   width=540, label_w=260)),
+                     chart_publishers=charts.bars_h(pub_data, width=540, label_w=220)),
     )
 
 

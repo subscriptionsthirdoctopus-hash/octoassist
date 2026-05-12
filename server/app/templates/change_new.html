@@ -2,13 +2,40 @@
 {% block title %}New Change — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
-  <h1>New Change</h1>
-  <p class="meta">Created as Draft. Submit for CAB review when ready.</p>
+  <h1>New Change Record</h1>
+  <p class="meta">
+    Every production-touching change is logged here. After you fill this in
+    and submit, the change becomes visible to the CAB (Change Advisory Board)
+    technicians for approval.
+  </p>
+</section>
+
+<!-- Workflow stepper — illustrative, no live data -->
+<section class="card" style="margin-bottom:18px;background:#f8fafc;">
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;">
+    <span class="prio prio-low" style="font-weight:600;">1. Draft</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-medium" style="font-weight:600;">2. Submitted</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-high" style="font-weight:600;">3. CAB review</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-critical" style="font-weight:600;">4. Approved</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-medium" style="font-weight:600;">5. In progress</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-low" style="font-weight:600;">6. Completed</span>
+  </div>
+  <p class="meta" style="margin:10px 0 0;font-size:12px;">
+    <strong>Tip:</strong> tick <em>“Submit for CAB approval now”</em> below to
+    skip the draft stage and route directly to the technicians. Use draft if
+    you're still working with stakeholders to refine the rollback plan.
+  </p>
 </section>
 
 <form method="post" action="/changes/new" class="card form" style="max-width:880px;">
-  <label>Title
-    <input type="text" name="title" required maxlength="255" placeholder="One-line summary of the change">
+  <label>Title <span class="meta">(one-line summary — what is changing and where)</span>
+    <input type="text" name="title" required maxlength="255"
+           placeholder="e.g. Upgrade SAP GUI from 7.70 to 8.00 on 12 design workstations">
   </label>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -21,28 +48,48 @@
     </label>
     <label>Risk
       <select name="risk">
-        <option value="low">low</option>
-        <option value="medium" selected>medium</option>
-        <option value="high">high</option>
+        <option value="low">low — single user, no downtime</option>
+        <option value="medium" selected>medium — multiple users, off-hours possible</option>
+        <option value="high">high — production system / plant network</option>
       </select>
     </label>
   </div>
 
-  <label>Description<textarea name="description" rows="4" placeholder="What's changing, where, and why."></textarea></label>
-  <label>Impact <span class="meta">(who/what is affected; downtime expected)</span>
-    <textarea name="impact" rows="3" placeholder="Systems / users impacted, expected window of disruption"></textarea>
+  <label>Description <span class="meta">(what is changing, where, and WHY)</span>
+    <textarea name="description" rows="4"
+              placeholder="What:  Roll SAP GUI 8.00 patch 9 to 12 engineering workstations in Bldg-A.&#10;Where: Hostnames ENG-WS-01 to ENG-WS-12.&#10;Why:   SAP S/4HANA production server now enforces TLS 1.2; older GUI 7.70 fails handshake."></textarea>
   </label>
-  <label>Rollback plan <span class="meta">(this is what makes it CAB-approvable)</span>
-    <textarea name="rollback_plan" rows="4" placeholder="Step-by-step procedure to revert if implementation fails"></textarea>
+
+  <label>Impact <span class="meta">(who or what is affected; expected disruption window)</span>
+    <textarea name="impact" rows="3"
+              placeholder="Affected users: 12 design engineers in Bldg-A.&#10;Downtime: ~10 min per workstation while installer runs.&#10;Window: 22:00–23:00 IST, Saturday (off-shift, no SAP transactions expected)."></textarea>
+  </label>
+
+  <label>Rollback plan <span class="meta">(THIS is what makes the change CAB-approvable — be specific)</span>
+    <textarea name="rollback_plan" rows="5"
+              placeholder="If install fails on a workstation:&#10;1. Uninstall SAP GUI 8.00 via Programs &amp; Features.&#10;2. Re-install SAP GUI 7.70 from \\fileserver\install$\sap-gui-7.70\setup.exe.&#10;3. Restart workstation, confirm user can log in to SAP-DEV (port 3200).&#10;4. If &gt;3 workstations fail, abort full rollout and reschedule."></textarea>
   </label>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-    <label>Planned start<input type="datetime-local" name="planned_start"></label>
-    <label>Planned end<input type="datetime-local" name="planned_end"></label>
+    <label>Planned start <span class="meta">(IST)</span>
+      <input type="datetime-local" name="planned_start">
+    </label>
+    <label>Planned end <span class="meta">(IST)</span>
+      <input type="datetime-local" name="planned_end">
+    </label>
   </div>
 
+  <label class="checkbox" style="margin-top:8px;">
+    <input type="checkbox" name="submit_now" value="1" checked>
+    <strong>Submit for CAB approval now</strong>
+    <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">
+      Routes the change straight to the technicians' approval queue.
+      Untick to save as <em>Draft</em> for later refinement.
+    </span>
+  </label>
+
   <div class="form-actions">
-    <button type="submit" class="primary">Create draft</button>
+    <button type="submit" class="primary">Save change</button>
     <a href="/changes" class="link-button">Cancel</a>
   </div>
 </form>

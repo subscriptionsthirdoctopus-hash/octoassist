@@ -56,9 +56,19 @@ def list_changes(
         except ValueError:
             pass
     rows = qy.order_by(Change.created_at.desc()).limit(200).all()
+
+    # "Awaiting your approval" — under_review changes the current user can act
+    # on (i.e. they are NOT the requester; you can't approve your own change).
+    awaiting = (db.query(Change)
+                  .filter(Change.tenant_id == user.tenant_id,
+                          Change.status == ChangeStatus.under_review,
+                          Change.requester_id != user.id)
+                  .order_by(Change.created_at.asc()).all())
+
     return templates.TemplateResponse(
         request=request, name="changes_list.html",
         context=_ctx(user, db, rows=rows,
+                     awaiting=awaiting,
                      statuses=[s.value for s in ChangeStatus],
                      filter_status=status or ""),
     )
@@ -88,6 +98,7 @@ def new_change_submit(
     rollback_plan: str = Form(""),
     planned_start: str = Form(""),
     planned_end: str = Form(""),
+    submit_now: int = Form(0),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -107,6 +118,11 @@ def new_change_submit(
         planned_start=_parse_dt(planned_start),
         planned_end=_parse_dt(planned_end),
     )
+    # Optional: auto-route to CAB approval queue. Standard / emergency
+    # change types skip CAB by design (standard = pre-approved, emergency =
+    # post-implementation review), so only auto-submit normal changes.
+    if submit_now and ctype == ChangeType.normal:
+        change_svc.submit_for_review(db, change=c, actor=user)
     return RedirectResponse(url=f"/changes/{c.id}", status_code=303)
 
 
