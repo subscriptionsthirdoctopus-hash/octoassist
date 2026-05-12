@@ -9,6 +9,7 @@ from ..models import (
 )
 from .audit import record
 from .sla import compute_sla
+from . import notifications
 
 
 def next_ticket_number(db: Session, tenant_id: int, kind: TicketKind) -> str:
@@ -62,6 +63,7 @@ def create_ticket(
     })
     db.commit()
     db.refresh(ticket)
+    notifications.ticket_created(db, ticket)
     return ticket
 
 
@@ -90,6 +92,7 @@ def add_comment(db: Session, *, ticket: Ticket, author: User, body: str, is_inte
     ticket.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(cm)
+    notifications.ticket_comment(db, ticket, cm)
     return cm
 
 
@@ -111,6 +114,7 @@ def transition_status(db: Session, *, ticket: Ticket, actor: User, new_status: T
     ticket.updated_at = now
     db.commit()
     db.refresh(ticket)
+    notifications.ticket_status_changed(db, ticket, old.value)
     return ticket
 
 

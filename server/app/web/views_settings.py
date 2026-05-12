@@ -257,11 +257,53 @@ def save_smtp_config(
         tenant.smtp_port = None
     tenant.smtp_username = (smtp_username or "").strip() or None
     if smtp_password and smtp_password.strip():
-        tenant.smtp_password = smtp_password
+        from ..crypto import encrypt
+        tenant.smtp_password = encrypt(smtp_password)
     tenant.smtp_from = (smtp_from or "").strip() or None
     tenant.smtp_use_tls = bool(smtp_use_tls)
     db.commit()
     return RedirectResponse(url="/settings?flash=SMTP+settings+saved.", status_code=303)
+
+
+@router.post("/settings/tenant/mail-provider")
+def set_mail_provider(
+    mail_provider: str = Form("smtp"),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+    if mail_provider not in ("smtp", "graph"):
+        raise HTTPException(status_code=400, detail="Invalid provider")
+    tenant.mail_provider = mail_provider
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings?flash=Mail+provider+set+to+{mail_provider}.",
+        status_code=303,
+    )
+
+
+@router.post("/settings/tenant/graph")
+def save_graph_config(
+    graph_tenant_id: str = Form(""),
+    graph_client_id: str = Form(""),
+    graph_client_secret: str = Form(""),
+    graph_from: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..crypto import encrypt
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+    tenant.graph_tenant_id = (graph_tenant_id or "").strip() or None
+    tenant.graph_client_id = (graph_client_id or "").strip() or None
+    if graph_client_secret and graph_client_secret.strip():
+        tenant.graph_client_secret = encrypt(graph_client_secret)
+    tenant.graph_from = (graph_from or "").strip() or None
+    db.commit()
+    return RedirectResponse(url="/settings?flash=Graph+settings+saved.", status_code=303)
 
 
 @router.post("/settings/tenant/smtp/test")

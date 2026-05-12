@@ -271,6 +271,14 @@ def transition_window(db: Session, *, window: PatchWindow, new_status: PatchWind
         window.cancelled_at = now
     db.commit()
     db.refresh(window)
+
+    # Phase 8: notify on important transitions.
+    from . import notifications  # local import to avoid circular import at module load
+    if new_status == PatchWindowStatus.in_progress:
+        notifications.patch_window_started(db, window)
+    elif new_status == PatchWindowStatus.completed:
+        notifications.patch_window_completed(db, window)
+
     return window
 
 

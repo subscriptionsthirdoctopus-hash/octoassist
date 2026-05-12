@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models import (
     Change, ChangeEvent, ChangeEventKind, ChangeRisk, ChangeStatus, ChangeType, User,
 )
+from . import notifications
 
 
 def next_change_number(db: Session, tenant_id: int) -> str:
@@ -76,6 +77,7 @@ def submit_for_review(db: Session, *, change: Change, actor: User) -> Change:
     _record(db, change=change, actor=actor, kind=ChangeEventKind.submitted_for_review)
     db.commit()
     db.refresh(change)
+    notifications.change_submitted(db, change)
     return change
 
 

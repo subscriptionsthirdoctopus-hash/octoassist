@@ -101,7 +101,29 @@
 
 <section>
   <h2>Notifications</h2>
+
   <div class="card">
+    <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Mail provider</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      OctoAssist sends notifications via one of two paths. Pick the one that fits your tenant's policy.
+      Microsoft Graph is preferred for M365 tenants — it doesn't need SMTP AUTH (which is blocked by default in modern M365).
+    </p>
+    <form method="post" action="/settings/tenant/mail-provider" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+      <label class="checkbox">
+        <input type="radio" name="mail_provider" value="smtp" {% if (tenant.mail_provider or 'smtp') == 'smtp' %}checked{% endif %}>
+        <strong>SMTP</strong>
+        <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">Classic outbound SMTP (smtp.office365.com / Outlook.com / app-password mailbox).</span>
+      </label>
+      <label class="checkbox">
+        <input type="radio" name="mail_provider" value="graph" {% if (tenant.mail_provider or 'smtp') == 'graph' %}checked{% endif %}>
+        <strong>Microsoft Graph</strong>
+        <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">App-registration based. No password, no SMTP AUTH. Needs Mail.Send application permission.</span>
+      </label>
+      <button type="submit" class="button">Save provider</button>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
     <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Notification email</h3>
     <p class="meta" style="margin:0 0 12px;">
       Microsoft email address for OctoAssist outbound notifications.
@@ -185,6 +207,49 @@
       {% if tenant.smtp_last_test_message %}<pre class="code" style="margin-top:8px;font-size:11.5px;">{{ tenant.smtp_last_test_message }}</pre>{% endif %}
     </div>
     {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Microsoft Graph — outbound email</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      Setup at the customer's Azure tenant:
+      <strong>Entra ID → App registrations → New registration</strong> → name "OctoAssist Mail Sender" →
+      copy Directory (tenant) ID + Application (client) ID →
+      <strong>Certificates &amp; secrets → New client secret</strong> →
+      <strong>API permissions → Microsoft Graph → Application → Mail.Send</strong> → Grant admin consent.
+      Then paste the values below. Sender (From) must be a real mailbox in the tenant.
+      The client secret is encrypted at rest (Fernet).
+    </p>
+
+    <form method="post" action="/settings/tenant/graph" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:760px;">
+      <label>Directory (tenant) ID
+        <input type="text" name="graph_tenant_id" value="{{ tenant.graph_tenant_id or '' }}"
+               placeholder="00000000-0000-0000-0000-000000000000"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label>Application (client) ID
+        <input type="text" name="graph_client_id" value="{{ tenant.graph_client_id or '' }}"
+               placeholder="00000000-0000-0000-0000-000000000000"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label style="grid-column:1/-1;">Client secret <span class="meta" style="font-weight:normal;">(blank to keep existing — encrypted at rest)</span>
+        <input type="password" name="graph_client_secret" value="" autocomplete="new-password"
+               placeholder="{% if tenant.graph_client_secret %}•••••• stored — type new to rotate{% else %}paste Value (NOT secret ID) from Azure portal{% endif %}"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <label style="grid-column:1/-1;">From mailbox
+        <input type="email" name="graph_from" value="{{ tenant.graph_from or '' }}"
+               placeholder="alerts@thirdoctopus.onmicrosoft.com"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+      </label>
+      <div class="form-actions" style="grid-column:1/-1;">
+        <button type="submit" class="button primary">Save Graph settings</button>
+      </div>
+    </form>
+
+    <form method="post" action="/settings/tenant/smtp/test" style="margin-top:12px;">
+      <button type="submit" class="button">Send test email (uses currently selected provider: <strong>{{ tenant.mail_provider or 'smtp' }}</strong>)</button>
+    </form>
   </div>
 </section>
 
