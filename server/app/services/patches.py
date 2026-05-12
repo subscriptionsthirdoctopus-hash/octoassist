@@ -308,11 +308,82 @@ def window_progress(window: PatchWindow) -> dict:
     return {"counts": counts, "total": total, "done": done, "pct": pct}
 
 
+# ---------------------------------------------------------- vendor / OEM grouping
+
+# Canonical vendor names — first segment of a winget package Id maps here.
+_VENDOR_CANON = {
+    "microsoft":          "Microsoft",
+    "google":             "Google",
+    "googlellc":          "Google",
+    "mozilla":            "Mozilla",
+    "adobe":              "Adobe",
+    "oracle":             "Oracle",
+    "apple":              "Apple",
+    "slacktechnologies":  "Slack",
+    "slack":              "Slack",
+    "zoom":               "Zoom",
+    "notion":             "Notion",
+    "atlassian":          "Atlassian",
+    "jetbrains":          "JetBrains",
+    "git":                "Git for Windows",
+    "github":             "GitHub",
+    "docker":             "Docker",
+    "videolan":           "VideoLAN (VLC)",
+    "7zip":               "7-Zip",
+    "winrar":             "WinRAR",
+    "putty":              "PuTTY",
+    "wireshark":          "Wireshark",
+    "tightvnc":           "TightVNC",
+    "teamviewer":         "TeamViewer",
+    "cisco":              "Cisco",
+    "vmware":             "VMware",
+    "intel":              "Intel",
+    "amd":                "AMD",
+    "nvidia":             "NVIDIA",
+    "lenovo":             "Lenovo",
+    "dell":               "Dell",
+    "hp":                 "HP",
+    "kaspersky":          "Kaspersky",
+    "bitdefender":        "Bitdefender",
+    "symantec":           "Symantec",
+}
+
+
+def derive_vendor(package_name: str, source: str | None = None) -> str:
+    """Best-effort vendor name from a package id + source.
+
+    Winget package ids follow Vendor.Product.SubProduct → vendor = first segment.
+    Windows Update KBs (KB#####) → Microsoft Windows Update.
+    Linux apt packages → Linux (since this product is Windows-only going forward,
+    only the demo droplet hits this branch).
+    Anything unrecognisable → "Other".
+    """
+    pn = (package_name or "").strip()
+    if not pn:
+        return "Other"
+    # Windows Update KB
+    if pn.upper().startswith("KB") and pn[2:].isdigit():
+        return "Microsoft Windows Update"
+    # Source-based hints
+    s = (source or "").lower()
+    if s.startswith("apt") or s.startswith("dpkg") or s == "rpm":
+        return "Linux distro packages"
+    if s == "windows-update":
+        return "Microsoft Windows Update"
+    # Winget Vendor.Product
+    if "." in pn:
+        first = pn.split(".", 1)[0].lower()
+        return _VENDOR_CANON.get(first, first.capitalize() if first else "Other")
+    # Single-word: try to canonicalise too
+    canon = _VENDOR_CANON.get(pn.lower())
+    return canon or "Other"
+
+
 def window_candidate_packages(db: Session, window: PatchWindow) -> list[dict]:
     """Distinct missing packages across this window's targets.
 
-    Each row: {name, severity, count, sources, hostnames_sample, selected}.
-    Sorted by severity (critical first) then count descending.
+    Each row: {name, vendor, severity, count, sources, hostnames_sample, selected}.
+    Sorted by vendor, then severity (critical first), then count descending.
     """
     target_agent_ids = [t.agent_id for t in window.targets]
     if not target_agent_ids:
@@ -348,6 +419,7 @@ def window_candidate_packages(db: Session, window: PatchWindow) -> list[dict]:
     for d in by_pkg.values():
         out.append({
             "name": d["name"],
+            "vendor": derive_vendor(d["name"], next(iter(d["sources"])) if d["sources"] else None),
             "severity": d["severity"],
             "count": d["count"],
             "sources": ", ".join(sorted(d["sources"])),
@@ -356,5 +428,41 @@ def window_candidate_packages(db: Session, window: PatchWindow) -> list[dict]:
             "selected": d["name"] in selected_set,
         })
     sev_rank = {"critical": 0, "important": 1, "moderate": 2, "low": 3, "unknown": 4}
-    out.sort(key=lambda r: (sev_rank.get(r["severity"], 9), -r["count"], r["name"]))
+    out.sort(key=lambda r: (r["vendor"], sev_rank.get(r["severity"], 9), -r["count"], r["name"]))
+    return out
+
+
+def fleet_vendor_breakdown(db: Session, tenant_id: int) -> list[dict]:
+    """All currently-missing patches across the fleet, grouped by vendor/OEM.
+
+    Each row: {vendor, total, critical, important, moderate, low_unknown, packages}
+    where packages is a count of distinct package names from that vendor.
+    """
+    rows = (db.query(PatchObservation)
+              .join(Agent, Agent.id == PatchObservation.agent_id)
+              .filter(Agent.tenant_id == tenant_id,
+                      PatchObservation.resolved_at.is_(None))
+              .all())
+
+    by_vendor: dict[str, dict] = {}
+    for o in rows:
+        v = derive_vendor(o.package_name, o.source)
+        d = by_vendor.setdefault(v, {
+            "vendor": v, "total": 0,
+            "critical": 0, "important": 0, "moderate": 0, "low_unknown": 0,
+            "_packages": set(),
+        })
+        d["total"] += 1
+        d["_packages"].add(o.package_name)
+        sev = o.severity.value
+        if sev == "critical":     d["critical"] += 1
+        elif sev == "important":  d["important"] += 1
+        elif sev == "moderate":   d["moderate"] += 1
+        else:                     d["low_unknown"] += 1
+
+    out = []
+    for d in by_vendor.values():
+        d["packages"] = len(d.pop("_packages"))
+        out.append(d)
+    out.sort(key=lambda d: (-d["critical"], -d["total"], d["vendor"]))
     return out

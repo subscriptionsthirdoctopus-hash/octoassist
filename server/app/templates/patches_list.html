@@ -44,6 +44,45 @@
   </div>
 </section>
 
+<section class="report-row">
+  <div class="report-card">
+    <h3>By vendor / OEM</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      Available updates grouped by publisher (derived from the winget Vendor.Product Id and Windows Update source).
+      Use this view to plan vendor-scoped patch waves — e.g. all Google updates in one window, all Microsoft in another.
+    </p>
+    {{ chart_vendors|safe }}
+    {% if vendors %}
+    <table class="data" style="margin-top:12px;max-width:760px;">
+      <thead>
+        <tr>
+          <th>Vendor / OEM</th>
+          <th>Critical</th>
+          <th>Important</th>
+          <th>Moderate</th>
+          <th>Low/unknown</th>
+          <th>Total patches</th>
+          <th>Distinct packages</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vendors %}
+        <tr>
+          <td><strong>{{ v.vendor }}</strong></td>
+          <td>{% if v.critical %}<span class="prio prio-critical">{{ v.critical }}</span>{% else %}—{% endif %}</td>
+          <td>{% if v.important %}<span class="prio prio-high">{{ v.important }}</span>{% else %}—{% endif %}</td>
+          <td>{{ v.moderate or "—" }}</td>
+          <td>{{ v.low_unknown or "—" }}</td>
+          <td><strong>{{ v.total }}</strong></td>
+          <td>{{ v.packages }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</section>
+
 <section>
   <h2>Endpoint posture</h2>
   {% if rows %}

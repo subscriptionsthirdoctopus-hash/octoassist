@@ -50,12 +50,16 @@ def patches_home(
     sev = patches_svc.severity_breakdown(db, tid)
     top = patches_svc.top_missing_packages(db, tid, top=15)
     kpi = patches_svc.patch_kpis(db, tid)
+    vendors = patches_svc.fleet_vendor_breakdown(db, tid)
+    vendor_chart_data = [(v["vendor"], v["total"]) for v in vendors[:10]]
     return templates.TemplateResponse(
         request=request, name="patches_list.html",
         context=_ctx(user, db,
                      rows=rows, kpi=kpi,
+                     vendors=vendors,
                      chart_severity=charts.donut(sev, size=200),
-                     chart_top=charts.bars_h(top, width=540, label_w=240)),
+                     chart_top=charts.bars_h(top, width=540, label_w=240),
+                     chart_vendors=charts.bars_h(vendor_chart_data, width=540, label_w=200)),
     )
 
 

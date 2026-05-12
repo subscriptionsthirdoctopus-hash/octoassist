@@ -41,17 +41,26 @@
   </div>
 
   <div style="margin-top:8px;">
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>c.checked=true);return false;" class="link-button">Select all</button>
-      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>c.checked=false);return false;" class="link-button">Select none</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
+      <strong style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--slate);">Bulk select:</strong>
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>c.checked=true);return false;" class="link-button">All</button>
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>c.checked=false);return false;" class="link-button">None</button>
       <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>{c.checked=c.dataset.sev==='critical'});return false;" class="link-button">Critical only</button>
       <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>{c.checked=(c.dataset.sev==='critical'||c.dataset.sev==='important')});return false;" class="link-button">Critical + Important</button>
     </div>
     {% if candidate_packages %}
+    {% set vendor_list = candidate_packages | map(attribute='vendor') | unique | sort | list %}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+      <strong style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--slate);">By vendor:</strong>
+      {% for v in vendor_list %}
+      <button type="button" onclick="document.querySelectorAll('input.pkg-cb').forEach(c=>{if(c.dataset.vendor==='{{ v|e }}')c.checked=true;});return false;" class="link-button">+ {{ v }}</button>
+      {% endfor %}
+    </div>
     <table class="data" style="max-width:none;">
       <thead>
         <tr>
           <th style="width:36px;">✓</th>
+          <th>Vendor / OEM</th>
           <th>Package</th>
           <th>Severity</th>
           <th>Endpoints</th>
@@ -62,7 +71,8 @@
       <tbody>
         {% for p in candidate_packages %}
         <tr>
-          <td><input type="checkbox" class="pkg-cb" name="package" value="{{ p.name }}" data-sev="{{ p.severity }}" {% if p.selected %}checked{% elif window.selected_packages is none %}checked{% endif %}></td>
+          <td><input type="checkbox" class="pkg-cb" name="package" value="{{ p.name }}" data-sev="{{ p.severity }}" data-vendor="{{ p.vendor }}" {% if p.selected %}checked{% elif window.selected_packages is none %}checked{% endif %}></td>
+          <td><span class="role-pill" style="background:var(--navy);color:white;font-size:10px;">{{ p.vendor }}</span></td>
           <td><strong>{{ p.name }}</strong></td>
           <td>
             {% if p.severity == 'critical' %}<span class="prio prio-critical">{{ p.severity }}</span>

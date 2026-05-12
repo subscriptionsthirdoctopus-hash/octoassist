@@ -91,6 +91,10 @@ def _startup() -> None:
         seed.run(db)
     finally:
         db.close()
+    # Phase 9: background scheduler that auto-promotes patch windows whose
+    # scheduled_for time has arrived. Daemon thread, idempotent.
+    from .services.scheduler import start_in_background
+    start_in_background()
 
 
 @app.get("/", response_class=HTMLResponse)
