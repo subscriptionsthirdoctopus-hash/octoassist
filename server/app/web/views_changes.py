@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
 from ..auth import require_staff
@@ -22,6 +23,7 @@ from ..services import change as change_svc
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+install_on(templates)
 
 router = APIRouter(tags=["changes"])
 
@@ -31,14 +33,13 @@ def _ctx(user: User, db: Session, **extra) -> dict:
 
 
 def _parse_dt(s: str) -> datetime | None:
-    s = (s or "").strip()
-    if not s:
-        return None
-    # HTML datetime-local sends "YYYY-MM-DDTHH:MM"
-    try:
-        return datetime.fromisoformat(s)
-    except ValueError:
-        return None
+    """Parse a `<input type="datetime-local">` value submitted by the browser.
+
+    HTML datetime-local sends "YYYY-MM-DDTHH:MM" with no timezone. We treat
+    it as IST wall-clock (what the user typed) and convert to UTC for storage.
+    """
+    from ..jinja_filters import parse_ist_input
+    return parse_ist_input(s)
 
 
 @router.get("/changes", response_class=HTMLResponse)

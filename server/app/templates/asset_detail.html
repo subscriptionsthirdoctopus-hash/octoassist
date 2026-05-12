@@ -5,8 +5,8 @@
   <h1>{{ agent.hostname }}</h1>
   <p class="meta">
     Machine ID: <code>{{ agent.machine_id }}</code> •
-    Registered: {{ agent.registered_at.strftime("%Y-%m-%d %H:%M UTC") }} •
-    Last seen: {% if agent.last_seen_at %}{{ agent.last_seen_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}
+    Registered: {{ agent.registered_at | ist }} •
+    Last seen: {% if agent.last_seen_at %}{{ agent.last_seen_at | ist }}{% else %}never{% endif %}
   </p>
 </section>
 

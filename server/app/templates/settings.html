@@ -37,7 +37,7 @@
           {% if i.last_test_at %}
             {% if i.last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
             <span class="meta-inline">·</span>
-            {{ i.last_test_at.strftime("%Y-%m-%d %H:%M UTC") }}
+            {{ i.last_test_at | ist }}
           {% else %}—{% endif %}
         </td>
         <td>{{ "yes" if i.auto_provision else "no" }}</td>
@@ -79,7 +79,7 @@
   <div class="card">
     <dl>
       <dt>Name</dt><dd>{{ tenant.name }}</dd>
-      <dt>Created</dt><dd>{{ tenant.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+      <dt>Created</dt><dd>{{ tenant.created_at | ist }}</dd>
       <dt>Enrolment key</dt>
       <dd>
         <div class="key-row">
@@ -203,7 +203,7 @@
       {% else %}
         <span class="status status-cancelled">FAIL</span>
       {% endif %}
-      <span class="meta">at {{ tenant.smtp_last_test_at.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+      <span class="meta">at {{ tenant.smtp_last_test_at | ist }}</span>
       {% if tenant.smtp_last_test_message %}<pre class="code" style="margin-top:8px;font-size:11.5px;">{{ tenant.smtp_last_test_message }}</pre>{% endif %}
     </div>
     {% endif %}

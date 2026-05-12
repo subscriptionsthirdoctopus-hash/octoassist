@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
 from ..auth import require_staff
@@ -19,6 +20,7 @@ from ..services import charts, patches as patches_svc
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+install_on(templates)
 
 router = APIRouter(tags=["patches"])
 
@@ -28,13 +30,13 @@ def _ctx(user: User, db: Session, **extra) -> dict:
 
 
 def _parse_dt(s: str) -> datetime | None:
-    s = (s or "").strip()
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s)
-    except ValueError:
-        return None
+    """Parse a `<input type="datetime-local">` value submitted by the browser.
+
+    The user types wall-clock IST; we store UTC in the DB. Delegated to the
+    shared helper in jinja_filters so display + parse stay symmetric.
+    """
+    from ..jinja_filters import parse_ist_input
+    return parse_ist_input(s)
 
 
 # ---------- Fleet view ----------

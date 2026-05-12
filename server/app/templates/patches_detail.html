@@ -7,7 +7,7 @@
       <h1>{{ agent.hostname }} — patches</h1>
       <p class="meta">
         <a href="/patches">← All endpoints</a>
-        · last seen {% if agent.last_seen_at %}{{ agent.last_seen_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}
+        · last seen {% if agent.last_seen_at %}{{ agent.last_seen_at | ist }}{% else %}never{% endif %}
       </p>
     </div>
     <div class="actions">
@@ -65,7 +65,7 @@
         <td><strong>{{ p.package_name }}</strong>{% if p.title %}<div style="color:var(--slate);font-size:12px;">{{ p.title[:160] }}</div>{% endif %}</td>
         <td>{{ p.current_version or "—" }}</td>
         <td>{{ p.available_version or "—" }}</td>
-        <td>{{ p.first_seen_at.strftime("%Y-%m-%d") }}</td>
+        <td>{{ p.first_seen_at | istdate }}</td>
         <td>{% if age_days > 90 %}<span class="breach">{{ age_days }}d</span>{% else %}{{ age_days }}d{% endif %}</td>
         <td>{{ p.source }}</td>
       </tr>

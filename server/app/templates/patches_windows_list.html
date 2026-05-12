@@ -25,10 +25,10 @@
           {% if w.severity_filter %}<div style="color:var(--slate);font-size:12px;">severity: {{ w.severity_filter.value }}</div>{% endif %}
       </td>
       <td><span class="status status-{% if w.status.value == 'completed' %}resolved{% elif w.status.value == 'cancelled' %}cancelled{% elif w.status.value == 'in_progress' %}in_progress{% else %}on_hold{% endif %}">{{ w.status.value.replace("_", " ") }}</span></td>
-      <td>{% if w.scheduled_for %}{{ w.scheduled_for.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</td>
+      <td>{% if w.scheduled_for %}{{ w.scheduled_for | ist }}{% else %}—{% endif %}</td>
       <td>{{ p.total }}</td>
       <td>{{ p.done }} / {{ p.total }} ({{ p.pct }}%)</td>
-      <td>{{ w.created_at.strftime("%Y-%m-%d") }}</td>
+      <td>{{ w.created_at | istdate }}</td>
       <td>{{ w.created_by.display_name if w.created_by else "—" }}</td>
     </tr>
     {% endfor %}

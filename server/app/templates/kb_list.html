@@ -50,7 +50,7 @@
       <td>{{ a.visibility.value }}</td>
       <td>{{ a.author.display_name if a.author else "—" }}</td>
       <td>{{ a.view_count }}</td>
-      <td>{{ a.updated_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+      <td>{{ a.updated_at | ist }}</td>
     </tr>
     {% endfor %}
   </tbody>

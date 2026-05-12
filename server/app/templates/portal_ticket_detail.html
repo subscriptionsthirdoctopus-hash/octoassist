@@ -5,7 +5,7 @@
   <div class="row-between">
     <div>
       <h1>{{ ticket.ticket_number }} <span class="meta-inline">·</span> {{ ticket.title }}</h1>
-      <p class="meta">{{ ticket.kind.value.replace("_", " ") | capitalize }} · {{ ticket.category.name }} · created {{ ticket.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</p>
+      <p class="meta">{{ ticket.kind.value.replace("_", " ") | capitalize }} · {{ ticket.category.name }} · created {{ ticket.created_at | ist }}</p>
     </div>
     <div class="ticket-meta">
       <span class="status status-{{ ticket.status.value }}">{{ ticket.status.value.replace("_", " ") }}</span>
@@ -23,7 +23,7 @@
     <h3>SLA</h3>
     {% set ttb = time_to_breach(ticket.due_resolution_at) %}
     <dl>
-      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at | ist }}{% else %}—{% endif %}</dd>
       <dt>Time remaining</dt><dd class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</dd>
     </dl>
   </div>
@@ -41,7 +41,7 @@
     <div class="comment-head">
       <strong>{{ c.author.display_name if c.author else "—" }}</strong>
       <span class="meta-inline">·</span>
-      <span>{{ c.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+      <span>{{ c.created_at | ist }}</span>
     </div>
     <div class="comment-body prose">{{ c.body }}</div>
   </div>

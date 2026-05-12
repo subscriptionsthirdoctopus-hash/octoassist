@@ -6,7 +6,7 @@
     {% if portal_view %}<a href="/portal/kb">← Knowledge Base</a>{% else %}<a href="/kb">← Knowledge Base</a>{% endif %}
     {% if article.category %}<span class="meta-inline">·</span> {{ article.category.name }}{% endif %}
     <span class="meta-inline">·</span> {{ article.view_count }} view{{ "" if article.view_count == 1 else "s" }}
-    <span class="meta-inline">·</span> updated {{ article.updated_at.strftime("%Y-%m-%d") }}
+    <span class="meta-inline">·</span> updated {{ article.updated_at | istdate }}
     {% if not portal_view %}
       <span class="meta-inline">·</span>
       <span class="status status-{% if article.status.value == 'published' %}resolved{% elif article.status.value == 'draft' %}on_hold{% else %}cancelled{% endif %}">{{ article.status.value }}</span>
@@ -29,7 +29,7 @@
 {% endif %}
 
 {% if portal_view and article.author %}
-<p class="meta" style="margin-top:24px;max-width:780px;font-size:12px;">Written by {{ article.author.display_name }}{% if article.published_at %} · published {{ article.published_at.strftime("%Y-%m-%d") }}{% endif %}</p>
+<p class="meta" style="margin-top:24px;max-width:780px;font-size:12px;">Written by {{ article.author.display_name }}{% if article.published_at %} · published {{ article.published_at | istdate }}{% endif %}</p>
 {% endif %}
 
 {% endblock %}

@@ -73,7 +73,7 @@
         <td><span class="prio prio-{{ t.priority.value }}">{{ t.priority.value }}</span></td>
         <td><span class="status status-{{ t.status.value }}">{{ t.status.value.replace("_", " ") }}</span></td>
         <td>{{ t.assignee.display_name if t.assignee else "—" }}</td>
-        <td class="breach">{{ t.due_resolution_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td class="breach">{{ t.due_resolution_at | ist }}</td>
       </tr>
       {% endfor %}
     </tbody>

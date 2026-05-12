@@ -7,7 +7,7 @@
       <h1>{{ change.change_number }} <span class="meta-inline">·</span> {{ change.title }}</h1>
       <p class="meta">
         {{ change.change_type.value | capitalize }} · risk: {{ change.risk.value }}
-        · created {{ change.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ change.requester.display_name }}
+        · created {{ change.created_at | ist }} by {{ change.requester.display_name }}
       </p>
     </div>
     <div class="ticket-meta">
@@ -80,7 +80,7 @@
     <h3>CAB decision</h3>
     <dl>
       <dt>By</dt><dd>{{ change.cab_approver.display_name if change.cab_approver else "—" }}</dd>
-      <dt>At</dt><dd>{{ change.cab_decision_at.strftime("%Y-%m-%d %H:%M UTC") }}</dd>
+      <dt>At</dt><dd>{{ change.cab_decision_at | ist }}</dd>
       <dt>Note</dt><dd>{{ change.cab_decision_note or "—" }}</dd>
     </dl>
   </div>
@@ -111,8 +111,8 @@
   <label>Rollback plan<textarea name="rollback_plan" rows="4">{{ change.rollback_plan }}</textarea></label>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-    <label>Planned start<input type="datetime-local" name="planned_start" value="{{ change.planned_start.strftime('%Y-%m-%dT%H:%M') if change.planned_start else '' }}"></label>
-    <label>Planned end<input type="datetime-local" name="planned_end" value="{{ change.planned_end.strftime('%Y-%m-%dT%H:%M') if change.planned_end else '' }}"></label>
+    <label>Planned start<input type="datetime-local" name="planned_start" value="{{ change.planned_start | ist_input if change.planned_start else '' }}"></label>
+    <label>Planned end<input type="datetime-local" name="planned_end" value="{{ change.planned_end | ist_input if change.planned_end else '' }}"></label>
   </div>
 
   <label>Implementer
@@ -136,10 +136,10 @@
   </div>
   <div class="cards">
     <div class="card"><h3>Window</h3><dl>
-      <dt>Planned start</dt><dd>{% if change.planned_start %}{{ change.planned_start.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>Planned end</dt><dd>{% if change.planned_end %}{{ change.planned_end.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>Actual start</dt><dd>{% if change.actual_start %}{{ change.actual_start.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>Actual end</dt><dd>{% if change.actual_end %}{{ change.actual_end.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Planned start</dt><dd>{% if change.planned_start %}{{ change.planned_start | ist }}{% else %}—{% endif %}</dd>
+      <dt>Planned end</dt><dd>{% if change.planned_end %}{{ change.planned_end | ist }}{% else %}—{% endif %}</dd>
+      <dt>Actual start</dt><dd>{% if change.actual_start %}{{ change.actual_start | ist }}{% else %}—{% endif %}</dd>
+      <dt>Actual end</dt><dd>{% if change.actual_end %}{{ change.actual_end | ist }}{% else %}—{% endif %}</dd>
     </dl></div>
     <div class="card"><h3>People</h3><dl>
       <dt>Requester</dt><dd>{{ change.requester.display_name }}</dd>
@@ -159,7 +159,7 @@
     <tbody>
       {% for e in change.events %}
       <tr>
-        <td>{{ e.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ e.created_at | ist }}</td>
         <td>{{ e.actor.display_name if e.actor else "system" }}</td>
         <td>{{ e.kind.value.replace("_", " ") }}</td>
         <td>

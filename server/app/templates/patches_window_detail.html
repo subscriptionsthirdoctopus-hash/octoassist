@@ -8,7 +8,7 @@
       <p class="meta">
         <a href="/patches/windows">← All windows</a>
         · <span class="status status-{% if window.status.value == 'completed' %}resolved{% elif window.status.value == 'cancelled' %}cancelled{% elif window.status.value == 'in_progress' %}in_progress{% else %}on_hold{% endif %}">{{ window.status.value.replace("_", " ") }}</span>
-        · created {{ window.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ window.created_by.display_name if window.created_by else "—" }}
+        · created {{ window.created_at | ist }} by {{ window.created_by.display_name if window.created_by else "—" }}
         {% if window.auto_execute %}<span class="prio prio-critical" style="margin-left:8px;">auto-execute ON</span>{% endif %}
       </p>
     </div>
@@ -41,9 +41,9 @@
   <div class="card">
     <h3>Schedule</h3>
     <dl>
-      <dt>Scheduled for</dt><dd>{% if window.scheduled_for %}{{ window.scheduled_for.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>Started</dt><dd>{% if window.started_at %}{{ window.started_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>Completed</dt><dd>{% if window.completed_at %}{{ window.completed_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
+      <dt>Scheduled for</dt><dd>{% if window.scheduled_for %}{{ window.scheduled_for | ist }}{% else %}—{% endif %}</dd>
+      <dt>Started</dt><dd>{% if window.started_at %}{{ window.started_at | ist }}{% else %}—{% endif %}</dd>
+      <dt>Completed</dt><dd>{% if window.completed_at %}{{ window.completed_at | ist }}{% else %}—{% endif %}</dd>
     </dl>
   </div>
   <div class="card">
@@ -134,7 +134,7 @@
                 <tr>
                   <td style="padding:2px 6px;border-top:1px solid var(--line);"><code>{{ a.package_name }}</code></td>
                   <td style="padding:2px 6px;border-top:1px solid var(--line);color:{% if a.success %}var(--green){% else %}var(--red){% endif %};">{{ a.exit_code if a.exit_code is not none else "—" }}</td>
-                  <td style="padding:2px 6px;border-top:1px solid var(--line);">{{ a.started_at.strftime("%H:%M") }}</td>
+                  <td style="padding:2px 6px;border-top:1px solid var(--line);">{{ a.started_at | isttime }}</td>
                 </tr>
                 {% endfor %}
               </tbody>

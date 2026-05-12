@@ -42,7 +42,7 @@
       <td>{{ u.full_name or "—" }}</td>
       <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
       <td>{{ "active" if u.is_active else "disabled" }}</td>
-      <td>{% if u.last_login_at %}{{ u.last_login_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</td>
+      <td>{% if u.last_login_at %}{{ u.last_login_at | ist }}{% else %}—{% endif %}</td>
       <td>
         {% if u.id != current_user.id %}
           {% if u.is_active %}

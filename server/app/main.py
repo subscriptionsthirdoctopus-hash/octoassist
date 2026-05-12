@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from .jinja_filters import install_on
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -26,6 +27,7 @@ from .web.views_patches import router as patches_router
 from .web.views_problems import router as problems_router
 from .web.views_reports import router as reports_router
 from .web.views_settings import router as settings_router
+from .web.views_software import router as software_router
 from .web.views_sso import router as sso_router
 from .web.views_tickets import router as tickets_router
 from .web.views_users import router as users_router
@@ -57,6 +59,7 @@ TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _root_templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+install_on(_root_templates)
 
 # JSON API
 app.include_router(agent_router)        # /api/v1/agent/*  — Bearer (used by OctoAssistAgent.exe)
@@ -71,6 +74,7 @@ app.include_router(problems_router)     # /problems, /problems/{id}, ...
 app.include_router(changes_router)      # /changes, /changes/{id}, ...
 app.include_router(reports_router)      # /reports, /reports/{tickets,sla,assets,changes}, /reports/export/*
 app.include_router(patches_router)      # /patches, /patches/{agent_id}, /patches/export.csv
+app.include_router(software_router)     # /software (SAM), /software/product/{pub}/{prod}, /software/export.csv
 app.include_router(agent_download_router) # /agent (download index), /agent/files/<name>
 app.include_router(users_router)        # /users, /users/new
 app.include_router(settings_router)     # /settings, /settings/idp/*

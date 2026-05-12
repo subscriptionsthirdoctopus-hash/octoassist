@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
 import secrets
@@ -16,6 +17,7 @@ from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_c
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+install_on(templates)
 
 router = APIRouter(tags=["settings"])
 

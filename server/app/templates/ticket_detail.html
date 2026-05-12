@@ -8,7 +8,7 @@
       <p class="meta">
         {{ ticket.kind.value.replace("_", " ") | capitalize }}
         · {{ ticket.category.name }}
-        · created {{ ticket.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ ticket.reporter.display_name if ticket.reporter else "—" }}
+        · created {{ ticket.created_at | ist }} by {{ ticket.reporter.display_name if ticket.reporter else "—" }}
       </p>
     </div>
     <div class="ticket-meta">
@@ -24,10 +24,10 @@
     {% set resp = time_to_breach(ticket.due_response_at) %}
     {% set resol = time_to_breach(ticket.due_resolution_at) %}
     <dl>
-      <dt>Response by</dt><dd>{% if ticket.due_response_at %}{{ ticket.due_response_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>First response</dt><dd>{% if ticket.first_response_at %}{{ ticket.first_response_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}<span class="{% if resp[1] %}breach{% endif %}">{{ resp[0] }}</span>{% endif %}</dd>
-      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}—{% endif %}</dd>
-      <dt>Resolved</dt><dd>{% if ticket.resolved_at %}{{ ticket.resolved_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}<span class="{% if resol[1] %}breach{% endif %}">{{ resol[0] }}</span>{% endif %}</dd>
+      <dt>Response by</dt><dd>{% if ticket.due_response_at %}{{ ticket.due_response_at | ist }}{% else %}—{% endif %}</dd>
+      <dt>First response</dt><dd>{% if ticket.first_response_at %}{{ ticket.first_response_at | ist }}{% else %}<span class="{% if resp[1] %}breach{% endif %}">{{ resp[0] }}</span>{% endif %}</dd>
+      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at | ist }}{% else %}—{% endif %}</dd>
+      <dt>Resolved</dt><dd>{% if ticket.resolved_at %}{{ ticket.resolved_at | ist }}{% else %}<span class="{% if resol[1] %}breach{% endif %}">{{ resol[0] }}</span>{% endif %}</dd>
     </dl>
   </div>
 
@@ -83,7 +83,7 @@
     <div class="comment-head">
       <strong>{{ c.author.display_name if c.author else "—" }}</strong>
       <span class="meta-inline">·</span>
-      <span>{{ c.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+      <span>{{ c.created_at | ist }}</span>
       {% if c.is_internal %}<span class="tag-internal">internal note</span>{% endif %}
     </div>
     <div class="comment-body prose">{{ c.body }}</div>
@@ -117,7 +117,7 @@
     <tbody>
       {% for e in ticket.events %}
       <tr>
-        <td>{{ e.created_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ e.created_at | ist }}</td>
         <td>{{ e.actor.display_name if e.actor else "system" }}</td>
         <td>{{ e.kind.value.replace("_", " ") }}</td>
         <td>

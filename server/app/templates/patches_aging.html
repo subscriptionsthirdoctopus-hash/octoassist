@@ -56,7 +56,7 @@
         <td><a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a></td>
         <td>{{ r.package }}</td>
         <td>{{ r.version or "—" }}</td>
-        <td>{{ r.first_seen.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ r.first_seen | ist }}</td>
         <td><span class="{% if r.age_days > 90 %}breach{% endif %}"><strong>{{ r.age_days }}d</strong></span></td>
       </tr>
       {% endfor %}
@@ -82,8 +82,8 @@
           {% elif r.severity.value == 'important' %}<span class="prio prio-high">important</span>
           {% else %}<span class="prio prio-medium">{{ r.severity.value }}</span>{% endif %}
         </td>
-        <td>{{ r.first_seen_at.strftime("%Y-%m-%d") }}</td>
-        <td>{{ r.resolved_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ r.first_seen_at | istdate }}</td>
+        <td>{{ r.resolved_at | ist }}</td>
         <td>{% if days >= 1 %}{{ days }}d{% else %}{{ hours }}h{% endif %}</td>
       </tr>
       {% endfor %}

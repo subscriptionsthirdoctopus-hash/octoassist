@@ -28,7 +28,7 @@
       <td>{% if r.ram_gb %}{{ "%.1f"|format(r.ram_gb) }} GB{% else %}—{% endif %}</td>
       <td>{{ r.logged_in_user }}</td>
       <td>{{ r.software_count }}</td>
-      <td>{% if r.last_seen_at %}{{ r.last_seen_at.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}</td>
+      <td>{% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}never{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

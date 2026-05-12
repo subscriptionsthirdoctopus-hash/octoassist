@@ -107,7 +107,7 @@
         <td>{% if r.moderate > 0 %}<span class="prio prio-medium">{{ r.moderate }}</span>{% else %}0{% endif %}</td>
         <td><strong>{{ r.total }}</strong></td>
         <td>{% if r.oldest_age_days is not none %}{% if r.oldest_age_days > 90 %}<span class="breach">{{ r.oldest_age_days }}d</span>{% else %}{{ r.oldest_age_days }}d{% endif %}{% else %}—{% endif %}</td>
-        <td>{% if r.last_seen %}{{ r.last_seen.strftime("%Y-%m-%d %H:%M UTC") }}{% else %}never{% endif %}</td>
+        <td>{% if r.last_seen %}{{ r.last_seen | ist }}{% else %}never{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

@@ -5,7 +5,7 @@
   <div class="row-between">
     <div>
       <h1>{{ problem.problem_number }} <span class="meta-inline">·</span> {{ problem.title }}</h1>
-      <p class="meta">Created {{ problem.created_at.strftime("%Y-%m-%d %H:%M UTC") }} by {{ problem.reporter.display_name if problem.reporter else "—" }}</p>
+      <p class="meta">Created {{ problem.created_at | ist }} by {{ problem.reporter.display_name if problem.reporter else "—" }}</p>
     </div>
     <div class="ticket-meta">
       <span class="prio prio-{{ problem.priority.value }}">priority: {{ problem.priority.value }}</span>
@@ -63,7 +63,7 @@
         <td><a href="/tickets/{{ link.ticket.id }}">{{ link.ticket.ticket_number }}</a></td>
         <td>{{ link.ticket.title }}</td>
         <td><span class="status status-{{ link.ticket.status.value }}">{{ link.ticket.status.value.replace("_", " ") }}</span></td>
-        <td>{{ link.linked_at.strftime("%Y-%m-%d %H:%M UTC") }}</td>
+        <td>{{ link.linked_at | ist }}</td>
         <td>
           <form method="post" action="/problems/{{ problem.id }}/unlink/{{ link.ticket.id }}" class="inline-form">
             <button type="submit" class="link-button" style="color:var(--red);">unlink</button>

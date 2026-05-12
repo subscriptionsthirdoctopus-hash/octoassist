@@ -35,7 +35,7 @@
     <h3>Last test</h3>
     <p>
       {% if idp.last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
-      at {{ idp.last_test_at.strftime("%Y-%m-%d %H:%M UTC") }}
+      at {{ idp.last_test_at | ist }}
     </p>
     {% if idp.last_test_message %}<pre class="code">{{ idp.last_test_message }}</pre>{% endif %}
   </div>

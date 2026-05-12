@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Software (SAM) — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Software Asset Management</h1>
+      <p class="meta">
+        Every product installed across the fleet, normalised + categorised. Ready for a SAM audit at any time.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/software/export.csv">Export CSV (audit-ready)</a>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Endpoints reporting</p>
+    <p class="kpi-value">{{ kpi.endpoint_count }}</p>
+    <p class="kpi-sub">latest inventory snapshot per device</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Distinct products</p>
+    <p class="kpi-value">{{ kpi.distinct_products }}</p>
+    <p class="kpi-sub">{{ kpi.distinct_publishers }} distinct publisher{{ "" if kpi.distinct_publishers == 1 else "s" }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Paid-licence products</p>
+    <p class="kpi-value">{{ kpi.licensed_paid }}</p>
+    <p class="kpi-sub">{{ kpi.licensed_paid_installs }} install{{ "" if kpi.licensed_paid_installs == 1 else "s" }} across the fleet</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Needs review</p>
+    <p class="kpi-value">{{ kpi.unknown_posture }}</p>
+    <p class="kpi-sub">products with unknown licence posture</p>
+  </div>
+</section>
+
+<section class="report-row two-col-charts">
+  <div class="report-card">
+    <h3>By category</h3>
+    {{ chart_categories|safe }}
+  </div>
+  <div class="report-card">
+    <h3>Top publishers</h3>
+    {{ chart_publishers|safe }}
+  </div>
+</section>
+
+<section class="report-row">
+  <div class="report-card">
+    <h3>By licence posture</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      Rule-based heuristic — finance has the final word on every licence.
+      Use this view to find paid-licence installs that might be uncovered, and
+      "Unknown" items that need a one-time triage.
+    </p>
+    {{ chart_licenses|safe }}
+  </div>
+</section>
+
+<section class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;font-size:14px;color:var(--slate);">Filter</h3>
+  <form method="get" action="/software" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+    <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate);">
+      Search product / publisher
+      <input type="text" name="q" value="{{ active_filters.q }}" placeholder="e.g. chrome, adobe" style="min-width:240px;">
+    </label>
+    <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate);">
+      Category
+      <select name="category">
+        <option value="">All categories</option>
+        {% for c in categories %}
+        <option value="{{ c }}" {% if active_filters.category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate);">
+      Licence posture
+      <select name="license">
+        <option value="">Any posture</option>
+        {% for k, label in license_labels.items() %}
+        <option value="{{ k }}" {% if active_filters.license == k %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate);">
+      Publisher
+      <select name="publisher">
+        <option value="">Any publisher</option>
+        {% for p in publishers %}
+        <option value="{{ p }}" {% if active_filters.publisher == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Apply</button>
+    <a href="/software" class="link-button">Reset</a>
+  </form>
+</section>
+
+<section style="margin-top:16px;">
+  <div class="row-between" style="margin-bottom:8px;">
+    <h2 style="margin:0;">Products</h2>
+    <p class="meta" style="margin:0;">
+      Showing {{ rows|length }} of {{ all_count }} product{{ "" if all_count == 1 else "s" }}.
+    </p>
+  </div>
+
+  {% if rows %}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Publisher</th>
+        <th>Product</th>
+        <th>Category</th>
+        <th>Licence</th>
+        <th>Installs</th>
+        <th>Endpoints</th>
+        <th>Versions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><strong>{{ r.publisher }}</strong></td>
+        <td>
+          <a href="/software/product/{{ r.publisher|urlencode }}/{{ r.product|urlencode }}">
+            {{ r.product }}
+          </a>
+        </td>
+        <td><span class="role-pill" style="background:var(--navy);color:white;font-size:10px;">{{ r.category }}</span></td>
+        <td>
+          {% set lp = r.license_posture %}
+          {% if lp == 'licensed_paid' %}
+            <span class="prio prio-critical">{{ license_labels[lp] }}</span>
+          {% elif lp == 'licensed_oem' %}
+            <span class="prio prio-medium">{{ license_labels[lp] }}</span>
+          {% elif lp == 'free_personal' %}
+            <span class="prio prio-high">{{ license_labels[lp] }}</span>
+          {% elif lp == 'freeware_oss' %}
+            <span class="prio prio-low">{{ license_labels[lp] }}</span>
+          {% else %}
+            <span class="prio prio-low" style="background:#e6e6e6;color:#444;">{{ license_labels[lp] }}</span>
+          {% endif %}
+        </td>
+        <td><strong>{{ r.install_count }}</strong></td>
+        <td>
+          {{ r.endpoint_count }}
+          {% if r.sample_hostnames %}
+          <span style="color:var(--slate);font-size:12px;">({{ r.sample_hostnames|join(", ") }}{% if r.endpoint_count > 3 %}, …{% endif %})</span>
+          {% endif %}
+        </td>
+        <td style="color:var(--slate);font-size:12.5px;max-width:240px;">
+          {{ r.versions|join(", ") }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h3 style="margin:0 0 8px;">No software matches these filters</h3>
+    {% if all_count == 0 %}
+    <p>No endpoint has reported software yet. Install the agent from <a href="/enrolment">/enrolment</a> — the next check-in will populate this list.</p>
+    {% else %}
+    <p>Try widening the filters — <a href="/software">reset</a> to see all {{ all_count }} products.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

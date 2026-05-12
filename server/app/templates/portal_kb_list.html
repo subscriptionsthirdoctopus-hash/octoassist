@@ -30,7 +30,7 @@
     <p class="meta" style="font-size:12px;margin:0;">
       {% if a.category %}{{ a.category.name }} · {% endif %}
       {{ a.view_count }} view{{ "" if a.view_count == 1 else "s" }}
-      {% if a.published_at %} · {{ a.published_at.strftime("%Y-%m-%d") }}{% endif %}
+      {% if a.published_at %} · {{ a.published_at | istdate }}{% endif %}
     </p>
   </a>
   {% endfor %}

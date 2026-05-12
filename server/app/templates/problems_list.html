@@ -36,7 +36,7 @@
       <td><span class="status status-{{ 'resolved' if p.status.value in ('resolved','closed') else ('on_hold' if p.status.value == 'workaround_in_place' else 'in_progress') }}">{{ p.status.value.replace("_", " ") }}</span></td>
       <td>{{ p.linked_tickets|length }}</td>
       <td>{{ p.assignee.display_name if p.assignee else "—" }}</td>
-      <td>{{ p.created_at.strftime("%Y-%m-%d") }}</td>
+      <td>{{ p.created_at | istdate }}</td>
     </tr>
     {% endfor %}
   </tbody>

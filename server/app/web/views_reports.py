@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
 from ..auth import require_staff
@@ -16,6 +17,7 @@ from ..services import charts, patches as patches_svc, reporting
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+install_on(templates)
 
 router = APIRouter(tags=["reports"])
 

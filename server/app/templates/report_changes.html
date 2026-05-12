@@ -63,7 +63,7 @@
         <td>{{ c.change_type.value }}</td>
         <td><span class="prio prio-{{ 'critical' if c.risk.value == 'high' else ('high' if c.risk.value == 'medium' else 'low') }}">{{ c.risk.value }}</span></td>
         <td><span class="status status-{{ 'in_progress' if c.status.value == 'in_progress' else 'resolved' }}">{{ c.status.value.replace("_", " ") }}</span></td>
-        <td>{{ c.planned_start.strftime("%Y-%m-%d %H:%M") if c.planned_start else "—" }}</td>
+        <td>{{ c.planned_start | ist if c.planned_start else "—" }}</td>
         <td>{{ c.implementer.display_name if c.implementer else "—" }}</td>
       </tr>
       {% endfor %}
