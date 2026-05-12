@@ -64,7 +64,7 @@ CATEGORY_RULES: list[tuple[str, str | None, str | None]] = [
     ("Communication",    None, r"^(microsoft teams|slack|zoom|webex|google meet|skype|whatsapp|discord)\b"),
 
     # Productivity (Office, mail, browsers, PDF)
-    ("Productivity",     r"^(microsoft corporation|microsoft)$", r"(office|excel|word|powerpoint|outlook|onenote|access|publisher|visio|project)"),
+    ("Productivity",     r"^(microsoft corporation|microsoft)$", r"(office|excel|word|powerpoint|outlook|onenote|access|publisher|visio|project|365|copilot)"),
     ("Productivity",     r"(adobe|foxit|nitro)", r"(acrobat|reader|pdf)"),
     ("Productivity",     None, r"^(google chrome|mozilla firefox|microsoft edge|brave|opera|vivaldi|safari)\b"),
     ("Productivity",     None, r"^(libreoffice|openoffice|wps office|onlyoffice)\b"),
@@ -73,7 +73,7 @@ CATEGORY_RULES: list[tuple[str, str | None, str | None]] = [
     # Developer tools
     ("Developer Tools",  None, r"^(visual studio|vs code|jetbrains|intellij|pycharm|webstorm|goland|rider|clion|datagrip|android studio|xcode|eclipse|netbeans|sublime text|atom)\b"),
     ("Developer Tools",  None, r"^(git|github|gitlab|sourcetree|tortoise(git|svn)|fork)\b"),
-    ("Developer Tools",  None, r"^(node\.?js|python|ruby|go programming|openjdk|oracle jdk|java se|.net sdk|dotnet sdk|docker|kubernetes|minikube|podman|vagrant)\b"),
+    ("Developer Tools",  None, r"^(node\.?js|npm|python|ruby|go programming|openjdk|oracle jdk|java se|.net sdk|dotnet sdk|docker|kubernetes|minikube|podman|vagrant|powershell)\b"),
     ("Developer Tools",  None, r"^(postman|insomnia|wireshark|fiddler|charles|burp suite|datagrip|mysql workbench|pgadmin|dbeaver|tableplus)\b"),
 
     # Cloud / Storage
@@ -85,6 +85,7 @@ CATEGORY_RULES: list[tuple[str, str | None, str | None]] = [
 
     # Utilities
     ("Utilities",        None, r"^(7-zip|winrar|winzip|peazip|notepad\+\+|putty|filezilla|teamviewer|anydesk|logmein|chrome remote desktop|ccleaner|rufus|balenaetcher|powertoys)\b"),
+    ("Utilities",        r"^(microsoft corporation|microsoft)$", r"(autoupdate)"),
 
     # Business / ERP
     ("Business / ERP",   r"(sap|oracle|tally|zoho|salesforce|quickbooks|sage|microsoft dynamics|netsuite)", None),
@@ -139,7 +140,10 @@ LICENSE_RULES: list[tuple[str, str | None, str | None]] = [
     # Freeware / OSS — usually safe in audits
     ("freeware_oss",  None, r"^(google chrome|mozilla firefox|brave|opera|vivaldi|libreoffice|openoffice|onlyoffice)\b"),
     ("freeware_oss",  None, r"^(7-zip|winrar trial|peazip|notepad\+\+|putty|filezilla|powertoys|powershell|git|github desktop|sourcetree|vs code|visual studio code)\b"),
-    ("freeware_oss",  None, r"^(node\.?js|python|ruby|go programming|openjdk|docker desktop|kubernetes|minikube|podman|vagrant|wireshark|audacity|obs studio|handbrake|kodi|vlc)\b"),
+    ("freeware_oss",  None, r"^(node\.?js|npm|python|ruby|go programming|openjdk|docker desktop|kubernetes|minikube|podman|vagrant|wireshark|audacity|obs studio|handbrake|kodi|vlc)\b"),
+
+    # Microsoft AutoUpdate — bundled with Office, covered by the same licence
+    ("licensed_oem",  r"^(microsoft corporation|microsoft)$", r"(autoupdate)"),
 ]
 
 
@@ -213,6 +217,189 @@ def _is_os_package(name: str, publisher: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Bundle-ID canonicalisation
+# ---------------------------------------------------------------------------
+# Agents on macOS (and some Windows MSIs) report reverse-DNS bundle identifiers
+# instead of human display names. Without normalisation, the SAM table is full
+# of rows like "Unknown publisher / com.microsoft.teams2 / Other / Unknown".
+#
+# We solve this in two layers:
+#   1. BUNDLE_CANONICAL — exact-match lookup table for known bundles, maps
+#      to a curated (publisher, product) pair so the categoriser + licence
+#      rules downstream fire correctly.
+#   2. BUNDLE_VENDOR_PREFIX — when an exact match misses, derive the publisher
+#      from the reverse-DNS prefix ("com.microsoft.*" -> "Microsoft") and
+#      Title-Case the last segment as the product. Far better than "Unknown".
+
+BUNDLE_CANONICAL: dict[str, tuple[str, str]] = {
+    # Microsoft (Mac PKG receipts use these exact strings)
+    "com.microsoft.teams":                              ("Microsoft", "Microsoft Teams"),
+    "com.microsoft.teams2":                             ("Microsoft", "Microsoft Teams"),
+    "com.microsoft.MSTeamsAudioDevice":                 ("Microsoft", "Microsoft Teams"),
+    "com.microsoft.m365copilot":                        ("Microsoft", "Microsoft 365 Copilot"),
+    "com.microsoft.powershell":                         ("Microsoft", "PowerShell"),
+    "com.microsoft.package.Microsoft_AutoUpdate.app":   ("Microsoft", "Microsoft AutoUpdate"),
+    "com.microsoft.autoupdate2":                        ("Microsoft", "Microsoft AutoUpdate"),
+    "com.microsoft.Excel":                              ("Microsoft", "Microsoft Excel"),
+    "com.microsoft.Word":                               ("Microsoft", "Microsoft Word"),
+    "com.microsoft.Powerpoint":                         ("Microsoft", "Microsoft PowerPoint"),
+    "com.microsoft.Outlook":                            ("Microsoft", "Microsoft Outlook"),
+    "com.microsoft.onenote.mac":                        ("Microsoft", "Microsoft OneNote"),
+    "com.microsoft.OneDrive":                           ("Microsoft", "OneDrive"),
+    "com.microsoft.OneDrive-mac":                       ("Microsoft", "OneDrive"),
+    "com.microsoft.edgemac":                            ("Microsoft", "Microsoft Edge"),
+    "com.microsoft.VSCode":                             ("Microsoft", "Visual Studio Code"),
+    "com.microsoft.copilot":                            ("Microsoft", "Microsoft Copilot"),
+    "com.microsoft.RDC.macos":                          ("Microsoft", "Microsoft Remote Desktop"),
+    "com.microsoft.SkypeForBusiness":                   ("Microsoft", "Skype for Business"),
+    # Google
+    "com.google.Chrome":                                ("Google", "Google Chrome"),
+    "com.google.drivefs":                               ("Google", "Google Drive"),
+    "com.google.driveeditfs":                           ("Google", "Google Drive"),
+    "com.google.Gmail":                                 ("Google", "Gmail"),
+    # Adobe
+    "com.adobe.Acrobat.Pro":                            ("Adobe", "Adobe Acrobat Pro"),
+    "com.adobe.Reader":                                 ("Adobe", "Adobe Acrobat Reader"),
+    "com.adobe.acc.AdobeCreativeCloud":                 ("Adobe", "Adobe Creative Cloud"),
+    "com.adobe.Photoshop":                              ("Adobe", "Adobe Photoshop"),
+    "com.adobe.Illustrator":                            ("Adobe", "Adobe Illustrator"),
+    "com.adobe.InDesign":                               ("Adobe", "Adobe InDesign"),
+    "com.adobe.AfterEffects":                           ("Adobe", "Adobe After Effects"),
+    "com.adobe.PremierePro":                            ("Adobe", "Adobe Premiere Pro"),
+    # Mozilla
+    "com.mozilla.firefox":                              ("Mozilla", "Firefox"),
+    "org.mozilla.firefox":                              ("Mozilla", "Firefox"),
+    "org.mozilla.thunderbird":                          ("Mozilla", "Thunderbird"),
+    # Sophos
+    "com.sophos.connect":                               ("Sophos", "Sophos Connect"),
+    "com.sophos.endpoint":                              ("Sophos", "Sophos Endpoint"),
+    "com.sophos.macendpoint":                           ("Sophos", "Sophos Endpoint"),
+    # Node.js / dev
+    "org.nodejs.node":                                  ("Node.js Foundation", "Node.js"),
+    "org.nodejs.node.pkg":                              ("Node.js Foundation", "Node.js"),
+    "org.nodejs.npm":                                   ("Node.js Foundation", "npm"),
+    "org.nodejs.npm.pkg":                               ("Node.js Foundation", "npm"),
+    "org.python.python":                                ("Python Software Foundation", "Python"),
+    "com.docker.docker":                                ("Docker", "Docker Desktop"),
+    "com.github.GitHubDesktop":                         ("GitHub", "GitHub Desktop"),
+    "com.jetbrains.intellij":                           ("JetBrains", "IntelliJ IDEA"),
+    "com.jetbrains.pycharm":                            ("JetBrains", "PyCharm"),
+    "com.jetbrains.WebStorm":                           ("JetBrains", "WebStorm"),
+    "com.jetbrains.goland":                             ("JetBrains", "GoLand"),
+    "com.jetbrains.toolbox":                            ("JetBrains", "JetBrains Toolbox"),
+    "com.sublimetext.4":                                ("Sublime HQ", "Sublime Text"),
+    # Communication
+    "us.zoom.xos":                                      ("Zoom", "Zoom"),
+    "us.zoom.ZoomClips":                                ("Zoom", "Zoom"),
+    "com.tinyspeck.slackmacgap":                        ("Slack", "Slack"),
+    "com.cisco.webex.meetings":                         ("Cisco", "Webex"),
+    "com.discord.Discord":                              ("Discord", "Discord"),
+    "com.skype.skype":                                  ("Microsoft", "Skype"),
+    "net.whatsapp.WhatsApp":                            ("Meta", "WhatsApp"),
+    # Cloud / storage
+    "com.dropbox.Dropbox":                              ("Dropbox", "Dropbox"),
+    "com.box.desktop":                                  ("Box", "Box Drive"),
+    # Security
+    "com.crowdstrike.falcon.Agent":                     ("CrowdStrike", "Falcon Agent"),
+    "com.sentinelone.S1Agent":                          ("SentinelOne", "SentinelOne Agent"),
+    "com.bitdefender.Antivirus":                        ("Bitdefender", "Bitdefender Antivirus"),
+    "com.mcafee.endpointsecurity":                      ("McAfee", "McAfee Endpoint Security"),
+    "com.symantec.endpoint.protection":                 ("Symantec", "Symantec Endpoint Protection"),
+    # Media / utilities
+    "com.spotify.client":                               ("Spotify", "Spotify"),
+    "org.videolan.vlc":                                 ("VideoLAN", "VLC"),
+    "com.brave.Browser":                                ("Brave Software", "Brave"),
+    "com.operasoftware.Opera":                          ("Opera", "Opera"),
+}
+
+# Prefix-to-publisher fallback for bundles we don't have an exact map for.
+# Ordered: longest prefix wins (Python dict iteration is insertion-order so
+# put more specific prefixes first).
+BUNDLE_VENDOR_PREFIX: dict[str, str] = {
+    "com.microsoft.": "Microsoft",
+    "com.google.":    "Google",
+    "com.adobe.":     "Adobe",
+    "com.sophos.":    "Sophos",
+    "com.mozilla.":   "Mozilla",
+    "org.mozilla.":   "Mozilla",
+    "org.nodejs.":    "Node.js Foundation",
+    "org.python.":    "Python Software Foundation",
+    "com.docker.":    "Docker",
+    "com.github.":    "GitHub",
+    "com.jetbrains.": "JetBrains",
+    "com.atlassian.": "Atlassian",
+    "com.tinyspeck.": "Slack",
+    "us.zoom.":       "Zoom",
+    "com.cisco.":     "Cisco",
+    "com.discord.":   "Discord",
+    "com.skype.":     "Microsoft",
+    "net.whatsapp.":  "Meta",
+    "com.dropbox.":   "Dropbox",
+    "com.box.":       "Box",
+    "com.crowdstrike.": "CrowdStrike",
+    "com.sentinelone.": "SentinelOne",
+    "com.bitdefender.": "Bitdefender",
+    "com.mcafee.":      "McAfee",
+    "com.symantec.":    "Symantec",
+    "com.spotify.":     "Spotify",
+    "org.videolan.":    "VideoLAN",
+    "com.brave.":       "Brave Software",
+    "com.operasoftware.": "Opera",
+    "com.opera.":       "Opera",
+    "com.vmware.":      "VMware",
+    "com.citrix.":      "Citrix",
+}
+
+_BUNDLE_RE = re.compile(r"^[a-z][a-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$")
+
+
+def _is_bundle_id(name: str) -> bool:
+    """Reverse-DNS bundle ID: ≥3 dot-separated segments, lowercase TLD prefix."""
+    if not name or " " in name:
+        return False
+    return bool(_BUNDLE_RE.match(name))
+
+
+def _titlecase_segment(s: str) -> str:
+    # Split camelCase first ("MSTeamsAudioDevice" -> "MS Teams Audio Device")
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
+    s = s.replace("_", " ").replace("-", " ").strip()
+    # Title-case but keep acronyms (≤3 letters all-caps) intact
+    out = []
+    for w in s.split():
+        if len(w) <= 3 and w.isupper():
+            out.append(w)
+        elif w.isupper():
+            out.append(w.title())
+        else:
+            out.append(w[0].upper() + w[1:] if w else w)
+    return " ".join(out)
+
+
+def _normalise_bundle(raw_name: str) -> tuple[str, str] | None:
+    """If raw_name looks like a reverse-DNS bundle identifier, return a
+    canonical (publisher, product). Else None.
+    """
+    if not _is_bundle_id(raw_name):
+        return None
+    # 1. Exact match
+    if raw_name in BUNDLE_CANONICAL:
+        return BUNDLE_CANONICAL[raw_name]
+    # 2. Strip trailing .pkg / .app and retry
+    trimmed = re.sub(r"\.(pkg|app)$", "", raw_name)
+    if trimmed != raw_name and trimmed in BUNDLE_CANONICAL:
+        return BUNDLE_CANONICAL[trimmed]
+    # 3. Prefix-vendor + Title-Cased final segment
+    for prefix, vendor in BUNDLE_VENDOR_PREFIX.items():
+        if raw_name.startswith(prefix):
+            parts = [p for p in raw_name.split(".") if p not in ("pkg", "app")]
+            product = _titlecase_segment(parts[-1])
+            return vendor, product
+    return None
+
+
 def _norm_name(n: str | None) -> str:
     """Collapse trivial version-in-name variations so different versions of
     the same product roll up.
@@ -253,10 +440,17 @@ def fleet_software(db: Session, tenant_id: int) -> list[dict]:
     for agent, payload in rows:
         for sw in (payload or {}).get("software", []) or []:
             raw_name = sw.get("name") or ""
-            name = _norm_name(raw_name)
-            if not name:
-                continue
-            publisher = _norm_publisher(sw.get("publisher"))
+            # Bundle-ID canonicalisation first — macOS PKG receipts use
+            # reverse-DNS identifiers that would otherwise show up as
+            # "Unknown publisher / com.foo.bar / Other / Unknown".
+            bundle = _normalise_bundle(raw_name)
+            if bundle is not None:
+                publisher, name = bundle
+            else:
+                name = _norm_name(raw_name)
+                if not name:
+                    continue
+                publisher = _norm_publisher(sw.get("publisher"))
             if _is_os_package(name, publisher):
                 continue
             version = (sw.get("version") or "").strip() or "—"
@@ -332,8 +526,12 @@ def product_detail(db: Session, tenant_id: int, publisher: str, product: str) ->
     for agent, payload in rows:
         for sw in (payload or {}).get("software", []) or []:
             raw_name = sw.get("name") or ""
-            name = _norm_name(raw_name)
-            pub  = _norm_publisher(sw.get("publisher"))
+            bundle = _normalise_bundle(raw_name)
+            if bundle is not None:
+                pub, name = bundle
+            else:
+                name = _norm_name(raw_name)
+                pub  = _norm_publisher(sw.get("publisher"))
             if name == product and pub == publisher:
                 version = (sw.get("version") or "").strip() or "—"
                 versions[version] += 1
@@ -379,10 +577,14 @@ def export_csv(db: Session, tenant_id: int) -> str:
         snap_at = (payload or {}).get("collected_at") or ""
         for sw in (payload or {}).get("software", []) or []:
             raw_name = sw.get("name") or ""
-            name = _norm_name(raw_name)
-            if not name:
-                continue
-            publisher = _norm_publisher(sw.get("publisher"))
+            bundle = _normalise_bundle(raw_name)
+            if bundle is not None:
+                publisher, name = bundle
+            else:
+                name = _norm_name(raw_name)
+                if not name:
+                    continue
+                publisher = _norm_publisher(sw.get("publisher"))
             if _is_os_package(name, publisher):
                 continue
             version = (sw.get("version") or "").strip() or ""
