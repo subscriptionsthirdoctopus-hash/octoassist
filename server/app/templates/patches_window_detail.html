@@ -29,6 +29,23 @@
 </section>
 {% endif %}
 
+{# Awaiting-checkin nudge: shown when window is in_progress but no target has progressed beyond `planned` #}
+{% if window.status.value == 'in_progress' and progress.counts.planned == progress.total and progress.counts.planned > 0 %}
+<section class="card" style="margin-bottom:16px;background:#fef3c7;border-left:4px solid #d97706;">
+  <h3 style="margin:0 0 6px;font-size:14px;">⏱ Waiting for endpoints to check in</h3>
+  <p style="margin:0 0 10px;font-size:13px;line-height:1.5;">
+    This deployment is queued. Each agent picks it up <strong>on its next scheduled check-in</strong>
+    (every 6 hours), at which point it installs the approved packages via
+    <code>Install-WindowsUpdate -MicrosoftUpdate</code> / <code>winget upgrade</code> as SYSTEM —
+    no user-side action needed. To force a check-in <em>right now</em>, run the
+    one-line refresh command on each endpoint listed below.
+  </p>
+  <button type="button" class="primary" onclick="showRefreshModalForWindow()">
+    Show "trigger now" command
+  </button>
+</section>
+{% endif %}
+
 <section class="cards">
   <div class="card">
     <h3>Filter</h3>
@@ -154,6 +171,13 @@
         <td>{{ t.note or "—" }}</td>
         <td>{{ t.actor.display_name if t.actor else "—" }}</td>
         <td>
+          {% if window.status.value == 'in_progress' and t.status.value == 'planned' %}
+          <button type="button" class="button primary" style="padding:4px 10px;font-size:12px;margin-bottom:6px;"
+                  onclick="showRefreshModalForWindow('{{ t.agent.hostname|e if t.agent else '' }}')">
+            Trigger check-in on {{ t.agent.hostname if t.agent else "endpoint" }}
+          </button>
+          <br>
+          {% endif %}
           {% if window.status.value == 'in_progress' %}
           <form method="post" action="/patches/windows/{{ window.id }}/targets/{{ t.id }}" class="inline-form-stack" style="gap:4px;">
             <select name="new_status">
@@ -185,4 +209,62 @@
   {{ window.notes }}
 </section>
 {% endif %}
+
+{# ───────── Trigger-check-in modal ───────── #}
+<div id="refresh-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:white;max-width:780px;width:100%;border-radius:8px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow:auto;">
+    <div class="row-between" style="margin-bottom:8px;">
+      <h2 style="margin:0;font-size:18px;">Force check-in <span id="refresh-host-wrap">on <code id="refresh-host">—</code></span></h2>
+      <button type="button" onclick="closeRefreshModal()" class="link-button" style="font-size:22px;line-height:1;padding:0 6px;">×</button>
+    </div>
+    <p class="meta" style="margin:0 0 14px;">
+      RDP / log in to the endpoint, open <strong>elevated PowerShell</strong>, and paste this
+      single command. It triggers an immediate check-in — the agent sees this deployment
+      in the queue and installs the approved packages within seconds. No user-facing prompt
+      on the endpoint; runs silently as SYSTEM.
+    </p>
+    <pre id="refresh-cmd" class="code" style="white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;font-size:13px;line-height:1.55;">iex (iwr -useb https://octoassist.thirdoctopus.com/agent/refresh.ps1).Content</pre>
+    <div class="row-between" style="margin-top:14px;align-items:center;">
+      <p class="meta" style="margin:0;font-size:12px;">
+        Patch deployment runs as SYSTEM via <code>Install-WindowsUpdate -MicrosoftUpdate -KBArticleID</code>.
+        This row flips from <strong>planned</strong> → <strong>succeeded</strong> within ~30 seconds.
+      </p>
+      <button type="button" class="primary" onclick="copyRefreshCmd()" id="refresh-copy-btn">Copy command</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showRefreshModalForWindow(hostname) {
+  var wrap = document.getElementById('refresh-host-wrap');
+  if (hostname && hostname.trim()) {
+    document.getElementById('refresh-host').innerText = hostname;
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+  }
+  document.getElementById('refresh-modal').style.display = 'flex';
+}
+function closeRefreshModal() {
+  document.getElementById('refresh-modal').style.display = 'none';
+}
+function copyRefreshCmd() {
+  var el  = document.getElementById('refresh-cmd');
+  var btn = document.getElementById('refresh-copy-btn');
+  var txt = el.innerText;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(function () {
+      var orig = btn.innerText;
+      btn.innerText = 'Copied!';
+      setTimeout(function () { btn.innerText = orig; }, 1500);
+    });
+  }
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeRefreshModal();
+});
+document.getElementById('refresh-modal').addEventListener('click', function (e) {
+  if (e.target.id === 'refresh-modal') closeRefreshModal();
+});
+</script>
 {% endblock %}
