@@ -757,7 +757,89 @@ def _winget_available_updates() -> list[dict]:
     return out
 
 
+def _windows_enforce_managed_update_policy() -> dict:
+    """Set WindowsUpdate Group-Policy registry keys so the end user sees
+    "Some settings are managed by your organisation" and can't run Windows
+    Update manually. Idempotent — safe to call every check-in.
+
+    OctoAssist (running as SYSTEM via Scheduled Task) keeps applying
+    Get-WindowsUpdate / Install-WindowsUpdate programmatically through
+    PSWindowsUpdate, so updates STILL happen — just centrally controlled.
+    """
+    if platform.system() != "Windows":
+        return {"applied": False, "reason": "not windows"}
+    ps = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$base = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+$au   = "$base\AU"
+foreach ($p in @($base, $au)) { if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null } }
+# Hide the Windows Update page in Settings — triggers the "managed by your organisation" banner.
+Set-ItemProperty -Path $base -Name 'SetDisableUXWUAccess' -Type DWord -Value 1
+# Block automatic install — agent drives the schedule via PSWindowsUpdate.
+Set-ItemProperty -Path $au   -Name 'NoAutoUpdate'        -Type DWord -Value 1
+# Don't auto-restart while a user is signed in (the agent picks reboot timing).
+Set-ItemProperty -Path $au   -Name 'NoAutoRebootWithLoggedOnUsers' -Type DWord -Value 1
+# Defer feature + quality updates so end users can't fast-ring themselves.
+Set-ItemProperty -Path $base -Name 'DeferFeatureUpdates'  -Type DWord -Value 1
+Set-ItemProperty -Path $base -Name 'DeferQualityUpdates'  -Type DWord -Value 1
+'OK'
+"""
+    try:
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+            capture_output=True, text=True, timeout=15,
+        )
+        ok = "OK" in (r.stdout or "")
+        return {"applied": ok, "reason": (r.stderr or "")[:200] if not ok else ""}
+    except Exception as e:  # noqa: BLE001
+        return {"applied": False, "reason": str(e)[:200]}
+
+
+def _patch_scan_metadata() -> dict:
+    """Probe whether the patch scan completed successfully (was PSWindowsUpdate
+    installed? did Get-WindowsUpdate return data? when?). Used by the server
+    to render '✓ Fully Updated' vs '○ N patches pending' vs '⚠ Scan failed'.
+    """
+    if platform.system() != "Windows":
+        return {"scanned_at": _now_iso(), "scan_success": True,
+                "psw_installed": False, "winget_available": False,
+                "sources_checked": ["apt" if platform.system() == "Linux" else "n/a"]}
+    psw = False
+    winget_ok = False
+    try:
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "if (Get-Module -ListAvailable PSWindowsUpdate) { 'yes' } else { 'no' }"],
+            capture_output=True, text=True, timeout=15,
+        )
+        psw = "yes" in (r.stdout or "")
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(["winget", "--version"], capture_output=True, text=True, timeout=8)
+        winget_ok = r.returncode == 0
+    except Exception:
+        pass
+    sources = []
+    if psw: sources.append("PSWindowsUpdate")
+    if winget_ok: sources.append("winget")
+    return {
+        "scanned_at": _now_iso(),
+        "scan_success": (psw or winget_ok),
+        "psw_installed": psw,
+        "winget_available": winget_ok,
+        "sources_checked": sources,
+    }
+
+
 def collect_snapshot() -> dict:
+    # Apply the WindowsUpdate lock-down policy on every check-in (idempotent).
+    # If a user disables it via gpedit, the next check-in re-applies it.
+    update_policy = _windows_enforce_managed_update_policy()
+    patches = patches_available()
+    scan = _patch_scan_metadata()
+    scan["pending_count"] = len(patches)
+    scan["fully_updated"] = (scan["scan_success"] and scan["pending_count"] == 0)
     return {
         "snapshot_at": _now_iso(),
         "os": os_info(),
@@ -769,7 +851,9 @@ def collect_snapshot() -> dict:
         "system": system_info(),
         "logged_in_user": logged_in_user(),
         "software": installed_software(),
-        "patches": patches_available(),
+        "patches": patches,
+        "patch_scan": scan,
+        "update_policy": update_policy,
     }
 
 

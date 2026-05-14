@@ -6,8 +6,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from sqlalchemy import and_, or_, not_
+
 from ..models import (
     Agent,
+    AssetSnapshot,
     PatchObservation,
     PatchSeverity,
     PatchWindow,
@@ -22,10 +25,34 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# ---------------------------------------------------------------------------
+# Windows-only filter
+# ---------------------------------------------------------------------------
+# We're going Windows-only on patch management. Linux endpoints + apt/dnf
+# sources are excluded from every aggregate. The detection is per-observation
+# (the `source` column is "windows-update" / "winget" for Windows and
+# "apt:*" / "dnf:*" for Linux), and per-agent (latest snapshot's os.caption).
+
+_LINUX_SOURCE_PREFIXES = ("apt:", "dnf:", "yum:", "zypper:")
+
+
+def _windows_source_filter():
+    """SQLAlchemy filter to restrict patch_observations to Windows sources."""
+    return not_(or_(*[PatchObservation.source.like(p + "%") for p in _LINUX_SOURCE_PREFIXES]))
+
+
+def is_windows_agent(latest_payload: dict | None) -> bool:
+    """Inspect the latest snapshot to decide if an agent is a Windows host."""
+    if not latest_payload:
+        return False
+    cap = ((latest_payload.get("os") or {}).get("caption") or "").lower()
+    return "windows" in cap or "microsoft" in cap
+
+
 # ---------------------------------------------------------- "currently missing"
 
 def fleet_patch_summary(db: Session, tenant_id: int) -> list[dict]:
-    """Per-endpoint patch posture (currently-missing only). Sorted worst-first."""
+    """Per-endpoint patch posture (Windows-only, currently-missing). Sorted worst-first."""
     rows = (db.query(
                 Agent.id, Agent.hostname, Agent.last_seen_at,
                 func.count(PatchObservation.id).label("total"),
@@ -35,8 +62,9 @@ def fleet_patch_summary(db: Session, tenant_id: int) -> list[dict]:
                 func.min(PatchObservation.first_seen_at).label("oldest_seen"),
             )
             .outerjoin(PatchObservation,
-                       (PatchObservation.agent_id == Agent.id) &
-                       (PatchObservation.resolved_at.is_(None)))
+                       and_(PatchObservation.agent_id == Agent.id,
+                            PatchObservation.resolved_at.is_(None),
+                            _windows_source_filter()))
             .filter(Agent.tenant_id == tenant_id)
             .group_by(Agent.id, Agent.hostname, Agent.last_seen_at)
             .all())
@@ -63,7 +91,8 @@ def severity_breakdown(db: Session, tenant_id: int) -> list[tuple[str, int]]:
     rows = (db.query(PatchObservation.severity, func.count(PatchObservation.id))
               .join(Agent, Agent.id == PatchObservation.agent_id)
               .filter(Agent.tenant_id == tenant_id,
-                      PatchObservation.resolved_at.is_(None))
+                      PatchObservation.resolved_at.is_(None),
+                      _windows_source_filter())
               .group_by(PatchObservation.severity)
               .all())
     order = {"critical": 0, "important": 1, "moderate": 2, "low": 3, "unknown": 4}
@@ -74,12 +103,111 @@ def top_missing_packages(db: Session, tenant_id: int, *, top: int = 20) -> list[
     rows = (db.query(PatchObservation.package_name, func.count(PatchObservation.id))
               .join(Agent, Agent.id == PatchObservation.agent_id)
               .filter(Agent.tenant_id == tenant_id,
-                      PatchObservation.resolved_at.is_(None))
+                      PatchObservation.resolved_at.is_(None),
+                      _windows_source_filter())
               .group_by(PatchObservation.package_name)
               .order_by(func.count(PatchObservation.id).desc())
               .limit(top)
               .all())
     return [(r[0], int(r[1])) for r in rows]
+
+
+def windows_endpoint_dashboard(db: Session, tenant_id: int) -> list[dict]:
+    """Per-Windows-endpoint patch dashboard.
+
+    Returns one row per Windows agent (Linux/Mac filtered out via the latest
+    snapshot's os.caption). Each row carries:
+        hostname, agent_id, os_caption, last_seen_at, last_scan_at,
+        psw_installed, winget_available,
+        pending_count, critical / important / moderate counts,
+        fully_updated (bool), scan_failed (bool),
+        compliance_pct  — 100 if pending=0 else (1 - pending/baseline) ranged
+    Sorted: scan-failed first, then by pending count desc, then hostname.
+    """
+    # Pull the LATEST snapshot per agent so we can read os caption + patch_scan.
+    sub = (db.query(AssetSnapshot.agent_id,
+                    func.max(AssetSnapshot.snapshot_at).label("latest"))
+             .group_by(AssetSnapshot.agent_id).subquery())
+    snaps = (db.query(Agent, AssetSnapshot.payload)
+               .join(AssetSnapshot, AssetSnapshot.agent_id == Agent.id)
+               .join(sub, and_(AssetSnapshot.agent_id == sub.c.agent_id,
+                               AssetSnapshot.snapshot_at == sub.c.latest))
+               .filter(Agent.tenant_id == tenant_id)
+               .all())
+
+    # Per-agent windows-only patch counts.
+    counts_q = (db.query(
+                    PatchObservation.agent_id,
+                    PatchObservation.severity,
+                    func.count(PatchObservation.id))
+                  .join(Agent, Agent.id == PatchObservation.agent_id)
+                  .filter(Agent.tenant_id == tenant_id,
+                          PatchObservation.resolved_at.is_(None),
+                          _windows_source_filter())
+                  .group_by(PatchObservation.agent_id, PatchObservation.severity)
+                  .all())
+    counts: dict[int, dict[str, int]] = {}
+    for aid, sev, n in counts_q:
+        counts.setdefault(int(aid), {})[sev.value] = int(n)
+
+    out: list[dict] = []
+    for agent, payload in snaps:
+        if not is_windows_agent(payload):
+            continue
+        scan = (payload or {}).get("patch_scan") or {}
+        c    = counts.get(agent.id, {})
+        crit = c.get("critical", 0)
+        imp  = c.get("important", 0)
+        mod  = c.get("moderate", 0)
+        low  = c.get("low", 0)
+        unk  = c.get("unknown", 0)
+        pending = crit + imp + mod + low + unk
+
+        scan_success = bool(scan.get("scan_success"))
+        # If the agent's payload doesn't have patch_scan yet (old agents),
+        # fall back to "scan succeeded if we have anything from it OR the
+        # post-install zero state". For UI purposes we treat missing scan
+        # data as 'scan failed' so the admin knows to refresh that agent.
+        scan_known = "patch_scan" in (payload or {})
+
+        # Compliance % — 100 when nothing pending, otherwise a soft signal
+        # weighted by severity (critical hurts more than moderate).
+        if not scan_known:
+            compliance = None
+        elif pending == 0:
+            compliance = 100
+        else:
+            weight = crit * 4 + imp * 2 + mod * 1 + low * 0.5 + unk * 0.5
+            compliance = max(0, int(round(100 - min(100, weight * 5))))
+
+        out.append({
+            "agent_id":          agent.id,
+            "hostname":          agent.hostname,
+            "os_caption":        (payload or {}).get("os", {}).get("caption", ""),
+            "last_seen_at":      agent.last_seen_at,
+            "last_scan_at":      scan.get("scanned_at"),
+            "psw_installed":     bool(scan.get("psw_installed")),
+            "winget_available":  bool(scan.get("winget_available")),
+            "scan_success":      scan_success,
+            "scan_known":        scan_known,
+            "pending_count":     pending,
+            "critical":          crit,
+            "important":         imp,
+            "moderate":          mod,
+            "low":               low,
+            "unknown":           unk,
+            "fully_updated":     scan_success and scan_known and pending == 0,
+            "scan_failed":       scan_known and not scan_success,
+            "needs_refresh":     not scan_known,  # old-agent flag
+            "compliance_pct":    compliance,
+        })
+
+    # Sort: needs_refresh / scan_failed first, then by pending desc, then host.
+    out.sort(key=lambda r: (
+        not r["needs_refresh"], not r["scan_failed"],
+        -r["pending_count"], r["hostname"].lower(),
+    ))
+    return out
 
 
 def patches_for_agent(db: Session, agent_id: int) -> list[PatchObservation]:
@@ -98,33 +226,36 @@ def patches_for_agent(db: Session, agent_id: int) -> list[PatchObservation]:
 
 
 def patch_kpis(db: Session, tenant_id: int) -> dict:
-    total_endpoints = db.query(func.count(Agent.id)).filter(Agent.tenant_id == tenant_id).scalar() or 0
-    bad_eps = (db.query(func.count(func.distinct(PatchObservation.agent_id)))
-                 .join(Agent, Agent.id == PatchObservation.agent_id)
-                 .filter(Agent.tenant_id == tenant_id,
-                         PatchObservation.resolved_at.is_(None),
-                         PatchObservation.severity == PatchSeverity.critical)
-                 .scalar()) or 0
-    compliant = max(0, total_endpoints - bad_eps)
-    pct = round(100 * compliant / total_endpoints) if total_endpoints else 100
+    """KPI tiles for the /patches page. Windows-only — Linux endpoints and
+    apt/dnf-sourced patches are excluded everywhere."""
+    # Count of Windows endpoints only (from latest snapshot OS caption)
+    dashboard = windows_endpoint_dashboard(db, tenant_id)
+    total_endpoints = len(dashboard)
+    fully = sum(1 for r in dashboard if r["fully_updated"])
+    non_compliant = sum(1 for r in dashboard if r["pending_count"] > 0)
+    needs_refresh = sum(1 for r in dashboard if r["needs_refresh"])
+    pct = round(100 * fully / total_endpoints) if total_endpoints else 100
 
     total_critical = (db.query(func.count(PatchObservation.id))
                         .join(Agent, Agent.id == PatchObservation.agent_id)
                         .filter(Agent.tenant_id == tenant_id,
                                 PatchObservation.resolved_at.is_(None),
-                                PatchObservation.severity == PatchSeverity.critical)
+                                PatchObservation.severity == PatchSeverity.critical,
+                                _windows_source_filter())
                         .scalar()) or 0
 
     total_patches = (db.query(func.count(PatchObservation.id))
                        .join(Agent, Agent.id == PatchObservation.agent_id)
                        .filter(Agent.tenant_id == tenant_id,
-                               PatchObservation.resolved_at.is_(None))
+                               PatchObservation.resolved_at.is_(None),
+                               _windows_source_filter())
                        .scalar()) or 0
 
     return {
         "total_endpoints":     int(total_endpoints),
-        "compliant_endpoints": int(compliant),
-        "non_compliant":       int(bad_eps),
+        "compliant_endpoints": int(fully),
+        "non_compliant":       int(non_compliant),
+        "needs_refresh":       int(needs_refresh),
         "compliance_pct":      int(pct),
         "total_critical":      int(total_critical),
         "total_patches":       int(total_patches),
@@ -506,7 +637,8 @@ def fleet_vendor_breakdown(db: Session, tenant_id: int) -> list[dict]:
     rows = (db.query(PatchObservation)
               .join(Agent, Agent.id == PatchObservation.agent_id)
               .filter(Agent.tenant_id == tenant_id,
-                      PatchObservation.resolved_at.is_(None))
+                      PatchObservation.resolved_at.is_(None),
+                      _windows_source_filter())
               .all())
 
     by_vendor: dict[str, dict] = {}

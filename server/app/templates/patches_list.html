@@ -18,10 +18,11 @@
 <div class="card" style="background:#eff6ff;border-left:4px solid var(--accent,#2563eb);margin-bottom:18px;">
   <p style="margin:0;font-size:13.5px;">
     <strong>Windows updates on these endpoints are managed centrally by your organisation.</strong>
-    End users see Windows Update as <em>"Some settings are managed by your organisation"</em> —
-    if they need an exception, ask them to contact their IT administrator (you) rather than
-    changing Windows Update settings locally. Patches deploy on the next agent check-in once
-    you approve them below.
+    The OctoAssist agent applies registry policy on every check-in so end users see
+    <em>"Some settings are managed by your organisation"</em> on the Windows Update page
+    and cannot manually trigger updates locally. Updates only flow through OctoAssist —
+    Quick-deploy a category below and the agent installs them via <code>Install-WindowsUpdate</code>
+    on next check-in. Linux endpoints (if any) are excluded from this view — Windows fleet only.
   </p>
 </div>
 
@@ -56,9 +57,14 @@
 
 <section class="kpi-grid">
   <div class="kpi-card">
-    <p class="kpi-label">Compliance</p>
-    <p class="kpi-value">{{ kpi.compliance_pct }}<span class="kpi-unit">%</span></p>
-    <p class="kpi-sub">{{ kpi.compliant_endpoints }} of {{ kpi.total_endpoints }} endpoints have 0 critical patches</p>
+    <p class="kpi-label">Fully Updated</p>
+    <p class="kpi-value">{{ kpi.compliant_endpoints }}<span class="kpi-unit">/{{ kpi.total_endpoints }}</span></p>
+    <p class="kpi-sub">
+      {{ kpi.compliance_pct }}% of Windows endpoints have <strong>0</strong> pending patches
+      {% if kpi.needs_refresh > 0 %}
+        <br><span style="color:var(--orange,#d97706);">({{ kpi.needs_refresh }} agent{{ "" if kpi.needs_refresh == 1 else "s" }} need a refresh)</span>
+      {% endif %}
+    </p>
   </div>
   <div class="kpi-card">
     <p class="kpi-label">Critical patches outstanding</p>
@@ -66,9 +72,9 @@
     <p class="kpi-sub">across {{ kpi.non_compliant }} non-compliant endpoint{{ "" if kpi.non_compliant == 1 else "s" }}</p>
   </div>
   <div class="kpi-card">
-    <p class="kpi-label">Total patches available</p>
+    <p class="kpi-label">Total patches pending</p>
     <p class="kpi-value">{{ kpi.total_patches }}</p>
-    <p class="kpi-sub">all severities, all endpoints</p>
+    <p class="kpi-sub">all severities, all Windows endpoints</p>
   </div>
 </section>
 
@@ -123,38 +129,73 @@
 </section>
 
 <section>
-  <h2>Endpoint posture</h2>
-  {% if rows %}
+  <h2>Windows endpoint patch posture</h2>
+  <p class="meta" style="margin:0 0 12px;">
+    Per-machine view. Each endpoint reports back what Windows Update + winget see as pending.
+    <strong>Fully Updated</strong> means a successful scan with zero pending patches — that's the goal state.
+  </p>
+  {% if win_dash %}
   <table class="data">
     <thead>
       <tr>
         <th>Hostname</th>
+        <th>OS</th>
+        <th>Last scan (IST)</th>
+        <th>Pending</th>
         <th>Critical</th>
         <th>Important</th>
         <th>Moderate</th>
-        <th>Total missing</th>
-        <th>Oldest</th>
-        <th>Last seen</th>
+        <th>Compliance</th>
+        <th>Status</th>
       </tr>
     </thead>
     <tbody>
-      {% for r in rows %}
+      {% for r in win_dash %}
       <tr>
         <td><a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a></td>
-        <td>{% if r.critical > 0 %}<span class="prio prio-critical">{{ r.critical }}</span>{% else %}<span style="color:var(--green);font-weight:600;">0</span>{% endif %}</td>
-        <td>{% if r.important > 0 %}<span class="prio prio-high">{{ r.important }}</span>{% else %}0{% endif %}</td>
-        <td>{% if r.moderate > 0 %}<span class="prio prio-medium">{{ r.moderate }}</span>{% else %}0{% endif %}</td>
-        <td><strong>{{ r.total }}</strong></td>
-        <td>{% if r.oldest_age_days is not none %}{% if r.oldest_age_days > 90 %}<span class="breach">{{ r.oldest_age_days }}d</span>{% else %}{{ r.oldest_age_days }}d{% endif %}{% else %}—{% endif %}</td>
-        <td>{% if r.last_seen %}{{ r.last_seen | ist }}{% else %}never{% endif %}</td>
+        <td style="font-size:12.5px;color:var(--slate);">{{ r.os_caption }}</td>
+        <td>{% if r.last_scan_at %}{{ r.last_scan_at | ist }}{% else %}<span style="color:var(--slate);font-size:12px;">unknown</span>{% endif %}</td>
+        <td><strong>{{ r.pending_count }}</strong></td>
+        <td>{% if r.critical %}<span class="prio prio-critical">{{ r.critical }}</span>{% else %}0{% endif %}</td>
+        <td>{% if r.important %}<span class="prio prio-high">{{ r.important }}</span>{% else %}0{% endif %}</td>
+        <td>{% if r.moderate %}<span class="prio prio-medium">{{ r.moderate }}</span>{% else %}0{% endif %}</td>
+        <td>
+          {% if r.compliance_pct is none %}
+            <span style="color:var(--slate);font-size:12px;">—</span>
+          {% else %}
+            {% set pct = r.compliance_pct %}
+            <div style="display:flex;align-items:center;gap:6px;min-width:130px;">
+              <div style="flex:1;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 95 %}#16a34a{% elif pct >= 70 %}#d97706{% else %}#dc2626{% endif %};"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;">{{ pct }}%</span>
+            </div>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.fully_updated %}
+            <span class="status status-resolved">✓ Fully Updated</span>
+          {% elif r.needs_refresh %}
+            <span class="status status-on_hold">⟳ Refresh agent</span>
+          {% elif r.scan_failed %}
+            <span class="status status-cancelled">⚠ Scan failed</span>
+          {% elif r.critical > 0 %}
+            <span class="status status-cancelled">{{ r.pending_count }} pending</span>
+          {% else %}
+            <span class="status status-in_progress">{{ r.pending_count }} pending</span>
+          {% endif %}
+          {% if not r.psw_installed and not r.needs_refresh %}
+            <br><span class="meta" style="font-size:11px;">PSWindowsUpdate missing</span>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% else %}
   <div class="empty">
-    <h2>No patch data yet</h2>
-    <p>Endpoints report missing patches on each check-in.</p>
+    <h2>No Windows endpoints reporting yet</h2>
+    <p>Install the agent on a Windows endpoint via <a href="/enrolment">/enrolment</a> — once it checks in, it appears here.</p>
   </div>
   {% endif %}
 </section>

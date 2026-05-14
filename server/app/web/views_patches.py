@@ -48,40 +48,32 @@ def patches_home(
     db: Session = Depends(get_db),
 ):
     tid = user.tenant_id
-    rows = patches_svc.fleet_patch_summary(db, tid)
+    # Windows-only per-endpoint dashboard (Linux + Mac filtered out)
+    win_dash = patches_svc.windows_endpoint_dashboard(db, tid)
     sev = patches_svc.severity_breakdown(db, tid)
     top = patches_svc.top_missing_packages(db, tid, top=15)
     kpi = patches_svc.patch_kpis(db, tid)
     vendors = patches_svc.fleet_vendor_breakdown(db, tid)
     vendor_chart_data = [(v["vendor"], v["total"]) for v in vendors[:10]]
 
-    # Build the one-click quick-deploy cards. Severity-based cards always
-    # appear; vendor-based cards appear for the top 3 vendors with > 0 patches.
+    # Build the one-click quick-deploy cards. Severity-based cards only —
+    # vendor cards intentionally dropped (Linux distro card was misleading).
     sev_counts = {k: v for k, v in sev}
     quick_deploy_options = [
         {"title": "Critical patches", "severity": "critical", "vendor": None,
          "count": sev_counts.get("critical", 0),
          "color": "#dc2626", "pill_class": "critical",
-         "subtitle": "All outstanding critical patches across the fleet — security fixes that should ship now."},
+         "subtitle": "All outstanding critical Windows patches across the fleet — security fixes that should ship now."},
         {"title": "Important patches", "severity": "important", "vendor": None,
          "count": sev_counts.get("important", 0),
          "color": "#d97706", "pill_class": "high",
-         "subtitle": "All outstanding important patches — feature + non-critical security fixes."},
+         "subtitle": "All outstanding important Windows patches — feature + non-critical security fixes."},
     ]
-    top_vendors_with_patches = [v for v in vendors if v["total"] > 0][:3]
-    for v in top_vendors_with_patches:
-        quick_deploy_options.append({
-            "title": f"{v['vendor']} updates",
-            "severity": None, "vendor": v["vendor"],
-            "count": v["total"],
-            "color": "#2563eb", "pill_class": "medium",
-            "subtitle": f"{v['packages']} distinct packages from {v['vendor']} across the fleet.",
-        })
 
     return templates.TemplateResponse(
         request=request, name="patches_list.html",
         context=_ctx(user, db,
-                     rows=rows, kpi=kpi,
+                     win_dash=win_dash, kpi=kpi,
                      vendors=vendors,
                      quick_deploy_options=quick_deploy_options,
                      chart_severity=charts.donut(sev, size=200),
