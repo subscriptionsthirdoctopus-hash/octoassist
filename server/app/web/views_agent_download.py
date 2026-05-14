@@ -109,37 +109,72 @@ if (-not $pyExe) {{
 }}
 
 if (-not $pyExe) {{
-    Write-Step "Real Python not found (the Store alias doesn't count) — installing Python 3.12 via winget"
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {{
-        throw "winget not available — install Python 3.10+ manually from python.org first."
-    }}
-    winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements --scope machine 2>&1 | Out-Host
-    # Refresh PATH in this session
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    Write-Step "Real Python not found (the Store alias doesn't count) — installing Python 3.12"
 
-    # Find python.exe in the standard install locations (winget machine scope = Program Files)
-    $search = @(
-        "$env:ProgramFiles\Python312\python.exe",
-        "$env:ProgramFiles\Python311\python.exe",
-        "$env:ProgramFiles\Python310\python.exe",
-        "${{env:ProgramFiles(x86)}}\Python312\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe"
-    )
-    foreach ($p in $search) {{
-        if ((Test-Path $p) -and (Test-RealPython $p)) {{ $pyExe = $p; break }}
-    }}
-    if (-not $pyExe) {{
-        # Last-ditch: try the launcher again post-install
+    function Find-RealPythonPostInstall() {{
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        $search = @(
+            "$env:ProgramFiles\Python312\python.exe",
+            "$env:ProgramFiles\Python311\python.exe",
+            "$env:ProgramFiles\Python310\python.exe",
+            "${{env:ProgramFiles(x86)}}\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe"
+        )
+        foreach ($p in $search) {{
+            if ((Test-Path $p) -and (Test-RealPython $p)) {{ return $p }}
+        }}
         $launcher = Get-Command py -ErrorAction SilentlyContinue
         if ($launcher) {{
             $candidate = (& $launcher.Path -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
-            if (Test-RealPython $candidate) {{ $pyExe = $candidate }}
+            if (Test-RealPython $candidate) {{ return $candidate }}
         }}
+        return $null
     }}
+
+    # Strategy 1: winget — fast and signed-source. But winget often breaks
+    # on machines where the msstore source needs terms acceptance or the
+    # winget source index is corrupted (0x8a15000f). We force --source winget
+    # to skip msstore, and treat any failure as a soft-fail then fall back.
+    $wingetOk = $false
+    if (Get-Command winget -ErrorAction SilentlyContinue) {{
+        try {{
+            winget install --id Python.Python.3.12 --source winget --silent --accept-package-agreements --accept-source-agreements --scope machine 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) {{ $wingetOk = $true }}
+        }} catch {{
+            Write-Warn2 "winget threw: $_"
+        }}
+        if (-not $wingetOk) {{ Write-Warn2 "winget install did not succeed; falling back to direct download from python.org" }}
+    }} else {{
+        Write-Warn2 "winget not available; falling back to direct download from python.org"
+    }}
+    $pyExe = Find-RealPythonPostInstall
+
+    # Strategy 2: direct download from python.org. No registry trust, just
+    # an authenticated TLS connection to python.org's CDN.
     if (-not $pyExe) {{
-        throw "Python install completed but no real python.exe found. Close PowerShell, open a NEW elevated PowerShell, and re-run the one-liner."
+        $pyVer = "3.12.7"
+        $pyUrl = "https://www.python.org/ftp/python/$pyVer/python-$pyVer-amd64.exe"
+        $tmp   = Join-Path $env:TEMP ("python-" + $pyVer + "-amd64.exe")
+        Write-Step "Downloading Python $pyVer installer from python.org"
+        try {{
+            Invoke-WebRequest -UseBasicParsing -Uri $pyUrl -OutFile $tmp
+        }} catch {{
+            throw "Could not download Python from python.org: $_  Check outbound HTTPS / proxy settings."
+        }}
+        Write-Step "Running Python installer silently (machine scope, PATH on, py launcher on)"
+        $args = @("/quiet","InstallAllUsers=1","PrependPath=1","Include_test=0","Include_doc=0","Include_launcher=1")
+        $proc = Start-Process -FilePath $tmp -ArgumentList $args -Wait -PassThru
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+        if ($proc.ExitCode -ne 0) {{
+            throw "Python installer exited with code $($proc.ExitCode). Re-run the one-liner in a new elevated PowerShell."
+        }}
+        $pyExe = Find-RealPythonPostInstall
+    }}
+
+    if (-not $pyExe) {{
+        throw "Python install completed but no real python.exe found. Close this PowerShell, open a NEW elevated PowerShell, and re-run the one-liner."
     }}
 }}
 Write-Ok ("Python at " + $pyExe)
