@@ -145,6 +145,34 @@ if (-not $pyExe) {{
 Write-Ok ("Python at " + $pyExe)
 $pyCmd = [PSCustomObject]@{{ Path = $pyExe }}
 
+# 2b. PSWindowsUpdate — needed for Windows Update KB deployment. Installs
+#     into the AllUsers scope so SYSTEM (the Scheduled Task account) can
+#     import it. NuGet provider is required first.
+Write-Step "Ensuring PowerShell dependencies (NuGet provider + PSWindowsUpdate module)"
+try {{
+    if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {{
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers | Out-Null
+        Write-Ok "NuGet provider installed"
+    }} else {{
+        Write-Ok "NuGet provider present"
+    }}
+}} catch {{
+    Write-Warn2 "NuGet provider install failed: $_  — generic software patching will still work, only KB-based Windows Update is affected."
+}}
+try {{
+    if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue | Where-Object {{ $_.InstallationPolicy -eq 'Trusted' }})) {{
+        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+    }}
+    if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {{
+        Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop
+        Write-Ok "PSWindowsUpdate module installed"
+    }} else {{
+        Write-Ok "PSWindowsUpdate module already present"
+    }}
+}} catch {{
+    Write-Warn2 "PSWindowsUpdate install failed: $_  — winget-based software patching still works; KB-based Windows Update KBs won't be applied by this agent until the module is installed."
+}}
+
 # 3. Install dir + download agent script
 Write-Step "Installing agent script to $INSTALL_DIR"
 New-Item -ItemType Directory -Force $INSTALL_DIR | Out-Null
@@ -192,14 +220,27 @@ Write-Host ""
 Write-Host "==============================================================" -ForegroundColor Cyan
 Write-Host "  OctoAssist agent installed."                                  -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Server:        $SERVER_URL"
-Write-Host "  Config:        $DATA_DIR\agent.json"
-Write-Host "  Logs:          $DATA_DIR\logs\agent.log"
-Write-Host "  Task:          $TASK_NAME (Task Scheduler)"
-Write-Host "  Run on demand: python `"$AGENT_SCRIPT`" --once"
-Write-Host "  Stop:          Stop-ScheduledTask -TaskName `"$TASK_NAME`""
-Write-Host "  Uninstall:     Unregister-ScheduledTask -TaskName `"$TASK_NAME`" -Confirm:`$false ;"
-Write-Host "                 Remove-Item -Recurse -Force `"$INSTALL_DIR`",`"$DATA_DIR`""
+Write-Host "  Server:           $SERVER_URL"
+Write-Host "  Python:           $($pyCmd.Path)"
+$wuMod = Get-Module -ListAvailable PSWindowsUpdate | Select-Object -First 1
+if ($wuMod) {{
+    Write-Host "  PSWindowsUpdate:  $($wuMod.Version) (KB-based Windows Update enabled)"
+}} else {{
+    Write-Host "  PSWindowsUpdate:  not installed (KB-based Windows Update disabled — only winget software patching will work)"
+}}
+$wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+if ($wingetCmd) {{
+    Write-Host "  winget:           $($wingetCmd.Path) (generic-software patching enabled)"
+}} else {{
+    Write-Host "  winget:           NOT FOUND (generic-software patching disabled — update Windows App Installer from the Store)"
+}}
+Write-Host "  Config:           $DATA_DIR\agent.json"
+Write-Host "  Logs:             $DATA_DIR\logs\agent.log"
+Write-Host "  Task:             $TASK_NAME (Task Scheduler)"
+Write-Host "  Run on demand:    python `"$AGENT_SCRIPT`" --once"
+Write-Host "  Stop:             Stop-ScheduledTask -TaskName `"$TASK_NAME`""
+Write-Host "  Uninstall:        Unregister-ScheduledTask -TaskName `"$TASK_NAME`" -Confirm:`$false ;"
+Write-Host "                    Remove-Item -Recurse -Force `"$INSTALL_DIR`",`"$DATA_DIR`""
 Write-Host ""
 Write-Host "  This endpoint will appear in OctoAssist /assets within a minute."
 Write-Host "==============================================================" -ForegroundColor Cyan
