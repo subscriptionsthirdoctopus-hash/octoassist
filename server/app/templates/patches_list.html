@@ -176,9 +176,13 @@
           {% if r.fully_updated %}
             <span class="status status-resolved">✓ Fully Updated</span>
           {% elif r.needs_refresh %}
-            <span class="status status-on_hold">⟳ Refresh agent</span>
+            <button type="button" class="status status-on_hold"
+                    style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;"
+                    onclick="showRefreshModal('{{ r.hostname|e }}')">⟳ Refresh agent</button>
           {% elif r.scan_failed %}
-            <span class="status status-cancelled">⚠ Scan failed</span>
+            <button type="button" class="status status-cancelled"
+                    style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;"
+                    onclick="showRefreshModal('{{ r.hostname|e }}')">⚠ Scan failed</button>
           {% elif r.critical > 0 %}
             <span class="status status-cancelled">{{ r.pending_count }} pending</span>
           {% else %}
@@ -199,4 +203,65 @@
   </div>
   {% endif %}
 </section>
+
+{# ───────── Refresh-agent modal ───────── #}
+<div id="refresh-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:white;max-width:760px;width:100%;border-radius:8px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow:auto;">
+    <div class="row-between" style="margin-bottom:8px;">
+      <h2 style="margin:0;font-size:18px;">Refresh agent on <code id="refresh-host">—</code></h2>
+      <button type="button" onclick="closeRefreshModal()" class="link-button" style="font-size:22px;line-height:1;padding:0 6px;">×</button>
+    </div>
+    <p class="meta" style="margin:0 0 14px;">
+      The new agent will <strong>auto-update on its next scheduled check-in</strong> (every 6 hours).
+      To roll it out <em>right now</em>, RDP into the endpoint, open <strong>elevated PowerShell</strong>,
+      and paste this single command. It installs missing dependencies, pulls the latest agent script,
+      applies the Windows Update lock-down, and forces an immediate re-scan.
+    </p>
+    <pre id="refresh-cmd" class="code" style="white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;font-size:12px;line-height:1.55;">{% raw %}if (-not (Get-PackageProvider NuGet -ErrorAction SilentlyContinue)) { Install-PackageProvider -Name NuGet -Force -Scope AllUsers | Out-Null }
+Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+if (-not (Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber }
+Invoke-WebRequest -UseBasicParsing -Uri "https://octoassist.thirdoctopus.com/agent/files/octoassist_agent.py" -OutFile "C:\Program Files\OctoAssist Agent\octoassist_agent.py"
+& "C:\Program Files\Python312\python.exe" "C:\Program Files\OctoAssist Agent\octoassist_agent.py" --once{% endraw %}</pre>
+    <div class="row-between" style="margin-top:14px;align-items:center;">
+      <p class="meta" style="margin:0;font-size:12px;">
+        After it finishes the endpoint reports back within ~30 seconds and this row will flip to
+        <span class="status status-resolved">✓ Fully Updated</span> or <span class="status status-cancelled">N pending</span>.
+      </p>
+      <button type="button" class="primary" onclick="copyRefreshCmd()" id="refresh-copy-btn">Copy command</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showRefreshModal(hostname) {
+  document.getElementById('refresh-host').innerText = hostname;
+  document.getElementById('refresh-modal').style.display = 'flex';
+}
+function closeRefreshModal() {
+  document.getElementById('refresh-modal').style.display = 'none';
+}
+function copyRefreshCmd() {
+  var el  = document.getElementById('refresh-cmd');
+  var btn = document.getElementById('refresh-copy-btn');
+  var txt = el.innerText;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(function () {
+      var orig = btn.innerText;
+      btn.innerText = 'Copied!';
+      setTimeout(function () { btn.innerText = orig; }, 1500);
+    });
+  } else {
+    var r = document.createRange();
+    r.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+  }
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeRefreshModal();
+});
+document.getElementById('refresh-modal').addEventListener('click', function (e) {
+  if (e.target.id === 'refresh-modal') closeRefreshModal();
+});
+</script>
 {% endblock %}

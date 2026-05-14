@@ -1063,7 +1063,59 @@ def register_if_needed(cfg: dict) -> dict:
     return cfg
 
 
+def _self_update_if_newer(cfg: dict) -> bool:
+    """Compare the on-disk agent script against /agent/files/octoassist_agent.py.
+    If the hashes differ, atomically replace the local script. The currently-
+    running process keeps using the OLD code (Python's already imported it),
+    but the scheduled task's NEXT invocation in 6 hours picks up the new one.
+
+    Returns True if a replacement was written.
+
+    Safe by design:
+      - Never replaces if the download is shorter than 5 KB (clearly broken)
+      - Verifies the downloaded blob parses as Python before replacing
+      - Atomic os.replace so a power-fail can't leave a half-written file
+    """
+    if platform.system() != "Windows":
+        return False  # only auto-update on Windows endpoints; Linux uses dpkg
+    try:
+        import hashlib, ast
+        own = Path(__file__).resolve()
+        if not own.exists():
+            return False
+        own_hash = hashlib.sha256(own.read_bytes()).hexdigest()
+        base = cfg["server_url"].rstrip("/")
+        code, body = _http(base + "/agent/files/octoassist_agent.py",
+                           method="GET", token=cfg.get("agent_token"))
+        if code != 200 or not body or len(body) < 5000:
+            return False
+        new_bytes = body.encode("utf-8") if isinstance(body, str) else body
+        new_hash = hashlib.sha256(new_bytes).hexdigest()
+        if new_hash == own_hash:
+            return False
+        # Make sure the new script is syntactically valid Python before swapping
+        try:
+            ast.parse(new_bytes.decode("utf-8", errors="strict"))
+        except (SyntaxError, UnicodeDecodeError) as e:
+            log.warning("self-update: downloaded script failed syntax check: %s", e)
+            return False
+        tmp = own.with_suffix(".py.new")
+        tmp.write_bytes(new_bytes)
+        os.replace(tmp, own)
+        log.info("self-update: replaced agent script (sha256 %s -> %s). "
+                 "Scheduled task will use new code on next invocation.",
+                 own_hash[:12], new_hash[:12])
+        return True
+    except Exception as e:  # noqa: BLE001
+        log.warning("self-update check failed (continuing with current code): %s", e)
+        return False
+
+
 def checkin_once(cfg: dict) -> bool:
+    # Auto-update first — picks up any server-side agent fixes without admin
+    # action. The new code lands but the running process keeps the old import;
+    # next scheduled run picks it up.
+    _self_update_if_newer(cfg)
     snap = collect_snapshot()
     log.info("Collected snapshot: OS=%s, CPU=%s, software=%d, patches=%d",
              snap["os"].get("caption"), snap["cpu"].get("name"),
