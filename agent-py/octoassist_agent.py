@@ -213,25 +213,59 @@ def _macos_os_info() -> dict:
 
 
 def _windows_os_info() -> dict:
+    """OS info on Windows. Pulls in one PowerShell hop:
+      - Caption / Version / Build / Architecture
+      - InstallDate (ISO yyyy-MM-dd — server re-formats to dd/mm/yyyy)
+      - OEM (BIOS-embedded) product key via OA3xOriginalProductKey
+      - Activation status (Licensed / OOB Grace / Unlicensed / …)
+    Each piece is in one try block — partial failures fall back to a
+    minimal platform.* dict so the agent never bombs on this collector.
+    """
+    out = {
+        "caption": "", "version": "", "build_number": "", "architecture": "",
+        "install_date": None, "product_key": None, "activation_status": None,
+    }
+    ps = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$os  = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
+$lic = Get-CimInstance SoftwareLicensingService | Select-Object -First 1
+$oa3 = if ($lic) { $lic.OA3xOriginalProductKey } else { '' }
+$slp = Get-CimInstance SoftwareLicensingProduct |
+       Where-Object { $_.PartialProductKey -and $_.Name -like 'Windows*' } |
+       Select-Object -First 1
+$states = @{ 0='Unlicensed'; 1='Licensed'; 2='OOB Grace';
+             3='OOT Grace'; 4='Non-Genuine Grace'; 5='Notification'; 6='Extended Grace' }
+$state  = if ($slp) { $states[[int]$slp.LicenseStatus] } else { 'Unknown' }
+$install = if ($os.InstallDate) { $os.InstallDate.ToString('yyyy-MM-dd') } else { '' }
+@{
+    Caption        = $os.Caption
+    Version        = $os.Version
+    BuildNumber    = "$($os.BuildNumber)"
+    OSArchitecture = $os.OSArchitecture
+    InstallDate    = $install
+    ProductKey     = $oa3
+    Activation     = $state
+} | ConvertTo-Json -Compress
+"""
     try:
         r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-CimInstance Win32_OperatingSystem | "
-             "Select-Object Caption,Version,BuildNumber,OSArchitecture | "
-             "ConvertTo-Json -Compress"],
-            capture_output=True, text=True, timeout=15,
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+            capture_output=True, text=True, timeout=20,
         )
         d = json.loads(r.stdout or "{}")
-        return {
-            "caption": d.get("Caption", "").strip(),
-            "version": d.get("Version", ""),
-            "build_number": str(d.get("BuildNumber", "")),
-            "architecture": d.get("OSArchitecture", ""),
-            "install_date": None,
-        }
+        out["caption"]      = (d.get("Caption") or "").strip()
+        out["version"]      = d.get("Version") or ""
+        out["build_number"] = str(d.get("BuildNumber") or "")
+        out["architecture"] = d.get("OSArchitecture") or ""
+        out["install_date"] = d.get("InstallDate") or None
+        pk = (d.get("ProductKey") or "").strip()
+        out["product_key"]  = pk if pk else None
+        out["activation_status"] = (d.get("Activation") or "").strip() or None
     except Exception:
-        return {"caption": platform.platform(), "version": platform.release(),
-                "build_number": "", "architecture": platform.machine(), "install_date": None}
+        out["caption"]      = platform.platform()
+        out["version"]      = platform.release()
+        out["architecture"] = platform.machine()
+    return out
 
 
 def os_info() -> dict:

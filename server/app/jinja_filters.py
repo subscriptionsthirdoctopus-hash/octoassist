@@ -58,6 +58,33 @@ def isttime(value: Any) -> str:
     return dt.strftime("%H:%M") if dt else "—"
 
 
+def dmy(value: Any) -> str:
+    """Render a date or ISO date string as dd/mm/yyyy (Indian / UK locale).
+
+    Accepts:
+      - "yyyy-MM-dd" (the format the Windows agent emits for OS install_date)
+      - datetime objects (any tz; date portion only)
+      - empty / None / "" → "—"
+    """
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    s = str(value).strip()
+    if not s:
+        return "—"
+    # Try ISO yyyy-MM-dd first, then fall back to fromisoformat for full timestamps.
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(s[: len(fmt) + 5], fmt).strftime("%d/%m/%Y")
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(s).strftime("%d/%m/%Y")
+    except ValueError:
+        return s  # last resort — show the raw string rather than hide it
+
+
 def ist_input(value: Any) -> str:
     """Format for `<input type="datetime-local">` prefill (no seconds, no TZ)."""
     dt = _to_ist(value)
@@ -93,4 +120,5 @@ def install_on(templates: Jinja2Templates) -> Jinja2Templates:
     env.filters["istdate"]   = istdate
     env.filters["isttime"]   = isttime
     env.filters["ist_input"] = ist_input
+    env.filters["dmy"]       = dmy
     return templates

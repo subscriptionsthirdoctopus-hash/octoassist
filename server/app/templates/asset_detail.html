@@ -22,6 +22,30 @@
       <dt>Version</dt><dd>{{ snapshot.os.version or "—" }}</dd>
       <dt>Build</dt><dd>{{ snapshot.os.build_number or "—" }}</dd>
       <dt>Architecture</dt><dd>{{ snapshot.os.architecture or "—" }}</dd>
+      <dt>Installed on</dt><dd>{{ snapshot.os.install_date | dmy }}</dd>
+      <dt>Activation</dt>
+      <dd>
+        {% set act = snapshot.os.activation_status %}
+        {% if act == 'Licensed' %}
+          <span class="status status-resolved">{{ act }}</span>
+        {% elif act in ('Unlicensed', 'Non-Genuine Grace') %}
+          <span class="status status-cancelled">{{ act }}</span>
+        {% elif act %}
+          <span class="status status-on_hold">{{ act }}</span>
+        {% else %}—{% endif %}
+      </dd>
+      <dt>Windows product key
+        <span class="meta" style="font-size:11px;font-weight:normal;">(OEM / firmware)</span>
+      </dt>
+      <dd>
+        {% if snapshot.os.product_key %}
+          <code id="winkey-{{ agent.id }}" style="font-family:ui-monospace,monospace;font-size:12.5px;letter-spacing:0.5px;">{{ snapshot.os.product_key }}</code>
+          <button type="button" class="link-button" style="margin-left:6px;font-size:12px;"
+                  onclick="(function(){{const t=document.getElementById('winkey-{{ agent.id }}').innerText;navigator.clipboard&&navigator.clipboard.writeText(t);event.target.innerText='copied';setTimeout(()=>event.target.innerText='copy',900);}})()">copy</button>
+        {% else %}
+          <span class="meta" style="font-size:12px;">— (no OA3 marker in firmware — typical for non-OEM / retail / VM)</span>
+        {% endif %}
+      </dd>
     </dl>
   </div>
 
