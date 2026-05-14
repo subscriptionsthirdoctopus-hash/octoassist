@@ -282,6 +282,71 @@ def transition_window(db: Session, *, window: PatchWindow, new_status: PatchWind
     return window
 
 
+def quick_deploy_category(
+    db: Session, *,
+    tenant_id: int,
+    creator: User,
+    severity: PatchSeverity | None = None,
+    vendor: str | None = None,
+) -> PatchWindow:
+    """Intune / Zoho Endpoint Central-style one-click deploy.
+
+    Creates a patch window in `in_progress` with auto_execute=True and
+    auto-selects all matching candidate packages, so the agent picks the
+    job up on its next check-in (no further admin action required).
+
+    Either `severity` or `vendor` must be set. The window's name and
+    description are auto-generated from the chosen filter + IST timestamp.
+    """
+    from datetime import timezone as _tz, timedelta as _td
+
+    if severity is None and not vendor:
+        raise ValueError("quick_deploy_category requires severity or vendor")
+
+    IST = _tz(_td(hours=5, minutes=30), name="IST")
+    now_ist = _now().astimezone(IST).strftime("%Y-%m-%d %H:%M IST")
+
+    if severity is not None:
+        label = severity.value.title()
+        name = f"Quick deploy — {label} severity — {now_ist}"
+        desc = (f"Auto-created one-click deployment for all currently-missing "
+                f"{severity.value} patches across the fleet. Started immediately, "
+                f"auto-executes on next agent check-in.")
+    else:
+        name = f"Quick deploy — {vendor} updates — {now_ist}"
+        desc = (f"Auto-created one-click deployment for all currently-missing "
+                f"{vendor} patches across the fleet. Started immediately, "
+                f"auto-executes on next agent check-in.")
+
+    win = create_window(
+        db,
+        tenant_id=tenant_id, creator=creator,
+        name=name, description=desc,
+        severity_filter=severity,
+        hostname_pattern="%",
+        scheduled_for=_now(),
+        notes=f"created via quick-deploy ({severity.value if severity else vendor})",
+    )
+    win.auto_execute = True
+
+    # Pre-pick all candidate packages so the deploy is truly one-click — no
+    # second-screen package selection. If filtering by vendor (not severity),
+    # narrow the package list to matching publishers; severity_filter is
+    # already enforced by window_candidate_packages.
+    candidates = window_candidate_packages(db, win)
+    if vendor:
+        v_l = vendor.lower()
+        candidates = [c for c in candidates if (c.get("vendor") or "").lower() == v_l]
+    win.selected_packages = [c["name"] for c in candidates] if candidates else None
+
+    db.commit()
+    db.refresh(win)
+
+    # Flip straight to in_progress so the next agent check-in picks it up.
+    transition_window(db, window=win, new_status=PatchWindowStatus.in_progress)
+    return win
+
+
 def update_target_status(
     db: Session, *,
     target: PatchWindowTarget,

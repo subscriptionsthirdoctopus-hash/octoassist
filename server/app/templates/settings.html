@@ -140,13 +140,13 @@
     <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Notification email</h3>
     <p class="meta" style="margin:0 0 12px;">
       Microsoft email address for OctoAssist outbound notifications.
-      Accepted domains: <code>thirdoctopus.com</code>, <code>outlook.com</code>,
-      <code>hotmail.com</code>, <code>live.com</code>, <code>msn.com</code>,
-      and any <code>*.onmicrosoft.com</code> tenant.
+      Accepted domains: <code>outlook.com</code>, <code>hotmail.com</code>,
+      <code>live.com</code>, <code>msn.com</code>, any <code>*.onmicrosoft.com</code> tenant,
+      and your own corporate domain once added in <em>Tenant settings</em>.
     </p>
     <form method="post" action="/settings/tenant/notification-email" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <input type="email" name="notification_email" value="{{ tenant.notification_email or '' }}"
-             placeholder="alerts@thirdoctopus.com"
+             placeholder="alerts@example.com"
              style="flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
       <button type="submit" class="button primary">Save</button>
       {% if tenant.notification_email %}
@@ -179,7 +179,7 @@
       </label>
       <label>Username
         <input type="text" name="smtp_username" value="{{ tenant.smtp_username or '' }}"
-               placeholder="serviceaccount@thirdoctopus.com" autocomplete="off"
+               placeholder="serviceaccount@example.com" autocomplete="off"
                style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
       </label>
       <label>Password <span class="meta" style="font-weight:normal;">(blank to keep existing)</span>
@@ -189,7 +189,7 @@
       </label>
       <label style="grid-column:1/-1;">From address
         <input type="email" name="smtp_from" value="{{ tenant.smtp_from or '' }}"
-               placeholder="OctoAssist Alerts &lt;noreply@thirdoctopus.com&gt;"
+               placeholder="OctoAssist Alerts &lt;noreply@example.com&gt;"
                style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
       </label>
       <label class="checkbox" style="grid-column:1/-1;">
@@ -252,7 +252,7 @@
       </label>
       <label style="grid-column:1/-1;">From mailbox
         <input type="email" name="graph_from" value="{{ tenant.graph_from or '' }}"
-               placeholder="alerts@thirdoctopus.onmicrosoft.com"
+               placeholder="alerts@contoso.onmicrosoft.com"
                style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
       </label>
       <div class="form-actions" style="grid-column:1/-1;">

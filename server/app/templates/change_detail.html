@@ -155,17 +155,58 @@
   <h2>Audit log</h2>
   {% if change.events %}
   <table class="data audit">
-    <thead><tr><th>When</th><th>Who</th><th>Event</th><th>Detail</th></tr></thead>
+    <thead>
+      <tr>
+        <th style="width:160px;">When (IST)</th>
+        <th style="width:200px;">Who</th>
+        <th style="width:180px;">Event</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
     <tbody>
       {% for e in change.events %}
       <tr>
         <td>{{ e.created_at | ist }}</td>
         <td>{{ e.actor.display_name if e.actor else "system" }}</td>
-        <td>{{ e.kind.value.replace("_", " ") }}</td>
         <td>
-          {% if e.note %}<em>{{ e.note }}</em>{% endif %}
-          {% if e.before_value %}<code>before: {{ e.before_value }}</code>{% endif %}
-          {% if e.after_value %}<code>after: {{ e.after_value }}</code>{% endif %}
+          {% set k = e.kind.value %}
+          {% if k == 'created' %}<span class="status status-on_hold">created</span>
+          {% elif k == 'submitted_for_review' %}<span class="status status-in_progress">submitted for review</span>
+          {% elif k == 'approved' %}<span class="status status-resolved">approved</span>
+          {% elif k == 'rejected' %}<span class="status status-cancelled">rejected</span>
+          {% elif k == 'started' %}<span class="status status-in_progress">started</span>
+          {% elif k == 'completed' %}<span class="status status-resolved">completed</span>
+          {% elif k == 'failed' %}<span class="status status-cancelled">failed</span>
+          {% elif k == 'cancelled' %}<span class="status status-cancelled">cancelled</span>
+          {% else %}{{ k.replace("_", " ") }}{% endif %}
+        </td>
+        <td>
+          {% if e.note %}<p style="margin:0 0 6px;">{{ e.note }}</p>{% endif %}
+          {% if e.before_value or e.after_value %}
+          <table style="font-size:12px;border-collapse:collapse;margin:0;">
+            <tbody>
+              {% if e.before_value %}
+                {% for k, v in e.before_value.items() %}
+                <tr>
+                  <td style="padding:1px 8px 1px 0;color:var(--slate);">before · {{ k.replace("_", " ") }}</td>
+                  <td style="padding:1px 0;"><code style="font-size:11.5px;background:#fef2f2;color:#991b1b;padding:1px 4px;border-radius:3px;">{{ v }}</code></td>
+                </tr>
+                {% endfor %}
+              {% endif %}
+              {% if e.after_value %}
+                {% for k, v in e.after_value.items() %}
+                <tr>
+                  <td style="padding:1px 8px 1px 0;color:var(--slate);">after  · {{ k.replace("_", " ") }}</td>
+                  <td style="padding:1px 0;"><code style="font-size:11.5px;background:#ecfdf5;color:#065f46;padding:1px 4px;border-radius:3px;">{{ v }}</code></td>
+                </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
+          </table>
+          {% endif %}
+          {% if not e.note and not e.before_value and not e.after_value %}
+          <span class="meta" style="font-size:12px;">—</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

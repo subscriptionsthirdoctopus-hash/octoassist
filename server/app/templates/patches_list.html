@@ -15,6 +15,45 @@
   </div>
 </section>
 
+<div class="card" style="background:#eff6ff;border-left:4px solid var(--accent,#2563eb);margin-bottom:18px;">
+  <p style="margin:0;font-size:13.5px;">
+    <strong>Windows updates on these endpoints are managed centrally by your organisation.</strong>
+    End users see Windows Update as <em>"Some settings are managed by your organisation"</em> —
+    if they need an exception, ask them to contact their IT administrator (you) rather than
+    changing Windows Update settings locally. Patches deploy on the next agent check-in once
+    you approve them below.
+  </p>
+</div>
+
+{# ────────── Quick-deploy cards (Intune / Zoho Endpoint Central-style one-click) ────────── #}
+{% if quick_deploy_options %}
+<section class="cards" style="margin-bottom:18px;">
+  <div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:end;margin-bottom:4px;">
+    <h2 style="margin:0;">Quick deploy</h2>
+    <p class="meta" style="margin:0;font-size:12.5px;">One click → window auto-created, packages auto-selected, status = <strong>in_progress</strong>. Agents pick it up on next check-in.</p>
+  </div>
+  {% for qd in quick_deploy_options %}
+  <div class="card" style="border-left:4px solid {{ qd.color }};">
+    <div class="row-between">
+      <h3 style="margin:0;font-size:15px;">{{ qd.title }}</h3>
+      <span class="prio prio-{{ qd.pill_class }}">{{ qd.count }}</span>
+    </div>
+    <p class="meta" style="margin:8px 0 12px;font-size:12.5px;">
+      {{ qd.subtitle }}
+    </p>
+    <form method="post" action="/patches/quick-deploy"
+          onsubmit="return confirm('Deploy {{ qd.count }} {{ qd.title.lower() }} now?\n\nA patch window will be created and marked in_progress immediately. Agents pick up the work on next check-in.');">
+      {% if qd.severity %}<input type="hidden" name="severity" value="{{ qd.severity }}">{% endif %}
+      {% if qd.vendor %}<input type="hidden" name="vendor" value="{{ qd.vendor }}">{% endif %}
+      <button type="submit" class="primary" {% if qd.count == 0 %}disabled{% endif %}>
+        Deploy {{ qd.title.lower() }} now
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 <section class="kpi-grid">
   <div class="kpi-card">
     <p class="kpi-label">Compliance</p>

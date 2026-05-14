@@ -9,8 +9,8 @@
 <body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
     <a href="/" class="brand brand-link" aria-label="OctoAssist home">
-      <span class="brand-mark">THIRD OCTOPUS</span>
       <span class="brand-product">OctoAssist</span>
+      <span class="brand-mark" style="font-size:11px;letter-spacing:1.2px;">ITSM</span>
     </a>
     <nav>
       {% if current_user %}
@@ -45,8 +45,8 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <span>&copy; 2026 Third Octopus &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes</span>
-    <span><a href="https://thirdoctopus.com" target="_blank" rel="noopener">thirdoctopus.com</a></span>
+    <span>&copy; 2026 OctoAssist ITSM &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes</span>
+    <span class="meta" style="font-size:11px;">v0.2 &middot; tenant: {{ tenant.name if tenant else "—" }}</span>
   </footer>
 </body>
 </html>

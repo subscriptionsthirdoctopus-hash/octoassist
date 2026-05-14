@@ -54,11 +54,36 @@ def patches_home(
     kpi = patches_svc.patch_kpis(db, tid)
     vendors = patches_svc.fleet_vendor_breakdown(db, tid)
     vendor_chart_data = [(v["vendor"], v["total"]) for v in vendors[:10]]
+
+    # Build the one-click quick-deploy cards. Severity-based cards always
+    # appear; vendor-based cards appear for the top 3 vendors with > 0 patches.
+    sev_counts = {k: v for k, v in sev}
+    quick_deploy_options = [
+        {"title": "Critical patches", "severity": "critical", "vendor": None,
+         "count": sev_counts.get("critical", 0),
+         "color": "#dc2626", "pill_class": "critical",
+         "subtitle": "All outstanding critical patches across the fleet — security fixes that should ship now."},
+        {"title": "Important patches", "severity": "important", "vendor": None,
+         "count": sev_counts.get("important", 0),
+         "color": "#d97706", "pill_class": "high",
+         "subtitle": "All outstanding important patches — feature + non-critical security fixes."},
+    ]
+    top_vendors_with_patches = [v for v in vendors if v["total"] > 0][:3]
+    for v in top_vendors_with_patches:
+        quick_deploy_options.append({
+            "title": f"{v['vendor']} updates",
+            "severity": None, "vendor": v["vendor"],
+            "count": v["total"],
+            "color": "#2563eb", "pill_class": "medium",
+            "subtitle": f"{v['packages']} distinct packages from {v['vendor']} across the fleet.",
+        })
+
     return templates.TemplateResponse(
         request=request, name="patches_list.html",
         context=_ctx(user, db,
                      rows=rows, kpi=kpi,
                      vendors=vendors,
+                     quick_deploy_options=quick_deploy_options,
                      chart_severity=charts.donut(sev, size=200),
                      chart_top=charts.bars_h(top, width=540, label_w=240),
                      chart_vendors=charts.bars_h(vendor_chart_data, width=540, label_w=200)),
@@ -67,6 +92,35 @@ def patches_home(
 
 # IMPORTANT: the literal paths below MUST be declared before /patches/{agent_id}
 # so they aren't matched as int route params.
+
+@router.post("/patches/quick-deploy")
+def quick_deploy(
+    severity: str = Form(""),
+    vendor: str = Form(""),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """One-click "Deploy this category now" — Intune / Zoho Endpoint Central style.
+
+    Creates a patch window, ticks all matching candidate packages, sets
+    auto_execute=True, and flips to in_progress in a single round-trip.
+    The agent picks up the work on the next check-in.
+    """
+    sev_enum: PatchSeverity | None = None
+    if severity.strip():
+        try:
+            sev_enum = PatchSeverity(severity.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid severity")
+    vendor = (vendor or "").strip() or None
+    if sev_enum is None and vendor is None:
+        raise HTTPException(status_code=400, detail="Pick a severity or vendor")
+    win = patches_svc.quick_deploy_category(
+        db, tenant_id=user.tenant_id, creator=user,
+        severity=sev_enum, vendor=vendor,
+    )
+    return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
+
 
 @router.get("/patches/aging", response_class=HTMLResponse)
 def patches_aging(
