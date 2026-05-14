@@ -634,38 +634,88 @@ def patches_available() -> list[dict]:
             except Exception:
                 pass
     elif platform.system() == "Windows":
-        # Two sources on Windows:
-        #   1. Windows Update via PSWindowsUpdate (KBs)
-        #   2. Generic third-party software via winget (Chrome, Adobe, Zoom, etc.)
+        # Windows patches come from THREE sources:
+        #   1. Windows Update + Microsoft Update catalog (drivers, .NET, OEM
+        #      hardware, AI components) via PSWindowsUpdate -MicrosoftUpdate
+        #   2. Direct COM Microsoft.Update.Searcher (fallback / completeness)
+        #   3. winget upgrade — third-party software (Chrome, Adobe, Zoom, …)
+        #
+        # The default `Get-WindowsUpdate` (no -MicrosoftUpdate) ONLY scans the
+        # Windows Update service and misses drivers, .NET Framework updates,
+        # ASUS/Dell/HP hardware updates, Phi Silica AI components, etc. —
+        # exactly the items end-users see in Settings → Windows Update.
+        ps_win_update = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+if (-not (Get-Module -ListAvailable PSWindowsUpdate)) { Write-Output '[]'; exit 0 }
+Import-Module PSWindowsUpdate
+
+# Make sure the Microsoft Update service (broader catalog) is registered.
+try {
+    $sm = New-Object -ComObject Microsoft.Update.ServiceManager
+    if (-not ($sm.Services | Where-Object { $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' })) {
+        # 7 = AllowOnlineRegistration + RegisterServiceWithAU + AddServiceFlag
+        $sm.AddService2('7971f918-a847-4430-9279-4a52d1efe18d', 7, '') | Out-Null
+    }
+} catch {}
+
+# Scan both Windows Update + Microsoft Update.
+$rows = Get-WindowsUpdate -MicrosoftUpdate -ErrorAction SilentlyContinue
+if (-not $rows) { Write-Output '[]'; exit 0 }
+if ($rows -isnot [System.Array]) { $rows = @($rows) }
+$rows | ForEach-Object {
+    $cat = ''
+    try { $cat = ($_.Categories | ForEach-Object { $_.Name }) -join ',' } catch {}
+    [pscustomobject]@{
+        KB           = ($_.KB -as [string]) -replace '^KB',''
+        Title        = $_.Title
+        MsrcSeverity = "$($_.MsrcSeverity)"
+        Categories   = $cat
+        SizeMB       = if ($_.Size) { [math]::Round($_.Size/1MB, 1) } else { $null }
+    }
+} | ConvertTo-Json -Compress -Depth 3
+"""
         try:
             r = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "if (Get-Module -ListAvailable PSWindowsUpdate) { "
-                 "Import-Module PSWindowsUpdate; "
-                 "Get-WindowsUpdate -ErrorAction SilentlyContinue | "
-                 "Select-Object KB, Title, MsrcSeverity | ConvertTo-Json -Compress "
-                 "} else { '[]' }"],
-                capture_output=True, text=True, timeout=120,
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_win_update],
+                capture_output=True, text=True, timeout=180,
             )
             data = json.loads(r.stdout or "[]")
             if isinstance(data, dict):
                 data = [data]
             for u in data:
-                kb = u.get("KB", "") or ""
-                title = u.get("Title", "")
-                sev = (u.get("MsrcSeverity") or "unknown").lower()
-                if sev not in ("critical", "important", "moderate", "low", "unknown"):
-                    sev = "unknown"
+                kb = (u.get("KB") or "").strip()
+                title = u.get("Title") or ""
+                cats = (u.get("Categories") or "").lower()
+                sev = (u.get("MsrcSeverity") or "").strip().lower()
+                # Derive severity if MsrcSeverity is blank — drivers, .NET
+                # Framework, Phi Silica etc. typically come without severity.
+                if sev not in ("critical", "important", "moderate", "low"):
+                    if "security" in cats:    sev = "important"
+                    elif "critical" in cats:  sev = "critical"
+                    elif "driver" in cats:    sev = "moderate"
+                    else:                     sev = "moderate"
+                name = (f"KB{kb}" if kb else title[:80]) or "update"
+                # Tag the source so the dashboard can distinguish driver /
+                # Windows / .NET / OEM updates.
+                if "driver" in cats:
+                    source = "windows-update:driver"
+                elif ".net" in title.lower() or ".net" in cats:
+                    source = "windows-update:dotnet"
+                elif kb:
+                    source = "windows-update:kb"
+                else:
+                    source = "windows-update:other"
                 out.append({
-                    "name": kb or (title[:80] or "update"),
-                    "current_version": None,
+                    "name":              name,
+                    "current_version":   None,
                     "available_version": None,
-                    "severity": sev,
-                    "source": "windows-update",
-                    "title": title,
+                    "severity":          sev,
+                    "source":            source,
+                    "title":             title,
                 })
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.warning("Windows Update scan failed: %s", e)
+
         # Phase 7: winget — generic third-party software updates.
         out.extend(_winget_available_updates())
     return out[:5000]
@@ -890,13 +940,19 @@ def _install_windows_update(kb_or_name: str) -> dict:
         ps_arg = f"-KBArticleID '{kb_or_name}'"
     else:
         ps_arg = f"-Title '{kb_or_name}'"
+    # Install via PSWindowsUpdate. -MicrosoftUpdate matches the scanner so
+    # we can deploy drivers, .NET, OEM hardware, AI components — same set
+    # the end-user would see in Settings → Windows Update.
     proc = subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
          "if (-not (Get-Module -ListAvailable PSWindowsUpdate)) { "
          "  Write-Error 'PSWindowsUpdate module not installed'; exit 2 }; "
          "Import-Module PSWindowsUpdate; "
-         f"Install-WindowsUpdate {ps_arg} -AcceptAll -IgnoreReboot -Confirm:$false"],
-        capture_output=True, text=True, timeout=1200,
+         "try { $sm = New-Object -ComObject Microsoft.Update.ServiceManager; "
+         "  if (-not ($sm.Services | ? { $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' })) { "
+         "    $sm.AddService2('7971f918-a847-4430-9279-4a52d1efe18d', 7, '') | Out-Null } } catch {}; "
+         f"Install-WindowsUpdate -MicrosoftUpdate {ps_arg} -AcceptAll -IgnoreReboot -Confirm:$false"],
+        capture_output=True, text=True, timeout=1800,
     )
     finished = _now_iso()
     return {
