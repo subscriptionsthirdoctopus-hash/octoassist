@@ -41,7 +41,7 @@
         {% if snapshot.os.product_key %}
           <code id="winkey-{{ agent.id }}" style="font-family:ui-monospace,monospace;font-size:12.5px;letter-spacing:0.5px;">{{ snapshot.os.product_key }}</code>
           <button type="button" class="link-button" style="margin-left:6px;font-size:12px;"
-                  onclick="(function(){{const t=document.getElementById('winkey-{{ agent.id }}').innerText;navigator.clipboard&&navigator.clipboard.writeText(t);event.target.innerText='copied';setTimeout(()=>event.target.innerText='copy',900);}})()">copy</button>
+                  onclick="copyWinKey({{ agent.id }}, this)">copy</button>
         {% else %}
           <span class="meta" style="font-size:12px;">— (no OA3 marker in firmware — typical for non-OEM / retail / VM)</span>
         {% endif %}
@@ -120,4 +120,23 @@
 </section>
 
 {% endif %}
+
+<script>
+function copyWinKey(agentId, btn) {
+  var el = document.getElementById('winkey-' + agentId);
+  if (!el) return;
+  var txt = el.innerText.trim();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt);
+  } else {
+    var r = document.createRange();
+    r.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+  }
+  var orig = btn.innerText;
+  btn.innerText = 'copied';
+  setTimeout(function () { btn.innerText = orig; }, 900);
+}
+</script>
 {% endblock %}
