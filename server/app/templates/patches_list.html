@@ -46,6 +46,7 @@
           onsubmit="return confirm('Deploy {{ qd.count }} {{ qd.title.lower() }} now?\n\nA patch window will be created and marked in_progress immediately. Agents pick up the work on next check-in.');">
       {% if qd.severity %}<input type="hidden" name="severity" value="{{ qd.severity }}">{% endif %}
       {% if qd.vendor %}<input type="hidden" name="vendor" value="{{ qd.vendor }}">{% endif %}
+      {% if qd.all %}<input type="hidden" name="all" value="1">{% endif %}
       <button type="submit" class="primary" {% if qd.count == 0 %}disabled{% endif %}>
         Deploy {{ qd.title.lower() }} now
       </button>

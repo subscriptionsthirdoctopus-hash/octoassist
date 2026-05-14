@@ -419,6 +419,7 @@ def quick_deploy_category(
     creator: User,
     severity: PatchSeverity | None = None,
     vendor: str | None = None,
+    all_severities: bool = False,
 ) -> PatchWindow:
     """Intune / Zoho Endpoint Central-style one-click deploy.
 
@@ -426,18 +427,22 @@ def quick_deploy_category(
     auto-selects all matching candidate packages, so the agent picks the
     job up on its next check-in (no further admin action required).
 
-    Either `severity` or `vendor` must be set. The window's name and
-    description are auto-generated from the chosen filter + IST timestamp.
+    Exactly one of (severity, vendor, all_severities) must indicate intent.
     """
     from datetime import timezone as _tz, timedelta as _td
 
-    if severity is None and not vendor:
-        raise ValueError("quick_deploy_category requires severity or vendor")
+    if severity is None and not vendor and not all_severities:
+        raise ValueError("quick_deploy_category requires severity, vendor, or all_severities")
 
     IST = _tz(_td(hours=5, minutes=30), name="IST")
     now_ist = _now().astimezone(IST).strftime("%Y-%m-%d %H:%M IST")
 
-    if severity is not None:
+    if all_severities:
+        name = f"Quick deploy — All pending patches — {now_ist}"
+        desc = ("Auto-created one-click deployment for ALL currently-missing "
+                "patches across the fleet, regardless of severity. "
+                "Started immediately, auto-executes on next agent check-in.")
+    elif severity is not None:
         label = severity.value.title()
         name = f"Quick deploy — {label} severity — {now_ist}"
         desc = (f"Auto-created one-click deployment for all currently-missing "
@@ -474,6 +479,53 @@ def quick_deploy_category(
     db.refresh(win)
 
     # Flip straight to in_progress so the next agent check-in picks it up.
+    transition_window(db, window=win, new_status=PatchWindowStatus.in_progress)
+    return win
+
+
+def deploy_to_single_endpoint(
+    db: Session, *,
+    tenant_id: int,
+    creator: User,
+    agent_id: int,
+    package_names: list[str],
+) -> PatchWindow:
+    """Per-endpoint hand-pick deploy. Creates an in_progress window, scoped
+    to one agent hostname pattern, with auto_execute=True and the admin's
+    chosen package list pre-selected. Agent picks up on next check-in.
+    """
+    from datetime import timezone as _tz, timedelta as _td
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.tenant_id != tenant_id:
+        raise ValueError("agent not found in this tenant")
+    if not package_names:
+        raise ValueError("no packages selected")
+
+    IST = _tz(_td(hours=5, minutes=30), name="IST")
+    now_ist = _now().astimezone(IST).strftime("%Y-%m-%d %H:%M IST")
+    name = f"Deploy to {agent.hostname} — {len(package_names)} patches — {now_ist}"
+    desc = (f"Hand-picked deployment of {len(package_names)} patches to "
+            f"{agent.hostname}. Auto-executes on next agent check-in.")
+
+    win = create_window(
+        db,
+        tenant_id=tenant_id, creator=creator,
+        name=name, description=desc,
+        severity_filter=None,
+        hostname_pattern=agent.hostname,  # exact-match LIKE
+        scheduled_for=_now(),
+        notes=f"hand-pick from /patches/{agent_id}",
+    )
+    win.auto_execute = True
+    # Sanitise package list against this agent's actual missing patches
+    valid = {n for (n,) in db.query(PatchObservation.package_name)
+                             .filter(PatchObservation.agent_id == agent_id,
+                                     PatchObservation.resolved_at.is_(None))
+                             .all()}
+    chosen = sorted({p for p in package_names if p in valid})
+    win.selected_packages = chosen if chosen else None
+    db.commit()
+    db.refresh(win)
     transition_window(db, window=win, new_status=PatchWindowStatus.in_progress)
     return win
 

@@ -59,15 +59,24 @@ def patches_home(
     # Build the one-click quick-deploy cards. Severity-based cards only —
     # vendor cards intentionally dropped (Linux distro card was misleading).
     sev_counts = {k: v for k, v in sev}
+    all_count = sum(sev_counts.values())
     quick_deploy_options = [
-        {"title": "Critical patches", "severity": "critical", "vendor": None,
+        {"title": "Critical patches", "severity": "critical", "vendor": None, "all": False,
          "count": sev_counts.get("critical", 0),
          "color": "#dc2626", "pill_class": "critical",
-         "subtitle": "All outstanding critical Windows patches across the fleet — security fixes that should ship now."},
-        {"title": "Important patches", "severity": "important", "vendor": None,
+         "subtitle": "Outstanding critical Windows patches — security fixes that should ship now."},
+        {"title": "Important patches", "severity": "important", "vendor": None, "all": False,
          "count": sev_counts.get("important", 0),
          "color": "#d97706", "pill_class": "high",
-         "subtitle": "All outstanding important Windows patches — feature + non-critical security fixes."},
+         "subtitle": "Important Windows patches — feature + non-critical security fixes."},
+        {"title": "Moderate patches", "severity": "moderate", "vendor": None, "all": False,
+         "count": sev_counts.get("moderate", 0),
+         "color": "#0891b2", "pill_class": "medium",
+         "subtitle": "Drivers, .NET, OEM hardware, AI components — non-security but recommended."},
+        {"title": "All pending patches", "severity": None, "vendor": None, "all": True,
+         "count": all_count,
+         "color": "#7c3aed", "pill_class": "low",
+         "subtitle": "Push everything outstanding across all severities. Equivalent to clicking 'Download & install all' in Windows Update."},
     ]
 
     return templates.TemplateResponse(
@@ -89,14 +98,15 @@ def patches_home(
 def quick_deploy(
     severity: str = Form(""),
     vendor: str = Form(""),
+    all_severities: int = Form(0, alias="all"),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     """One-click "Deploy this category now" — Intune / Zoho Endpoint Central style.
 
-    Creates a patch window, ticks all matching candidate packages, sets
-    auto_execute=True, and flips to in_progress in a single round-trip.
-    The agent picks up the work on the next check-in.
+    severity → push everything of that severity
+    vendor   → push everything from that vendor
+    all=1    → push every pending patch regardless of severity
     """
     sev_enum: PatchSeverity | None = None
     if severity.strip():
@@ -105,11 +115,11 @@ def quick_deploy(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid severity")
     vendor = (vendor or "").strip() or None
-    if sev_enum is None and vendor is None:
-        raise HTTPException(status_code=400, detail="Pick a severity or vendor")
+    if sev_enum is None and vendor is None and not all_severities:
+        raise HTTPException(status_code=400, detail="Pick a severity, vendor, or all")
     win = patches_svc.quick_deploy_category(
         db, tenant_id=user.tenant_id, creator=user,
-        severity=sev_enum, vendor=vendor,
+        severity=sev_enum, vendor=vendor, all_severities=bool(all_severities),
     )
     return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
 
@@ -317,6 +327,26 @@ def patches_export_csv(user: User = Depends(require_staff), db: Session = Depend
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="octoassist-patches.csv"'},
     )
+
+
+@router.post("/patches/{agent_id}/deploy")
+def patches_deploy_to_agent(
+    agent_id: int,
+    package: list[str] = Form(default=[]),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """Push admin-selected packages to one specific endpoint."""
+    if not package:
+        raise HTTPException(status_code=400, detail="No packages selected")
+    try:
+        win = patches_svc.deploy_to_single_endpoint(
+            db, tenant_id=user.tenant_id, creator=user,
+            agent_id=agent_id, package_names=package,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
 
 
 # Numeric agent id — DEFINED LAST so the literal paths above match first.
