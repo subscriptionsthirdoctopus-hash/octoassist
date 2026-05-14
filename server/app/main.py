@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from .jinja_filters import install_on
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .api.agent import router as agent_router
 from .api.agent_deploy import router as agent_deploy_router
@@ -45,6 +46,13 @@ app = FastAPI(
 # bulk-updating every form template to include the hidden csrf field.
 # Will land in next turn together with a unified Jinja2 template config.
 # app.add_middleware(CsrfMiddleware)
+
+# Trust the X-Forwarded-Proto / X-Forwarded-For headers set by hrms-nginx so
+# request.url.scheme reports "https" when the client used HTTPS. Without this
+# the installer script bakes "http://..." into the agent config even though
+# the user requested it via https://octoassist.thirdoctopus.com.
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key,
