@@ -78,20 +78,72 @@ if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 }}
 Write-Ok "Running as Administrator"
 
-# 2. Python
-$pyCmd = Get-Command python -ErrorAction SilentlyContinue
-if (-not $pyCmd) {{
-    Write-Step "Python not in PATH — installing Python 3.12 via winget"
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {{
-        throw "winget not available — install Python 3.10+ manually first."
+# 2. Python — careful here: Windows 10/11 ships an "App Execution Alias"
+#    stub at %LOCALAPPDATA%\Microsoft\WindowsApps\python.exe that LOOKS like
+#    Python but just opens the Microsoft Store and exits 9009. We have to
+#    detect it and install the real thing.
+function Test-RealPython($path) {{
+    if (-not $path) {{ return $false }}
+    if ($path -match "\\Microsoft\\WindowsApps\\python(3)?\.exe$") {{ return $false }}
+    try {{
+        $out = & $path --version 2>&1
+        if ($LASTEXITCODE -ne 0) {{ return $false }}
+        return ($out -match "^Python \d+\.\d+")
+    }} catch {{ return $false }}
+}}
+
+# First try the official Python Launcher (py.exe) — always points at a real install.
+$pyExe = $null
+$launcher = Get-Command py -ErrorAction SilentlyContinue
+if ($launcher) {{
+    try {{
+        $candidate = (& $launcher.Path -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
+        if (Test-RealPython $candidate) {{ $pyExe = $candidate }}
+    }} catch {{}}
+}}
+# Else try `python` in PATH (skipping the Store stub)
+if (-not $pyExe) {{
+    foreach ($cand in (Get-Command python -All -ErrorAction SilentlyContinue)) {{
+        if (Test-RealPython $cand.Path) {{ $pyExe = $cand.Path; break }}
     }}
-    winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
+}}
+
+if (-not $pyExe) {{
+    Write-Step "Real Python not found (the Store alias doesn't count) — installing Python 3.12 via winget"
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {{
+        throw "winget not available — install Python 3.10+ manually from python.org first."
+    }}
+    winget install --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements --scope machine 2>&1 | Out-Host
     # Refresh PATH in this session
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    $pyCmd = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $pyCmd) {{ throw "Python install completed but `python` still not in PATH. Restart PowerShell and re-run." }}
+
+    # Find python.exe in the standard install locations (winget machine scope = Program Files)
+    $search = @(
+        "$env:ProgramFiles\Python312\python.exe",
+        "$env:ProgramFiles\Python311\python.exe",
+        "$env:ProgramFiles\Python310\python.exe",
+        "${{env:ProgramFiles(x86)}}\Python312\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe"
+    )
+    foreach ($p in $search) {{
+        if ((Test-Path $p) -and (Test-RealPython $p)) {{ $pyExe = $p; break }}
+    }}
+    if (-not $pyExe) {{
+        # Last-ditch: try the launcher again post-install
+        $launcher = Get-Command py -ErrorAction SilentlyContinue
+        if ($launcher) {{
+            $candidate = (& $launcher.Path -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
+            if (Test-RealPython $candidate) {{ $pyExe = $candidate }}
+        }}
+    }}
+    if (-not $pyExe) {{
+        throw "Python install completed but no real python.exe found. Close PowerShell, open a NEW elevated PowerShell, and re-run the one-liner."
+    }}
 }}
-Write-Ok ("Python at " + $pyCmd.Path)
+Write-Ok ("Python at " + $pyExe)
+$pyCmd = [PSCustomObject]@{{ Path = $pyExe }}
 
 # 3. Install dir + download agent script
 Write-Step "Installing agent script to $INSTALL_DIR"
