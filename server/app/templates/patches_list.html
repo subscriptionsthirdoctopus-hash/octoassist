@@ -214,14 +214,16 @@
     <p class="meta" style="margin:0 0 14px;">
       The new agent will <strong>auto-update on its next scheduled check-in</strong> (every 6 hours).
       To roll it out <em>right now</em>, RDP into the endpoint, open <strong>elevated PowerShell</strong>,
-      and paste this single command. It installs missing dependencies, pulls the latest agent script,
-      applies the Windows Update lock-down, and forces an immediate re-scan.
+      and paste this <strong>one</strong> permanent command. It always pulls the latest refresh logic
+      from the server — you never need to copy a different command, even after future updates.
     </p>
-    <pre id="refresh-cmd" class="code" style="white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;font-size:12px;line-height:1.55;">{% raw %}if (-not (Get-PackageProvider NuGet -ErrorAction SilentlyContinue)) { Install-PackageProvider -Name NuGet -Force -Scope AllUsers | Out-Null }
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-if (-not (Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber }
-Invoke-WebRequest -UseBasicParsing -Uri "https://octoassist.thirdoctopus.com/agent/files/octoassist_agent.py" -OutFile "C:\Program Files\OctoAssist Agent\octoassist_agent.py"
-& "C:\Program Files\Python312\python.exe" "C:\Program Files\OctoAssist Agent\octoassist_agent.py" --once{% endraw %}</pre>
+    <pre id="refresh-cmd" class="code" style="white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;font-size:13px;line-height:1.55;">iex (iwr -useb https://octoassist.thirdoctopus.com/agent/refresh.ps1).Content</pre>
+    <p class="meta" style="margin:10px 0 0;font-size:12px;">
+      What this does (in one HTTPS fetch + run):
+      installs missing PSWindowsUpdate + NuGet → pulls the newest <code>octoassist_agent.py</code>
+      → locates real Python → runs <code>--once</code> to apply the Windows Update lock-down
+      and post a fresh inventory + patch scan → tails the agent log.
+    </p>
     <div class="row-between" style="margin-top:14px;align-items:center;">
       <p class="meta" style="margin:0;font-size:12px;">
         After it finishes the endpoint reports back within ~30 seconds and this row will flip to
