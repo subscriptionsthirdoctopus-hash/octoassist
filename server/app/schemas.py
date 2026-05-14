@@ -29,6 +29,12 @@ class CheckinRequest(BaseModel):
     # Phase 4: patches available (not installed yet) on this endpoint.
     # Each entry: {name, current_version?, available_version?, severity?, source?, title?}
     patches: list[dict[str, Any]] = Field(default_factory=list)
+    # Phase 9: patch-scan diagnostics — {scanned_at, scan_success, psw_installed,
+    # winget_available, sources_checked, pending_count, fully_updated}
+    patch_scan: dict[str, Any] | None = None
+    # Phase 9: result of applying the WindowsUpdate Group-Policy lock-down
+    # — {applied, reason}. Server uses `applied` for the dashboard banner.
+    update_policy: dict[str, Any] | None = None
 
 
 class CheckinResponse(BaseModel):
