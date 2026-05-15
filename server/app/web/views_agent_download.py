@@ -229,7 +229,11 @@ Write-Ok "Config written"
 Write-Step "Registering Scheduled Task '$TASK_NAME'"
 Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
 
-$action      = New-ScheduledTaskAction  -Execute $pyCmd.Path -Argument ('"' + $AGENT_SCRIPT + '"')
+# Prefer pythonw.exe (no console window, GUI subsystem) so even if any
+# subprocess code path forgets CREATE_NO_WINDOW, there's no console flash.
+$pyExeForTask = $pyExe -replace 'python\.exe$', 'pythonw.exe'
+if (-not (Test-Path $pyExeForTask)) {{ $pyExeForTask = $pyExe }}  # fall back if pythonw missing
+$action      = New-ScheduledTaskAction  -Execute $pyExeForTask -Argument ('"' + $AGENT_SCRIPT + '"')
 $bootTrig    = New-ScheduledTaskTrigger -AtStartup
 $repeatTrig  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
                                         -RepetitionInterval (New-TimeSpan -Minutes 15) `

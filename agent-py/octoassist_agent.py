@@ -47,6 +47,63 @@ from pathlib import Path
 
 VERSION = "0.1.0"
 
+# Windows: hide every subprocess console window. SYSTEM-launched processes
+# (which is how the daemon runs in production) won't show desktop windows
+# to the interactive user anyway, but CREATE_NO_WINDOW is a belt-and-braces
+# guarantee for both SYSTEM and the manual `--once` mode that admins run
+# during refresh, where a brief PowerShell flash COULD otherwise appear.
+_CREATE_NO_WINDOW = 0x08000000 if platform.system() == "Windows" else 0
+
+
+def _run(cmd, **kwargs):
+    """Wrapper around subprocess.run that hides any console window on Windows.
+
+    Identical contract to subprocess.run; just sets creationflags. Use this
+    everywhere instead of subprocess.run when invoking PowerShell / cmd /
+    msg / shutdown etc.
+    """
+    if _CREATE_NO_WINDOW:
+        kwargs.setdefault("creationflags", _CREATE_NO_WINDOW)
+    return subprocess.run(cmd, **kwargs)
+
+
+def _user_visible_reboot_prompt() -> None:
+    """Show the end user a 'restart your computer' notification and schedule
+    an automatic restart 2 hours from now (cancelable with `shutdown /a`).
+
+    Runs in two layers:
+      1. msg.exe sends a dialog to every active session — appears as a
+         standard Windows alert with an OK button. Times out after 10 min.
+      2. shutdown.exe /r /t 7200 schedules an OS-level restart with the
+         standard Windows balloon countdown ('Windows will restart in 2
+         hours to install updates'). User sees the system tray notification
+         and can save work; an admin can abort with `shutdown /a` if needed.
+
+    Both calls fire as SYSTEM (the daemon's context) but msg.exe + shutdown
+    are designed to surface in interactive user sessions.
+    """
+    if platform.system() != "Windows":
+        return
+    try:
+        _run(["msg.exe", "*", "/TIME:600", "/W",
+              "OctoAssist: Security updates have been installed. "
+              "Please save your work and restart your computer to "
+              "complete installation. An automatic restart is scheduled "
+              "in 2 hours."],
+             timeout=20)
+    except Exception as e:  # noqa: BLE001
+        log.warning("msg.exe popup failed: %s", e)
+    try:
+        # /f forces close of apps (with grace period); /t 7200 = 2 hours.
+        # Use /a to abort. /c is the user-visible reason text.
+        _run(["shutdown.exe", "/r", "/t", "7200", "/f",
+              "/c", "OctoAssist: Security updates installed. "
+                    "Restart in 2 hours. Save your work."],
+             timeout=15)
+        log.info("Scheduled automatic restart in 2 hours (shutdown /r /t 7200)")
+    except Exception as e:  # noqa: BLE001
+        log.warning("shutdown.exe schedule failed: %s", e)
+
 # --------------------------------------------------------------------- paths
 
 if os.name == "nt":
@@ -135,7 +192,7 @@ def get_machine_id() -> str:
                 continue
     if platform.system() == "Darwin":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["ioreg", "-d2", "-c", "IOPlatformExpertDevice"],
                 capture_output=True, text=True, timeout=10,
             )
@@ -146,7 +203,7 @@ def get_machine_id() -> str:
             pass
     if os.name == "nt":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["wmic", "csproduct", "get", "uuid"],
                 capture_output=True, text=True, timeout=10,
             )
@@ -158,7 +215,7 @@ def get_machine_id() -> str:
             pass
         # Fallback via PowerShell
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "(Get-CimInstance Win32_ComputerSystemProduct).UUID"],
                 capture_output=True, text=True, timeout=10,
@@ -199,8 +256,8 @@ def _linux_os_info() -> dict:
 
 def _macos_os_info() -> dict:
     try:
-        v = subprocess.run(["sw_vers", "-productVersion"], capture_output=True, text=True, timeout=5).stdout.strip()
-        b = subprocess.run(["sw_vers", "-buildVersion"], capture_output=True, text=True, timeout=5).stdout.strip()
+        v = _run(["sw_vers", "-productVersion"], capture_output=True, text=True, timeout=5).stdout.strip()
+        b = _run(["sw_vers", "-buildVersion"], capture_output=True, text=True, timeout=5).stdout.strip()
     except Exception:
         v, b = "", ""
     return {
@@ -248,7 +305,7 @@ $install = if ($os.InstallDate) { $os.InstallDate.ToString('yyyy-MM-dd') } else 
 } | ConvertTo-Json -Compress
 """
     try:
-        r = subprocess.run(
+        r = _run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
             capture_output=True, text=True, timeout=20,
         )
@@ -289,13 +346,13 @@ def cpu_info() -> dict:
             pass
     elif platform.system() == "Darwin":
         try:
-            name = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
+            name = _run(["sysctl", "-n", "machdep.cpu.brand_string"],
                                    capture_output=True, text=True, timeout=5).stdout.strip()
         except Exception:
             pass
     elif platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "(Get-CimInstance Win32_Processor)[0].Name"],
                 capture_output=True, text=True, timeout=10,
@@ -318,13 +375,13 @@ def memory_info() -> dict:
             pass
     elif platform.system() == "Darwin":
         try:
-            r = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=5)
+            r = _run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=5)
             return {"total_gb": round(int(r.stdout.strip()) / 1024 / 1024 / 1024, 2)}
         except Exception:
             pass
     elif platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"],
                 capture_output=True, text=True, timeout=10,
@@ -339,7 +396,7 @@ def disks_info() -> list[dict]:
     disks: list[dict] = []
     if platform.system() in ("Linux", "Darwin"):
         try:
-            r = subprocess.run(["df", "-Pk"], capture_output=True, text=True, timeout=10)
+            r = _run(["df", "-Pk"], capture_output=True, text=True, timeout=10)
             for line in r.stdout.splitlines()[1:]:
                 parts = line.split()
                 if len(parts) < 6:
@@ -358,7 +415,7 @@ def disks_info() -> list[dict]:
             pass
     elif platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-CimInstance Win32_LogicalDisk -Filter \"DriveType=3\" | "
                  "Select-Object DeviceID,FileSystem,Size,FreeSpace | "
@@ -386,7 +443,7 @@ def network_info() -> list[dict]:
     nets: list[dict] = []
     if platform.system() == "Linux":
         try:
-            r = subprocess.run(["ip", "-json", "addr"], capture_output=True, text=True, timeout=10)
+            r = _run(["ip", "-json", "addr"], capture_output=True, text=True, timeout=10)
             for nic in json.loads(r.stdout or "[]"):
                 if nic.get("operstate") != "UP" or nic.get("link_type") == "loopback":
                     continue
@@ -397,7 +454,7 @@ def network_info() -> list[dict]:
             pass
     elif platform.system() == "Darwin":
         try:
-            r = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=10)
+            r = _run(["ifconfig"], capture_output=True, text=True, timeout=10)
             cur = None
             for line in r.stdout.splitlines():
                 if line and not line.startswith("\t") and ":" in line:
@@ -415,7 +472,7 @@ def network_info() -> list[dict]:
             pass
     elif platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-NetAdapter | Where-Object Status -eq 'Up' | "
                  "ForEach-Object { $ip = (Get-NetIPAddress -InterfaceIndex $_.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress; "
@@ -445,7 +502,7 @@ def bios_info() -> dict:
         return info
     if platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-CimInstance Win32_BIOS | Select-Object Manufacturer,SMBIOSBIOSVersion,SerialNumber | ConvertTo-Json -Compress"],
                 capture_output=True, text=True, timeout=15,
@@ -469,7 +526,7 @@ def system_info() -> dict:
         return d
     if platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-CimInstance Win32_ComputerSystem | "
                  "Select-Object Manufacturer,Model,Domain,Workgroup,PartOfDomain | ConvertTo-Json -Compress"],
@@ -488,7 +545,7 @@ def system_info() -> dict:
 def logged_in_user() -> str | None:
     if platform.system() in ("Linux", "Darwin"):
         try:
-            r = subprocess.run(["who"], capture_output=True, text=True, timeout=5)
+            r = _run(["who"], capture_output=True, text=True, timeout=5)
             users = []
             for line in r.stdout.splitlines():
                 u = line.split()[0] if line.split() else ""
@@ -499,7 +556,7 @@ def logged_in_user() -> str | None:
             return os.environ.get("USER")
     if platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "(Get-CimInstance Win32_ComputerSystem).UserName"],
                 capture_output=True, text=True, timeout=10,
@@ -514,7 +571,7 @@ def installed_software() -> list[dict]:
     if platform.system() == "Linux":
         out = []
         try:
-            r = subprocess.run(
+            r = _run(
                 ["dpkg-query", "-W", "-f=${Package}|||${Version}|||${Maintainer}\\n"],
                 capture_output=True, text=True, timeout=30,
             )
@@ -528,7 +585,7 @@ def installed_software() -> list[dict]:
         except Exception:
             pass
         try:
-            r = subprocess.run(["rpm", "-qa", "--queryformat",
+            r = _run(["rpm", "-qa", "--queryformat",
                                 "%{NAME}|||%{VERSION}|||%{VENDOR}\n"],
                                capture_output=True, text=True, timeout=30)
             if r.returncode == 0:
@@ -543,7 +600,7 @@ def installed_software() -> list[dict]:
     if platform.system() == "Darwin":
         out = []
         try:
-            r = subprocess.run(["pkgutil", "--pkgs"], capture_output=True, text=True, timeout=10)
+            r = _run(["pkgutil", "--pkgs"], capture_output=True, text=True, timeout=10)
             for line in r.stdout.splitlines():
                 line = line.strip()
                 if line:
@@ -553,7 +610,7 @@ def installed_software() -> list[dict]:
         return out
     if platform.system() == "Windows":
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-ItemProperty 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',"
                  "'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' "
@@ -582,7 +639,7 @@ def patches_available() -> list[dict]:
             env = {**os.environ, "LANG": "C", "LC_ALL": "C"}
             # apt-get update first if recent metadata isn't present (best-effort).
             # We deliberately skip auto-update — it requires root and writes lock files.
-            r = subprocess.run(
+            r = _run(
                 ["apt", "list", "--upgradable"],
                 capture_output=True, text=True, timeout=60, env=env,
             )
@@ -613,7 +670,7 @@ def patches_available() -> list[dict]:
         # Also try dnf check-update for RHEL-family.
         if not out:
             try:
-                r = subprocess.run(
+                r = _run(
                     ["dnf", "-q", "check-update"],
                     capture_output=True, text=True, timeout=60,
                 )
@@ -675,7 +732,7 @@ $rows | ForEach-Object {
 } | ConvertTo-Json -Compress -Depth 3
 """
         try:
-            r = subprocess.run(
+            r = _run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_win_update],
                 capture_output=True, text=True, timeout=180,
             )
@@ -737,7 +794,7 @@ def _winget_available_updates() -> list[dict]:
     out: list[dict] = []
     try:
         # Auto-accept source agreements so first-run doesn't prompt.
-        r = subprocess.run(
+        r = _run(
             ["winget", "upgrade",
              "--include-unknown",
              "--accept-source-agreements"],
@@ -824,18 +881,28 @@ $base = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
 $au   = "$base\AU"
 foreach ($p in @($base, $au)) { if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null } }
 # Hide the Windows Update page in Settings — triggers the "managed by your organisation" banner.
-Set-ItemProperty -Path $base -Name 'SetDisableUXWUAccess' -Type DWord -Value 1
-# Block automatic install — agent drives the schedule via PSWindowsUpdate.
-Set-ItemProperty -Path $au   -Name 'NoAutoUpdate'        -Type DWord -Value 1
-# Don't auto-restart while a user is signed in (the agent picks reboot timing).
-Set-ItemProperty -Path $au   -Name 'NoAutoRebootWithLoggedOnUsers' -Type DWord -Value 1
+Set-ItemProperty -Path $base -Name 'SetDisableUXWUAccess'                        -Type DWord -Value 1
+# Block ALL user access to the Windows Update control panel / settings entry.
+Set-ItemProperty -Path $base -Name 'DisableWindowsUpdateAccess'                  -Type DWord -Value 1
+# Don't connect to the Windows Update internet locations — even if user gets to
+# the UI somehow, "Check for updates" can't reach Microsoft.
+Set-ItemProperty -Path $base -Name 'DoNotConnectToWindowsUpdateInternetLocations' -Type DWord -Value 1
+# Hide the "Get the latest updates as soon as they're available" toggle.
+Set-ItemProperty -Path $base -Name 'IsContinuousInnovationOptedIn'               -Type DWord -Value 0
 # Defer feature + quality updates so end users can't fast-ring themselves.
-Set-ItemProperty -Path $base -Name 'DeferFeatureUpdates'  -Type DWord -Value 1
-Set-ItemProperty -Path $base -Name 'DeferQualityUpdates'  -Type DWord -Value 1
+Set-ItemProperty -Path $base -Name 'DeferFeatureUpdates'                         -Type DWord -Value 1
+Set-ItemProperty -Path $base -Name 'DeferQualityUpdates'                         -Type DWord -Value 1
+# Block automatic install — agent drives the schedule via PSWindowsUpdate.
+# AUOptions=1 = "Never check for updates (not recommended)" — the most
+# restrictive setting; the OS WU service goes idle.
+Set-ItemProperty -Path $au   -Name 'AUOptions'                                   -Type DWord -Value 1
+Set-ItemProperty -Path $au   -Name 'NoAutoUpdate'                                -Type DWord -Value 1
+# Don't auto-restart while a user is signed in (the agent picks reboot timing).
+Set-ItemProperty -Path $au   -Name 'NoAutoRebootWithLoggedOnUsers'               -Type DWord -Value 1
 'OK'
 """
     try:
-        r = subprocess.run(
+        r = _run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
             capture_output=True, text=True, timeout=15,
         )
@@ -857,7 +924,7 @@ def _patch_scan_metadata() -> dict:
     psw = False
     winget_ok = False
     try:
-        r = subprocess.run(
+        r = _run(
             ["powershell", "-NoProfile", "-Command",
              "if (Get-Module -ListAvailable PSWindowsUpdate) { 'yes' } else { 'no' }"],
             capture_output=True, text=True, timeout=15,
@@ -866,7 +933,7 @@ def _patch_scan_metadata() -> dict:
     except Exception:
         pass
     try:
-        r = subprocess.run(["winget", "--version"], capture_output=True, text=True, timeout=8)
+        r = _run(["winget", "--version"], capture_output=True, text=True, timeout=8)
         winget_ok = r.returncode == 0
     except Exception:
         pass
@@ -912,7 +979,7 @@ def collect_snapshot() -> dict:
 def _install_apt(pkg: str) -> dict:
     """apt-get install -y <pkg>. Returns attempt dict ready to POST."""
     started = _now_iso()
-    proc = subprocess.run(
+    proc = _run(
         ["apt-get", "-q", "-y", "-o", "Dpkg::Options::=--force-confold",
          "-o", "Dpkg::Options::=--force-confdef", "install", pkg],
         capture_output=True, text=True, timeout=900,
@@ -959,7 +1026,7 @@ def _install_windows_update(kb_or_name: str) -> dict:
     # Install via PSWindowsUpdate. -MicrosoftUpdate matches the scanner so
     # we can deploy drivers, .NET, OEM hardware, AI components — same set
     # the end-user would see in Settings → Windows Update.
-    proc = subprocess.run(
+    proc = _run(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
          "if (-not (Get-Module -ListAvailable PSWindowsUpdate)) { "
          "  Write-Error 'PSWindowsUpdate module not installed'; exit 2 }; "
@@ -988,7 +1055,7 @@ def _install_winget(package_id: str) -> dict:
     """winget upgrade --silent path. Generic third-party software (Chrome / Adobe / Zoom etc.)."""
     started = _now_iso()
     try:
-        proc = subprocess.run(
+        proc = _run(
             ["winget", "upgrade",
              "--id", package_id,
              "--silent",
@@ -1084,6 +1151,8 @@ def execute_pending_deployments(cfg: dict) -> int:
         _http(f"{base}/api/v1/agent/deployments/{target_id}/start", method="POST", token=token)
 
         any_failed = False
+        any_reboot_needed = False
+        any_success = False
         for pkg in packages:
             try:
                 attempt = _install_dispatch(pkg)
@@ -1102,15 +1171,30 @@ def execute_pending_deployments(cfg: dict) -> int:
                      pkg, attempt["exit_code"], attempt["success"])
             if not attempt["success"]:
                 any_failed = True
+            else:
+                any_success = True
+            if attempt.get("needs_reboot"):
+                any_reboot_needed = True
             _http(f"{base}/api/v1/agent/deployments/{target_id}/attempt",
                   method="POST", body=attempt, token=token)
 
         # Finish marker — server reads attempts table to compute final status
+        linux_reboot = Path("/var/run/reboot-required").exists() if is_linux else False
         _http(f"{base}/api/v1/agent/deployments/{target_id}/finish",
               method="POST",
               body={"note": ("Linux apt-get" if is_linux else "Windows Update via PSWindowsUpdate"),
-                    "needs_reboot": Path("/var/run/reboot-required").exists() if is_linux else False},
+                    "needs_reboot": any_reboot_needed or linux_reboot},
               token=token)
+
+        # Phase 9: end-user notification + scheduled restart. Fires only if
+        # something installed successfully AND a reboot is genuinely needed.
+        # Skipped on Linux (the reboot prompt is Windows-specific).
+        if any_success and any_reboot_needed and is_windows:
+            try:
+                _user_visible_reboot_prompt()
+            except Exception as e:  # noqa: BLE001
+                log.warning("reboot prompt failed: %s", e)
+
         processed += 1
 
     return processed
