@@ -934,12 +934,28 @@ def _install_apt(pkg: str) -> dict:
 
 
 def _install_windows_update(kb_or_name: str) -> dict:
-    """PSWindowsUpdate path. Endpoint must have the module installed."""
+    """PSWindowsUpdate path. Endpoint must have the module installed.
+
+    Two install modes:
+      - KB-based (e.g. 'KB5087051')      → -KBArticleID 'KB5087051'
+      - Title-based (e.g. 'ASUSTeK...')  → wildcard -Title '*ASUSTeK*' so a
+        minor version mismatch (200.0.4.0 in DB vs 200.0.4.1 in catalog
+        when MS re-released) still matches.
+
+    Timeout is 2 hours: cumulative security updates + .NET Framework can
+    each take 30-60 min; the previous 30-min cap killed them prematurely.
+    """
     started = _now_iso()
-    if kb_or_name.upper().startswith("KB"):
-        ps_arg = f"-KBArticleID '{kb_or_name}'"
+    p = kb_or_name.strip()
+    if p.upper().startswith("KB") and p[2:].split(maxsplit=1)[0].isdigit():
+        ps_arg = f"-KBArticleID '{p}'"
     else:
-        ps_arg = f"-Title '{kb_or_name}'"
+        # Strip trailing "(version)" so the wildcard match isn't too tight
+        import re as _re
+        title_core = _re.sub(r"\s*\([^)]+\)\s*$", "", p).strip()
+        # PowerShell-escape single quotes
+        safe = title_core.replace("'", "''")
+        ps_arg = f"-Title '*{safe}*'"
     # Install via PSWindowsUpdate. -MicrosoftUpdate matches the scanner so
     # we can deploy drivers, .NET, OEM hardware, AI components — same set
     # the end-user would see in Settings → Windows Update.
@@ -952,7 +968,7 @@ def _install_windows_update(kb_or_name: str) -> dict:
          "  if (-not ($sm.Services | ? { $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' })) { "
          "    $sm.AddService2('7971f918-a847-4430-9279-4a52d1efe18d', 7, '') | Out-Null } } catch {}; "
          f"Install-WindowsUpdate -MicrosoftUpdate {ps_arg} -AcceptAll -IgnoreReboot -Confirm:$false"],
-        capture_output=True, text=True, timeout=1800,
+        capture_output=True, text=True, timeout=7200,
     )
     finished = _now_iso()
     return {
@@ -1006,16 +1022,24 @@ def _install_winget(package_id: str) -> dict:
 def _install_dispatch(package_name: str) -> dict:
     """Pick install method based on package name + OS heuristics.
 
-    Linux           → apt-get
-    Windows + KB    → PSWindowsUpdate
-    Windows + other → winget (Vendor.Product Id like Google.Chrome)
+    Linux                         → apt-get
+    Windows + 'KB12345'           → Install-WindowsUpdate -KBArticleID
+    Windows + 'Vendor.Product'    → winget (one dot, no spaces, no KB)
+    Windows + everything else     → Install-WindowsUpdate -Title (Microsoft
+                                    Update catalog items like driver / ASUS /
+                                    .NET / Phi Silica that come in by Title)
     """
     if platform.system() == "Linux":
         return _install_apt(package_name)
     # Windows
-    if package_name.upper().startswith("KB"):
-        return _install_windows_update(package_name)
-    return _install_winget(package_name)
+    p = package_name.strip()
+    if p.upper().startswith("KB") and p[2:].split(maxsplit=1)[0].isdigit():
+        return _install_windows_update(p)
+    # winget Vendor.Product Id heuristic: at least one dot, no spaces, alnum/-
+    if "." in p and " " not in p and "/" not in p and "(" not in p:
+        return _install_winget(p)
+    # Microsoft Update catalog item identified by Title (no KB, has spaces)
+    return _install_windows_update(p)
 
 
 def execute_pending_deployments(cfg: dict) -> int:

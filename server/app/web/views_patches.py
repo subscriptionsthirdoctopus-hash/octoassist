@@ -280,6 +280,31 @@ def window_transition(
     return RedirectResponse(url=f"/patches/windows/{window_id}", status_code=303)
 
 
+@router.post("/patches/windows/{window_id}/retry-failed")
+def window_retry_failed(
+    window_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """Flip every failed/skipped target back to planned so the agent retries
+    on its next check-in. Useful when a transient timeout (slow Windows
+    Update download, server busy, etc.) killed the original attempt."""
+    from ..models import PatchWindowTargetStatus
+    win = db.get(PatchWindow, window_id)
+    if win is None or win.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    if win.status != PatchWindowStatus.in_progress:
+        raise HTTPException(status_code=409, detail="Window must be in_progress")
+    retried = 0
+    for t in win.targets:
+        if t.status in (PatchWindowTargetStatus.failed, PatchWindowTargetStatus.skipped):
+            t.status = PatchWindowTargetStatus.planned
+            t.note = ((t.note or "") + " · retry queued").strip(" ·")[:1000]
+            retried += 1
+    db.commit()
+    return RedirectResponse(url=f"/patches/windows/{window_id}", status_code=303)
+
+
 @router.post("/patches/windows/{window_id}/targets/{target_id}")
 def window_target_update(
     window_id: int,

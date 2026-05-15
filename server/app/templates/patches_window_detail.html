@@ -46,6 +46,22 @@
 </section>
 {% endif %}
 
+{% if window.status.value == 'in_progress' and (progress.counts.failed + progress.counts.skipped) > 0 %}
+<section class="card" style="margin-bottom:16px;background:#fee2e2;border-left:4px solid #dc2626;">
+  <h3 style="margin:0 0 6px;font-size:14px;">⚠ {{ progress.counts.failed }} failed / {{ progress.counts.skipped }} skipped target(s)</h3>
+  <p style="margin:0 0 10px;font-size:13px;line-height:1.5;">
+    The most common cause is the previous 30-minute install timeout for
+    cumulative security KBs + .NET Framework updates (now lifted to 2 hours
+    in the latest agent). Run <code>refresh.ps1</code> on the endpoint to
+    auto-update the agent, then click <strong>Retry failed targets</strong> below —
+    the next check-in re-attempts the same packages with the new timeout.
+  </p>
+  <form method="post" action="/patches/windows/{{ window.id }}/retry-failed" class="inline-form">
+    <button type="submit" class="primary">Retry failed targets</button>
+  </form>
+</section>
+{% endif %}
+
 <section class="cards">
   <div class="card">
     <h3>Filter</h3>
