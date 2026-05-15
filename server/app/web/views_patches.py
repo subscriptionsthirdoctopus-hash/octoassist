@@ -99,14 +99,18 @@ def quick_deploy(
     severity: str = Form(""),
     vendor: str = Form(""),
     all_severities: int = Form(0, alias="all"),
+    scheduled_for: str = Form(""),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    """One-click "Deploy this category now" — Intune / Zoho Endpoint Central style.
+    """One-click "Deploy this category now/later" — Intune / Zoho style.
 
-    severity → push everything of that severity
-    vendor   → push everything from that vendor
-    all=1    → push every pending patch regardless of severity
+    severity        → push everything of that severity
+    vendor          → push everything from that vendor
+    all=1           → push every pending patch regardless of severity
+    scheduled_for   → ISO datetime (IST, from <input type=datetime-local>);
+                      if in the future, window is parked in 'scheduled'
+                      state and auto-promoted by the scheduler.
     """
     sev_enum: PatchSeverity | None = None
     if severity.strip():
@@ -117,9 +121,11 @@ def quick_deploy(
     vendor = (vendor or "").strip() or None
     if sev_enum is None and vendor is None and not all_severities:
         raise HTTPException(status_code=400, detail="Pick a severity, vendor, or all")
+    when = _parse_dt(scheduled_for)  # already IST-aware via parse_ist_input
     win = patches_svc.quick_deploy_category(
         db, tenant_id=user.tenant_id, creator=user,
         severity=sev_enum, vendor=vendor, all_severities=bool(all_severities),
+        scheduled_for=when,
     )
     return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
 
@@ -358,16 +364,19 @@ def patches_export_csv(user: User = Depends(require_staff), db: Session = Depend
 def patches_deploy_to_agent(
     agent_id: int,
     package: list[str] = Form(default=[]),
+    scheduled_for: str = Form(""),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    """Push admin-selected packages to one specific endpoint."""
+    """Push admin-selected packages to one specific endpoint (now or scheduled)."""
     if not package:
         raise HTTPException(status_code=400, detail="No packages selected")
+    when = _parse_dt(scheduled_for)
     try:
         win = patches_svc.deploy_to_single_endpoint(
             db, tenant_id=user.tenant_id, creator=user,
             agent_id=agent_id, package_names=package,
+            scheduled_for=when,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

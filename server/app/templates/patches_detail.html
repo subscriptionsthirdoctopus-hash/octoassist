@@ -94,12 +94,19 @@
   <div class="card" style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
     <p class="meta" style="margin:0;font-size:13px;">
       <strong id="pick-count">0</strong> patch(es) selected.
-      Pushes a new in-progress window scoped to <strong>{{ agent.hostname }}</strong>; agent installs on next check-in
-      via <code>Install-WindowsUpdate -MicrosoftUpdate -KBArticleID</code> / <code>winget upgrade</code>.
+      Pushes a new window scoped to <strong>{{ agent.hostname }}</strong>; agent installs on next 5-min poll
+      via <code>Install-WindowsUpdate -MicrosoftUpdate</code> / <code>winget upgrade</code>.
     </p>
-    <button type="submit" class="primary" id="push-btn" disabled>
-      Push selected patches to {{ agent.hostname }}
-    </button>
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+      <label style="display:flex;flex-direction:column;font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">
+        Schedule for (IST, blank = now)
+        <input type="datetime-local" name="scheduled_for" id="pick-schedule"
+               style="margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px;">
+      </label>
+      <button type="submit" class="primary" id="push-btn" disabled>
+        Push selected patches to {{ agent.hostname }}
+      </button>
+    </div>
   </div>
 </form>
 {% else %}
@@ -129,10 +136,14 @@ function updatePickCount() {
   var n = document.querySelectorAll('input.pick-pkg:checked').length;
   document.getElementById('pick-count').innerText = n;
   document.getElementById('push-btn').disabled = (n === 0);
+  var when = (document.getElementById('pick-schedule') || {}).value || '';
+  var verb = when ? ('Schedule ' + n + ' patch(es) for ' + when.replace('T', ' '))
+                  : ('Push ' + n + ' patch(es) to {{ agent.hostname|e }}');
   document.getElementById('push-btn').innerText = n === 0
     ? 'Push selected patches to {{ agent.hostname|e }}'
-    : 'Push ' + n + ' patch(es) to {{ agent.hostname|e }}';
+    : verb;
 }
+document.getElementById('pick-schedule') && document.getElementById('pick-schedule').addEventListener('input', updatePickCount);
 function confirmDeploy(form) {
   var n = form.querySelectorAll('input.pick-pkg:checked').length;
   if (n === 0) { alert('Pick at least one patch first.'); return false; }

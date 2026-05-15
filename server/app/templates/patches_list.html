@@ -29,9 +29,16 @@
 {# ────────── Quick-deploy cards (Intune / Zoho Endpoint Central-style one-click) ────────── #}
 {% if quick_deploy_options %}
 <section class="cards" style="margin-bottom:18px;">
-  <div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:end;margin-bottom:4px;">
-    <h2 style="margin:0;">Quick deploy</h2>
-    <p class="meta" style="margin:0;font-size:12.5px;">One click → window auto-created, packages auto-selected, status = <strong>in_progress</strong>. Agents pick it up on next check-in.</p>
+  <div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:end;margin-bottom:4px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 style="margin:0;">Quick deploy</h2>
+      <p class="meta" style="margin:2px 0 0;font-size:12.5px;">One click → window auto-created, packages auto-selected. Agents pick it up on the next 5-min poll (or at the time you schedule below).</p>
+    </div>
+    <label style="display:flex;flex-direction:column;font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">
+      Schedule for (IST, blank = now)
+      <input type="datetime-local" id="qd-scheduled-for" name="scheduled_for"
+             style="margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px;min-width:220px;">
+    </label>
   </div>
   {% for qd in quick_deploy_options %}
   <div class="card" style="border-left:4px solid {{ qd.color }};">
@@ -42,12 +49,13 @@
     <p class="meta" style="margin:8px 0 12px;font-size:12.5px;">
       {{ qd.subtitle }}
     </p>
-    <form method="post" action="/patches/quick-deploy"
-          onsubmit="return confirm('Deploy {{ qd.count }} {{ qd.title.lower() }} now?\n\nA patch window will be created and marked in_progress immediately. Agents pick up the work on next check-in.');">
+    <form method="post" action="/patches/quick-deploy" class="qd-form"
+          onsubmit="return confirmQuickDeploy(this, '{{ qd.count }}', '{{ qd.title.lower() }}')">
       {% if qd.severity %}<input type="hidden" name="severity" value="{{ qd.severity }}">{% endif %}
       {% if qd.vendor %}<input type="hidden" name="vendor" value="{{ qd.vendor }}">{% endif %}
       {% if qd.all %}<input type="hidden" name="all" value="1">{% endif %}
-      <button type="submit" class="primary" {% if qd.count == 0 %}disabled{% endif %}>
+      <input type="hidden" name="scheduled_for" class="qd-when" value="">
+      <button type="submit" class="primary qd-btn" data-title="{{ qd.title.lower() }}" {% if qd.count == 0 %}disabled{% endif %}>
         Deploy {{ qd.title.lower() }} now
       </button>
     </form>
@@ -265,6 +273,27 @@ document.addEventListener('keydown', function (e) {
 });
 document.getElementById('refresh-modal').addEventListener('click', function (e) {
   if (e.target.id === 'refresh-modal') closeRefreshModal();
+});
+
+// --- Quick-deploy scheduling: copy the global datetime to each form's hidden field on submit ---
+function confirmQuickDeploy(form, count, title) {
+  var when = document.getElementById('qd-scheduled-for').value;
+  form.querySelector('input.qd-when').value = when || '';
+  if (when) {
+    return confirm('Schedule ' + count + ' ' + title + ' for ' + when.replace('T', ' ') + ' IST?\n\nThe window stays in scheduled state until that time, then auto-promotes to in_progress and agents install on the next 5-min poll.');
+  }
+  return confirm('Deploy ' + count + ' ' + title + ' now?\n\nThe window goes to in_progress immediately; agents install on the next 5-min poll.');
+}
+
+// Update button labels when a schedule time is picked
+document.getElementById('qd-scheduled-for').addEventListener('input', function (e) {
+  var when = e.target.value;
+  document.querySelectorAll('.qd-btn').forEach(function (btn) {
+    var t = btn.dataset.title || '';
+    btn.innerText = when
+      ? 'Schedule ' + t + ' for ' + when.replace('T', ' ')
+      : 'Deploy ' + t + ' now';
+  });
 });
 </script>
 {% endblock %}

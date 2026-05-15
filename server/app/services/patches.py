@@ -420,6 +420,7 @@ def quick_deploy_category(
     severity: PatchSeverity | None = None,
     vendor: str | None = None,
     all_severities: bool = False,
+    scheduled_for: datetime | None = None,
 ) -> PatchWindow:
     """Intune / Zoho Endpoint Central-style one-click deploy.
 
@@ -454,14 +455,23 @@ def quick_deploy_category(
                 f"{vendor} patches across the fleet. Started immediately, "
                 f"auto-executes on next agent check-in.")
 
+    is_scheduled = scheduled_for is not None and scheduled_for > _now()
+    if is_scheduled:
+        ist_str = scheduled_for.astimezone(IST).strftime("%Y-%m-%d %H:%M IST")
+        name = name.replace(now_ist, f"runs at {ist_str}")
+        desc = desc.replace(
+            "Started immediately, auto-executes on next agent check-in.",
+            f"Auto-promotes to in_progress at {ist_str}; agents pick it up on the next 5-min poll after that.",
+        )
+
     win = create_window(
         db,
         tenant_id=tenant_id, creator=creator,
         name=name, description=desc,
         severity_filter=severity,
         hostname_pattern="%",
-        scheduled_for=_now(),
-        notes=f"created via quick-deploy ({severity.value if severity else vendor})",
+        scheduled_for=scheduled_for or _now(),
+        notes=f"created via quick-deploy ({severity.value if severity else (vendor or 'all')})",
     )
     win.auto_execute = True
 
@@ -475,9 +485,16 @@ def quick_deploy_category(
         candidates = [c for c in candidates if (c.get("vendor") or "").lower() == v_l]
     win.selected_packages = [c["name"] for c in candidates] if candidates else None
 
+    if is_scheduled:
+        # Park in 'scheduled' state — background scheduler promotes to
+        # in_progress when scheduled_for arrives.
+        win.status = PatchWindowStatus.scheduled
+        db.commit()
+        db.refresh(win)
+        return win
+
     db.commit()
     db.refresh(win)
-
     # Flip straight to in_progress so the next agent check-in picks it up.
     transition_window(db, window=win, new_status=PatchWindowStatus.in_progress)
     return win
@@ -489,10 +506,12 @@ def deploy_to_single_endpoint(
     creator: User,
     agent_id: int,
     package_names: list[str],
+    scheduled_for: datetime | None = None,
 ) -> PatchWindow:
-    """Per-endpoint hand-pick deploy. Creates an in_progress window, scoped
-    to one agent hostname pattern, with auto_execute=True and the admin's
-    chosen package list pre-selected. Agent picks up on next check-in.
+    """Per-endpoint hand-pick deploy. Creates an in_progress window (or a
+    scheduled one if scheduled_for is in the future), scoped to one agent
+    hostname pattern, with auto_execute=True and the admin's chosen package
+    list pre-selected. Agent picks up on next check-in.
     """
     from datetime import timezone as _tz, timedelta as _td
     agent = db.get(Agent, agent_id)
@@ -502,10 +521,15 @@ def deploy_to_single_endpoint(
         raise ValueError("no packages selected")
 
     IST = _tz(_td(hours=5, minutes=30), name="IST")
-    now_ist = _now().astimezone(IST).strftime("%Y-%m-%d %H:%M IST")
-    name = f"Deploy to {agent.hostname} — {len(package_names)} patches — {now_ist}"
+    is_scheduled = scheduled_for is not None and scheduled_for > _now()
+    when_label = (scheduled_for.astimezone(IST).strftime("runs at %Y-%m-%d %H:%M IST")
+                  if is_scheduled
+                  else _now().astimezone(IST).strftime("%Y-%m-%d %H:%M IST"))
+    name = f"Deploy to {agent.hostname} — {len(package_names)} patches — {when_label}"
     desc = (f"Hand-picked deployment of {len(package_names)} patches to "
-            f"{agent.hostname}. Auto-executes on next agent check-in.")
+            f"{agent.hostname}. "
+            + ("Auto-promotes at the scheduled time; agents pick it up on the next 5-min poll after that."
+               if is_scheduled else "Auto-executes on next agent check-in."))
 
     win = create_window(
         db,
@@ -513,7 +537,7 @@ def deploy_to_single_endpoint(
         name=name, description=desc,
         severity_filter=None,
         hostname_pattern=agent.hostname,  # exact-match LIKE
-        scheduled_for=_now(),
+        scheduled_for=scheduled_for or _now(),
         notes=f"hand-pick from /patches/{agent_id}",
     )
     win.auto_execute = True
@@ -524,6 +548,11 @@ def deploy_to_single_endpoint(
                              .all()}
     chosen = sorted({p for p in package_names if p in valid})
     win.selected_packages = chosen if chosen else None
+    if is_scheduled:
+        win.status = PatchWindowStatus.scheduled
+        db.commit()
+        db.refresh(win)
+        return win
     db.commit()
     db.refresh(win)
     transition_window(db, window=win, new_status=PatchWindowStatus.in_progress)
