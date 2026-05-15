@@ -221,22 +221,30 @@ Write-Step "Bootstrapping config (server + enrolment key)"
 & $pyCmd.Path $AGENT_SCRIPT --bootstrap --server-url=$SERVER_URL --enrolment-key=$ENROLMENT_KEY --interval-hours=6
 Write-Ok "Config written"
 
-# 5. Scheduled Task — SYSTEM, at boot + every 6h, restart on failure
+# 5. Scheduled Task — SYSTEM, runs daemon at boot + every-15-min safety net.
+#    The daemon itself polls /api/v1/agent/deployments every 5 minutes; the
+#    safety-net trigger ensures the daemon comes back if it ever crashes or
+#    is killed by anti-malware. Multiple-instance-policy = IgnoreNew so the
+#    safety-net never starts a second copy if the first is still alive.
 Write-Step "Registering Scheduled Task '$TASK_NAME'"
 Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
 
-$action    = New-ScheduledTaskAction  -Execute $pyCmd.Path -Argument ('"' + $AGENT_SCRIPT + '"')
-$trigger   = New-ScheduledTaskTrigger -AtStartup
-$principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-$settings  = New-ScheduledTaskSettingsSet `
+$action      = New-ScheduledTaskAction  -Execute $pyCmd.Path -Argument ('"' + $AGENT_SCRIPT + '"')
+$bootTrig    = New-ScheduledTaskTrigger -AtStartup
+$repeatTrig  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
+                                        -RepetitionInterval (New-TimeSpan -Minutes 15) `
+                                        -RepetitionDuration ([System.TimeSpan]::FromDays(365 * 10))
+$principal   = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$settings    = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
+    -StartWhenAvailable -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1) `
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit ([System.TimeSpan]::Zero)
 
 Register-ScheduledTask -TaskName $TASK_NAME `
-    -Action $action -Trigger $trigger `
+    -Action $action -Trigger @($bootTrig, $repeatTrig) `
     -Principal $principal -Settings $settings `
-    -Description "OctoAssist asset agent (Python) — sends hardware/software/patch inventory + applies approved patches." | Out-Null
-Write-Ok "Scheduled Task registered"
+    -Description "OctoAssist asset agent (Python) — runs as SYSTEM; polls for patch deployments every 5 minutes, posts full inventory every 6 hours. End-users never see anything." | Out-Null
+Write-Ok "Scheduled Task registered (boot trigger + 15-min safety net)"
 
 # 6. First check-in NOW (verifies network + auth, registers in /assets)
 Write-Step "First check-in (one-shot, verifies end-to-end)"

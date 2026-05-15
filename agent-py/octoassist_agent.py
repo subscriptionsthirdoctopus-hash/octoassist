@@ -1251,20 +1251,66 @@ def cmd_once(_args: argparse.Namespace) -> int:
 
 
 def cmd_daemon(_args: argparse.Namespace) -> int:
+    """Long-running daemon with two cadences:
+
+      1. FAST  — every DEPLOY_POLL_SECONDS (default 300s = 5 min):
+                 lightweight GET /api/v1/agent/deployments and execute any
+                 pending work. No inventory snapshot, no patch scan. Result:
+                 the moment an admin clicks "Push" in the UI, the endpoint
+                 picks up the deployment within 5 minutes — no PowerShell
+                 needed on the user's laptop.
+
+      2. SLOW  — every checkin_interval_hours (default 6h):
+                 full inventory + patch_scan + Windows Update lock-down
+                 + self-update of the agent script. Heavier; runs on the
+                 6-hour cycle. Idempotent.
+
+    The first iteration runs a full slow check-in immediately so a freshly
+    booted machine reports inventory + applies the WU policy before the
+    first hour-long sleep.
+    """
     cfg = load_config()
     cfg = register_if_needed(cfg)
-    interval = max(1, int(cfg.get("checkin_interval_hours", 6)))
-    log.info("Daemon mode: checking in every %d h", interval)
-    # Initial check-in immediately
+    slow_interval_h = max(1, int(cfg.get("checkin_interval_hours", 6)))
+    fast_interval_s = max(30, int(cfg.get("deploy_poll_seconds", 300)))
+
+    log.info("Daemon mode: full check-in every %d h, deployment poll every %d s",
+             slow_interval_h, fast_interval_s)
+
+    # Run a full check-in immediately on start.
     checkin_once(cfg)
+    last_full_checkin = time.time()
+
     while True:
         try:
-            time.sleep(interval * 3600)
-            checkin_once(cfg)
+            time.sleep(fast_interval_s)
+            now = time.time()
+            if now - last_full_checkin >= slow_interval_h * 3600:
+                # Time for the heavy cycle: full inventory + patch scan +
+                # self-update + deployment execution.
+                checkin_once(cfg)
+                last_full_checkin = now
+            else:
+                # Fast cycle: just pick up + execute pending deployments.
+                # If there's nothing pending the call is cheap (1 HTTP GET).
+                try:
+                    n = execute_pending_deployments(cfg)
+                    if n:
+                        log.info("Fast cycle: processed %d deployment target(s)", n)
+                        # After running deployments, push a fresh inventory so
+                        # the server's patch state reflects what just installed.
+                        try:
+                            snap = collect_snapshot()
+                            _http(cfg["server_url"].rstrip("/") + "/api/v1/agent/checkin",
+                                  method="POST", body=snap, token=cfg["agent_token"])
+                        except Exception as e:  # noqa: BLE001
+                            log.warning("post-deploy resync failed: %s", e)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Fast deployment poll failed: %s", e)
         except KeyboardInterrupt:
             return 0
-        except Exception as e:
-            log.exception("Loop error: %s", e)
+        except Exception as e:  # noqa: BLE001
+            log.exception("Daemon loop error: %s", e)
             time.sleep(60)
 
 
