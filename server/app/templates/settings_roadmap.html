@@ -41,24 +41,24 @@
     <div class="road-meta">no risk</div>
   </div>
 
-  <div class="road-row partial">
+  <div class="road-row done">
     <div class="road-num">2</div>
     <div>
       <p class="road-title">Remote-action framework</p>
-      <p class="road-sub">Generic command channel that every future feature rides on. <code>remote_actions</code> table + <code>/api/v1/agent/actions</code> endpoints + agent dispatcher skeleton. Adding new actions = new enum value + handler, no new PowerShell on endpoints.</p>
+      <p class="road-sub">Generic command channel: <code>remote_actions</code> table + 3 API endpoints + agent dispatcher with 6 handler slots. Adding a new action = enum value + handler, no new PowerShell on endpoints.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-partial">⏳ In flight</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">foundational</div>
   </div>
 
-  <div class="road-row queued">
+  <div class="road-row done">
     <div class="road-num">3</div>
     <div>
       <p class="road-title">Run .exe / .msi action + Software → Deploy tab</p>
-      <p class="road-sub">Push installers to one or many endpoints. Admin uploads installer + silent-args, agent runs as SYSTEM, captures exit code, reports back. Lives under Software, not Patches.</p>
+      <p class="road-sub">Push installers via URL. <a href="/software/deploy">/software/deploy</a> form → agent runs as SYSTEM with silent args → captures exit/stdout/stderr → reports back. End-user sees nothing on the laptop.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
