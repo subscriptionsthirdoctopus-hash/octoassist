@@ -6,16 +6,39 @@
   <p class="meta">Tenant: {{ tenant.name }}</p>
 </section>
 
+{# Category jump-nav — keeps the long page browsable #}
+<nav class="card" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;padding:10px 14px;background:#f8fafc;">
+  <a href="#identity"      class="link-button" style="font-size:13px;">🔐 Identity &amp; Access</a>
+  <a href="#service-levels" class="link-button" style="font-size:13px;">⏱ Service Levels</a>
+  <a href="#notifications"  class="link-button" style="font-size:13px;">📧 Notifications</a>
+  <a href="#tenant"         class="link-button" style="font-size:13px;">🏢 Tenant</a>
+</nav>
+
 {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
 
 {% if not is_https %}
 <div class="alert error">
-  <strong>HTTPS required for SSO.</strong> Microsoft Entra ID rejects redirect URIs that aren't HTTPS (except <code>localhost</code>). You can configure SSO here, but real sign-ins will not complete until OctoAssist is served over HTTPS. The recommended path is the subdomain + Let's Encrypt route described in <code>docs/COHOST-DEPLOYMENT.md</code>.
+  <strong>HTTPS required for SSO.</strong> Microsoft Entra ID rejects redirect URIs that aren't HTTPS (except <code>localhost</code>). You can configure SSO here, but real sign-ins will not complete until OctoAssist is served over HTTPS.
 </div>
 {% endif %}
 
-<section>
-  <h2>Single sign-on (SSO)</h2>
+<section id="identity">
+  <h2 style="border-bottom:2px solid var(--accent,#2563eb);padding-bottom:6px;">🔐 Identity &amp; Access</h2>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="row-between">
+      <div>
+        <h3 style="margin:0 0 4px;">Users</h3>
+        <p class="meta" style="margin:0;">
+          Local OctoAssist accounts — admin, technician (agent), and requester roles.
+          SSO users auto-provision on first sign-in if Entra ID is configured below.
+        </p>
+      </div>
+      <a href="/users" class="button primary">Manage users ›</a>
+    </div>
+  </div>
+
+  <h3 style="margin:18px 0 6px;font-size:15px;">Single sign-on (SSO)</h3>
   <p class="meta">
     Configure an external identity provider so users sign in with their corporate Microsoft accounts
     instead of an OctoAssist password. Auto-provisioning creates an OctoAssist user the first time
@@ -74,8 +97,8 @@
   </div>
 </section>
 
-<section>
-  <h2>Service levels</h2>
+<section id="service-levels">
+  <h2 style="border-bottom:2px solid var(--accent,#2563eb);padding-bottom:6px;margin-top:24px;">⏱ Service Levels</h2>
   <div class="card">
     <h3 style="margin:0 0 6px;">SLA matrix</h3>
     <p class="meta" style="margin:0 0 12px;">
@@ -87,8 +110,8 @@
   </div>
 </section>
 
-<section>
-  <h2>Tenant</h2>
+<section id="tenant">
+  <h2 style="border-bottom:2px solid var(--accent,#2563eb);padding-bottom:6px;margin-top:24px;">🏢 Tenant</h2>
   <div class="card">
     <dl>
       <dt>Name</dt><dd>{{ tenant.name }}</dd>
@@ -112,8 +135,8 @@
   </div>
 </section>
 
-<section>
-  <h2>Notifications</h2>
+<section id="notifications">
+  <h2 style="border-bottom:2px solid var(--accent,#2563eb);padding-bottom:6px;margin-top:24px;">📧 Notifications</h2>
 
   <div class="card">
     <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Mail provider</h3>
