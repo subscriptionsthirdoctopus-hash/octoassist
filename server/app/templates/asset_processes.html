@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Processes — {{ agent.hostname }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <p class="meta" style="margin:0;"><a href="/asset/{{ agent.id }}">← {{ agent.hostname }}</a></p>
+      <h1>Running processes — {{ agent.hostname }}</h1>
+      <p class="meta">
+        {% if scan_time %}
+          Last scan: {{ scan_time | ist }}.
+        {% else %}
+          No scan yet on this endpoint.
+        {% endif %}
+        Click <strong>Refresh</strong> to ask the agent to send the current process list.
+      </p>
+    </div>
+    <div class="actions">
+      <form method="post" action="/asset/{{ agent.id }}/processes/refresh" class="inline-form">
+        <button type="submit" class="primary">↻ Refresh process list</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+
+{% if pending_refresh %}
+<div class="alert" style="background:#fef3c7;border-left:4px solid #d97706;">
+  ⏳ A refresh is queued (action #{{ pending_refresh.id }}, status: <strong>{{ pending_refresh.status.value }}</strong>).
+  The agent picks it up within 30 seconds. Reload this page after that to see the new list.
+</div>
+{% endif %}
+
+{% if processes %}
+<table class="data">
+  <thead>
+    <tr>
+      <th>PID</th>
+      <th>Name</th>
+      <th>RAM (MB)</th>
+      <th>CPU</th>
+      <th>Path</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in processes %}
+    <tr>
+      <td>{{ p.Id }}</td>
+      <td><strong>{{ p.Name }}</strong></td>
+      <td>{{ p.RAM_MB }}</td>
+      <td>{% if p.CPU is not none %}{{ "%.1f"|format(p.CPU|float) }}{% else %}—{% endif %}</td>
+      <td style="font-size:11.5px;color:var(--slate);max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        {{ p.Path or "—" }}
+      </td>
+      <td>
+        <form method="post" action="/asset/{{ agent.id }}/processes/kill" class="inline-form"
+              onsubmit="return confirm('Kill {{ p.Name }} (PID {{ p.Id }}) on {{ agent.hostname|e }}?\n\nStop-Process -Id {{ p.Id }} -Force will run as SYSTEM within 30 seconds.');">
+          <input type="hidden" name="pid" value="{{ p.Id }}">
+          <input type="hidden" name="name" value="{{ p.Name }}">
+          <button type="submit" class="link-button" style="color:#dc2626;">✕ Kill</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="meta" style="margin-top:10px;font-size:12px;">
+  Showing top {{ processes|length }} processes by RAM. Background services with no window and &lt;50 MB RAM are filtered out.
+</p>
+{% else %}
+<div class="empty">
+  <h2>No process list captured yet</h2>
+  <p>Click <strong>↻ Refresh process list</strong> above. The agent will return the data within 30 seconds.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -14,6 +14,104 @@
 <div class="empty"><p>No check-in received yet from this agent.</p></div>
 {% else %}
 
+{# ────────────────  Quick Actions panel  ──────────────── #}
+<section class="card" style="margin-bottom:18px;border-left:4px solid var(--accent,#2563eb);">
+  <div class="row-between" style="margin-bottom:10px;">
+    <div>
+      <h2 style="margin:0;font-size:18px;">⚡ Quick Actions</h2>
+      <p class="meta" style="margin:2px 0 0;">
+        Push a command. Agent picks it up within 30 seconds and runs as SYSTEM — no user prompt.
+        <a href="/asset/{{ agent.id }}/actions">Action history ›</a>
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="/asset/{{ agent.id }}/processes" class="button">🔎 Process list</a>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;">
+    {# Single-click actions — POST with hidden 'kind' #}
+    <form method="post" action="/asset/{{ agent.id }}/action"
+          onsubmit="return confirm('Reboot {{ agent.hostname|e }} in 60 seconds?\n\nA Windows balloon notification will warn the user; cancel with shutdown /a.');">
+      <input type="hidden" name="kind" value="reboot">
+      <input type="hidden" name="delay_seconds" value="60">
+      <button type="submit" class="button" style="width:100%;">🔁 Reboot</button>
+    </form>
+    <form method="post" action="/asset/{{ agent.id }}/action"
+          onsubmit="return confirm('Lock {{ agent.hostname|e }} now? The signed-in user will see the lock screen.');">
+      <input type="hidden" name="kind" value="lock_workstation">
+      <button type="submit" class="button" style="width:100%;">🔒 Lock workstation</button>
+    </form>
+    <button type="button" class="button" style="width:100%;" onclick="openAct('toast')">🔔 Send notification</button>
+    <button type="button" class="button" style="width:100%;" onclick="openAct('wallpaper')">🖼️ Set wallpaper</button>
+    <button type="button" class="button" style="width:100%;" onclick="openAct('password')">🔑 Reset password</button>
+    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">⚠️ Run PowerShell</button>
+  </div>
+</section>
+
+{# Modal forms for actions with parameters #}
+<div id="act-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:white;max-width:640px;width:100%;border-radius:8px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow:auto;">
+    <div class="row-between" style="margin-bottom:10px;">
+      <h2 id="act-title" style="margin:0;font-size:18px;">—</h2>
+      <button type="button" onclick="closeAct()" class="link-button" style="font-size:22px;line-height:1;padding:0 6px;">×</button>
+    </div>
+
+    <form method="post" action="/asset/{{ agent.id }}/action" id="act-toast" style="display:none;">
+      <input type="hidden" name="kind" value="send_toast">
+      <label>Title<input type="text" name="title" required maxlength="80" value="OctoAssist" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;"></label>
+      <label style="margin-top:10px;display:block;">Body<textarea name="body" rows="3" required maxlength="500" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;" placeholder="Save your work — system restart at 22:00 IST."></textarea></label>
+      <p class="meta" style="font-size:12px;margin:6px 0 0;">Appears as a Windows alert in every active session. Auto-dismisses after 10 min.</p>
+      <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary">Queue notification</button></div>
+    </form>
+
+    <form method="post" action="/asset/{{ agent.id }}/action" id="act-wallpaper" style="display:none;">
+      <input type="hidden" name="kind" value="set_wallpaper">
+      <label>Image URL<input type="url" name="url" required style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;" placeholder="https://example.com/wallpapers/corporate.jpg"></label>
+      <p class="meta" style="font-size:12px;margin:6px 0 0;">Image is downloaded to <code>%ProgramData%\OctoAssist\wallpaper.jpg</code> and applied to every signed-in user's desktop. JPG / PNG / BMP supported.</p>
+      <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary">Apply wallpaper</button></div>
+    </form>
+
+    <form method="post" action="/asset/{{ agent.id }}/action" id="act-password" style="display:none;"
+          onsubmit="return confirm('Reset password for LOCAL user on {{ agent.hostname|e }}?\n\nThis only affects local accounts, not domain accounts. The audit log records who triggered it but not the password value.');">
+      <input type="hidden" name="kind" value="reset_password">
+      <label>Local username<input type="text" name="username" required style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;" placeholder="khalid.s"></label>
+      <label style="margin-top:10px;display:block;">New password<input type="password" name="new_password" required minlength="8" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;" placeholder="min 8 chars"></label>
+      <p class="meta" style="font-size:12px;margin:6px 0 0;">Runs <code>net user &lt;name&gt; &lt;password&gt;</code> as SYSTEM. Domain accounts are not affected.</p>
+      <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary">Reset password</button></div>
+    </form>
+
+    <form method="post" action="/asset/{{ agent.id }}/action" id="act-ps" style="display:none;"
+          onsubmit="return confirm('Run arbitrary PowerShell on {{ agent.hostname|e }} as SYSTEM?\n\nThis is the break-glass action. It is audit-logged with full stdout/stderr capture.');">
+      <input type="hidden" name="kind" value="custom_powershell">
+      <label>PowerShell script (runs as SYSTEM, 10-min cap)
+        <textarea name="script" rows="10" required style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-family:ui-monospace,monospace;font-size:12.5px;" placeholder="# Example: list local users&#10;Get-LocalUser | Select-Object Name, Enabled, LastLogon | ConvertTo-Json"></textarea>
+      </label>
+      <p class="meta" style="font-size:12px;margin:6px 0 0;color:#dc2626;">⚠ Last-resort. Full audit log captures who, when, the script, and the result.</p>
+      <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary" style="background:#dc2626;border-color:#dc2626;">Run script</button></div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openAct(kind) {
+  var titles = {
+    toast:     '🔔 Send notification to {{ agent.hostname|e }}',
+    wallpaper: '🖼️ Set wallpaper on {{ agent.hostname|e }}',
+    password:  '🔑 Reset local password on {{ agent.hostname|e }}',
+    ps:        '⚠️ Run PowerShell on {{ agent.hostname|e }}',
+  };
+  document.getElementById('act-title').innerText = titles[kind] || kind;
+  ['toast','wallpaper','password','ps'].forEach(function(k){
+    document.getElementById('act-' + k).style.display = (k === kind) ? '' : 'none';
+  });
+  document.getElementById('act-modal').style.display = 'flex';
+}
+function closeAct() { document.getElementById('act-modal').style.display = 'none'; }
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAct(); });
+document.getElementById('act-modal').addEventListener('click', function(e){ if (e.target.id === 'act-modal') closeAct(); });
+</script>
+
 <section class="cards">
   <div class="card">
     <h3>Operating System</h3>

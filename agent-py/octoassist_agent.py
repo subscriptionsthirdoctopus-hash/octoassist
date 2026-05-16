@@ -1605,13 +1605,114 @@ def _action_kill_process(params: dict) -> dict:
     }
 
 
+def _action_set_wallpaper(params: dict) -> dict:
+    """Download an image URL, save to %ProgramData%\\OctoAssist\\wallpaper.jpg,
+    set it as the per-user wallpaper for every logged-in user via registry +
+    SystemParametersInfo. Safe to re-run.
+    """
+    url = params.get("url")
+    if not url:
+        return {"success": False, "exit_code": -1,
+                "stderr": "missing 'url' param", "stdout": None, "result": None}
+
+    wp_dir = Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "OctoAssist"
+    wp_dir.mkdir(parents=True, exist_ok=True)
+    target = wp_dir / "wallpaper.jpg"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "OctoAssist-Agent/1"})
+        with urllib.request.urlopen(req, timeout=120) as resp, open(target, "wb") as f:
+            f.write(resp.read())
+    except Exception as e:  # noqa: BLE001
+        return {"success": False, "exit_code": -1,
+                "stderr": f"download failed: {e}", "stdout": None, "result": None}
+
+    ps = rf"""
+$ErrorActionPreference = 'SilentlyContinue'
+$img = '{target}'
+# Loop every active user profile; set their Desktop wallpaper registry value.
+Get-ChildItem 'Registry::HKEY_USERS' | Where-Object {{ $_.Name -match 'S-1-5-21-' -and $_.Name -notlike '*_Classes' }} |
+  ForEach-Object {{
+    $sid = $_.PSChildName
+    $key = "Registry::HKEY_USERS\$sid\Control Panel\Desktop"
+    if (Test-Path $key) {{
+      Set-ItemProperty -Path $key -Name 'Wallpaper' -Value $img -ErrorAction SilentlyContinue
+      Set-ItemProperty -Path $key -Name 'WallpaperStyle' -Value '10' -ErrorAction SilentlyContinue
+    }}
+  }}
+# Force refresh for currently signed-in user (SystemParametersInfo)
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class W {{
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}}
+"@
+[W]::SystemParametersInfo(20, 0, $img, 3) | Out-Null
+'OK'
+"""
+    proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                capture_output=True, text=True, timeout=30)
+    return {
+        "success": proc.returncode == 0 and "OK" in (proc.stdout or ""),
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
+        "result": {"saved_to": str(target)},
+    }
+
+
+def _action_reset_password(params: dict) -> dict:
+    """Reset a LOCAL user's password via `net user`. Domain accounts unaffected.
+    Audit-trail-friendly: the new password isn't echoed back in stdout.
+    """
+    username = (params.get("username") or "").strip()
+    new_password = params.get("new_password") or ""
+    if not username or not new_password:
+        return {"success": False, "exit_code": -1,
+                "stderr": "missing username or new_password",
+                "stdout": None, "result": None}
+    # Use net user <name> <pw>. /domain explicitly excluded -> local only.
+    proc = _run(["net.exe", "user", username, new_password],
+                capture_output=True, text=True, timeout=30)
+    # Scrub stdout so the password never appears in the audit log
+    out = (proc.stdout or "").replace(new_password, "***")
+    err = (proc.stderr or "").replace(new_password, "***")
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": out, "stderr": err,
+        "result": {"username": username, "scope": "local"},
+    }
+
+
+def _action_custom_powershell(params: dict) -> dict:
+    """Break-glass: run admin-supplied PowerShell. Audit-logged on the server.
+    Capped at 10 min timeout. ExecutionPolicy Bypass; runs as SYSTEM.
+    """
+    script = params.get("script") or ""
+    if not script.strip():
+        return {"success": False, "exit_code": -1,
+                "stderr": "missing 'script' param", "stdout": None, "result": None}
+    proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                capture_output=True, text=True, timeout=600)
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
+        "result": {"script_length": len(script)},
+    }
+
+
 _ACTION_HANDLERS = {
-    "run_executable":  _action_run_executable,
-    "reboot":          _action_reboot,
-    "lock_workstation": _action_lock_workstation,
-    "send_toast":      _action_send_toast,
-    "list_processes":  _action_list_processes,
-    "kill_process":    _action_kill_process,
+    "run_executable":    _action_run_executable,
+    "reboot":            _action_reboot,
+    "lock_workstation":  _action_lock_workstation,
+    "send_toast":        _action_send_toast,
+    "list_processes":    _action_list_processes,
+    "kill_process":      _action_kill_process,
+    "set_wallpaper":     _action_set_wallpaper,
+    "reset_password":    _action_reset_password,
+    "custom_powershell": _action_custom_powershell,
 }
 
 

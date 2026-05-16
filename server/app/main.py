@@ -20,6 +20,7 @@ from .database import Base, SessionLocal, engine, get_db
 from .models import IdentityProvider, Tenant, User, UserRole
 from . import seed
 from .web.views import router as web_router
+from .web.views_actions import router as actions_router
 from .web.views_agent_download import router as agent_download_router
 from .web.views_changes import router as changes_router
 from .web.views_kb import router as kb_router
@@ -85,6 +86,7 @@ app.include_router(changes_router)      # /changes, /changes/{id}, ...
 app.include_router(reports_router)      # /reports, /reports/{tickets,sla,assets,changes}, /reports/export/*
 app.include_router(patches_router)      # /patches, /patches/{agent_id}, /patches/export.csv
 app.include_router(software_router)     # /software (SAM), /software/product/{pub}/{prod}, /software/export.csv
+app.include_router(actions_router)      # /actions, /asset/{id}/{actions,processes,action}
 app.include_router(agent_download_router) # /agent (download index), /agent/files/<name>
 app.include_router(users_router)        # /users, /users/new
 app.include_router(settings_router)     # /settings, /settings/idp/*

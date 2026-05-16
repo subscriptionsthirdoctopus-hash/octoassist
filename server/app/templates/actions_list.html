@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Remote Actions — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Remote Actions</h1>
+      <p class="meta">Every admin-triggered command across the fleet. Live status, audit-logged.</p>
+    </div>
+  </div>
+</section>
+
+<form method="get" action="/actions" class="filters" style="margin-bottom:14px;">
+  <label>Kind
+    <select name="kind">
+      <option value="">All kinds</option>
+      {% for k in kinds %}<option value="{{ k }}" {% if filter_kind == k %}selected{% endif %}>{{ k.replace("_"," ") }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">All statuses</option>
+      {% for s in statuses %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_"," ") }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Apply</button>
+  <a href="/actions" class="link-button">Clear</a>
+</form>
+
+{% if actions %}
+<table class="data">
+  <thead>
+    <tr>
+      <th>When (IST)</th>
+      <th>Endpoint</th>
+      <th>Action</th>
+      <th>Status</th>
+      <th>Exit</th>
+      <th>By</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in actions %}
+    <tr>
+      <td>{{ a.created_at | ist }}</td>
+      <td><a href="/asset/{{ a.agent_id }}">{{ a.agent.hostname if a.agent else "—" }}</a></td>
+      <td>
+        <strong>{{ a.kind.value.replace("_"," ") }}</strong>
+        <div class="meta" style="font-size:11.5px;">{{ ra_svc.human_summary(a) }}</div>
+      </td>
+      <td>
+        {% set s = a.status.value %}
+        {% if s == 'succeeded' %}<span class="status status-resolved">✓ succeeded</span>
+        {% elif s == 'failed' %}<span class="status status-cancelled">✗ failed</span>
+        {% elif s == 'in_progress' %}<span class="status status-in_progress">running</span>
+        {% elif s == 'cancelled' %}<span class="status status-on_hold">cancelled</span>
+        {% else %}<span class="status status-on_hold">⏱ queued</span>{% endif %}
+      </td>
+      <td>{{ a.exit_code if a.exit_code is not none else "—" }}</td>
+      <td>{{ a.created_by.display_name if a.created_by else "—" }}</td>
+      <td><a href="/asset/{{ a.agent_id }}/actions" class="link-button">view</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No actions queued yet</h2>
+  <p>Go to any endpoint's asset page (<a href="/assets">/assets</a>) and use the Quick Actions panel.</p>
+</div>
+{% endif %}
+{% endblock %}

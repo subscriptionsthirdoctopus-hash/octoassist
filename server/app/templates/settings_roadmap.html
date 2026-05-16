@@ -63,57 +63,57 @@
     <div class="road-meta">low risk</div>
   </div>
 
-  <div class="road-row queued">
+  <div class="road-row done">
     <div class="road-num">4</div>
     <div>
       <p class="road-title">List + kill running processes (per-asset tab)</p>
-      <p class="road-sub">"Running apps" view per endpoint. Admin clicks Kill → <code>Stop-Process -Name -Force</code>. Useful for stuck Outlook / Adobe / locked Office docs.</p>
+      <p class="road-sub">Per-endpoint <a href="/assets">Process list</a> page. Click ↻ Refresh → agent returns top 60 processes by RAM within 30 sec. Per-row ✕ Kill button runs <code>Stop-Process -Id -Force</code>.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
 
-  <div class="road-row queued">
+  <div class="road-row done">
     <div class="road-num">5</div>
     <div>
-      <p class="road-title">Reboot now / scheduled · Lock workstation · Send toast notification</p>
-      <p class="road-sub">Three one-click actions. Reboot with grace period (user gets balloon). Lock = <code>LockWorkStation</code>. Toast = "Save your work, restart in 1 hour" style messages.</p>
+      <p class="road-title">Reboot now · Lock workstation · Send notification</p>
+      <p class="road-sub">One-click buttons in the <strong>Quick Actions</strong> panel on every asset page. Reboot with 60-sec grace (user sees Windows balloon). Lock = <code>rundll32 user32.dll,LockWorkStation</code>. Notification = msg.exe to every active session.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">low risk</div>
   </div>
 
-  <div class="road-row queued">
+  <div class="road-row done">
     <div class="road-num">6</div>
     <div>
-      <p class="road-title">Set wallpaper (fleet-wide branding)</p>
-      <p class="road-sub">Upload an image, push to all (or selected) endpoints. Per-user wallpaper registry + refresh on next sign-in.</p>
+      <p class="road-title">Set wallpaper</p>
+      <p class="road-sub">Paste an image URL, agent downloads to <code>%ProgramData%\OctoAssist\wallpaper.jpg</code>, sets it per-user via registry + <code>SystemParametersInfo</code>. Triggered from the Quick Actions panel.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">low risk</div>
   </div>
 
-  <div class="road-row queued">
+  <div class="road-row done">
     <div class="road-num">7</div>
     <div>
       <p class="road-title">Reset local user password</p>
-      <p class="road-sub">Set local account password via <code>net user</code>. Audit-logged with admin who triggered it. Local accounts only — not domain.</p>
+      <p class="road-sub">Quick Actions modal asks for username + new password. Agent runs <code>net user &lt;u&gt; &lt;pw&gt;</code> as SYSTEM. Password is scrubbed from the audit log; only the admin who ran it is recorded.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">credentials</div>
   </div>
 
-  <div class="road-row queued">
+  <div class="road-row done">
     <div class="road-num">8</div>
     <div>
-      <p class="road-title">Custom PowerShell admin action (break-glass)</p>
-      <p class="road-sub">Run arbitrary PowerShell on an endpoint. Admin-only, requires confirmation, fully audit-logged with stdout/stderr capture. Last resort for everything not in the catalog above.</p>
+      <p class="road-title">Custom PowerShell (break-glass)</p>
+      <p class="road-sub">Red "Run PowerShell" button on asset page. 10-min subprocess cap; full stdout + stderr captured to the audit log. Use sparingly — last resort for things not in the curated catalog.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">high power</div>
   </div>
