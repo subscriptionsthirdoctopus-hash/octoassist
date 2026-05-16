@@ -1237,16 +1237,22 @@ def register_if_needed(cfg: dict) -> dict:
 
 def _self_update_if_newer(cfg: dict) -> bool:
     """Compare the on-disk agent script against /agent/files/octoassist_agent.py.
-    If the hashes differ, atomically replace the local script. The currently-
-    running process keeps using the OLD code (Python's already imported it),
-    but the scheduled task's NEXT invocation in 6 hours picks up the new one.
+    If the hashes differ, atomically replace the local script AND re-execute
+    this Python process so the new code takes effect immediately.
 
-    Returns True if a replacement was written.
+    Without the re-exec, the on-disk file gets updated but the in-memory
+    Python interpreter keeps running the old imports until the daemon is
+    killed and restarted — meaning admin still has to do something on the
+    endpoint to pick up agent fixes. With execv() the daemon swaps itself
+    out: same Python process replaces its memory image with the new script,
+    keeps the same PID + Scheduled Task lineage, and immediately runs the
+    new code on the very next loop iteration. Truly hands-off.
 
     Safe by design:
       - Never replaces if the download is shorter than 5 KB (clearly broken)
       - Verifies the downloaded blob parses as Python before replacing
       - Atomic os.replace so a power-fail can't leave a half-written file
+      - execv only happens AFTER os.replace has succeeded
     """
     if platform.system() != "Windows":
         return False  # only auto-update on Windows endpoints; Linux uses dpkg
@@ -1275,8 +1281,17 @@ def _self_update_if_newer(cfg: dict) -> bool:
         tmp.write_bytes(new_bytes)
         os.replace(tmp, own)
         log.info("self-update: replaced agent script (sha256 %s -> %s). "
-                 "Scheduled task will use new code on next invocation.",
+                 "Re-executing in-place to load new code.",
                  own_hash[:12], new_hash[:12])
+        # Hand control to the new code. os.execv replaces the current
+        # process image — same PID, no restart of the Scheduled Task,
+        # no service interruption visible to anyone. Keeps original argv.
+        try:
+            os.execv(sys.executable, [sys.executable, str(own)] + sys.argv[1:])
+        except Exception as e:  # noqa: BLE001
+            log.warning("self-update: execv failed (will pick up new code on next reboot): %s", e)
+            return True
+        # Should never reach here — execv replaces the process.
         return True
     except Exception as e:  # noqa: BLE001
         log.warning("self-update check failed (continuing with current code): %s", e)
