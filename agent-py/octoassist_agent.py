@@ -1737,14 +1737,16 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
     """
     cfg = load_config()
     cfg = register_if_needed(cfg)
-    slow_interval_h = max(1, int(cfg.get("checkin_interval_hours", 6)))
-    # Default 30-second deployment poll: when admin clicks Push, the
-    # endpoint picks the work up almost immediately. 30s is the floor we
-    # actively recommend; admin can override via deploy_poll_seconds in
-    # agent.json if they want to back off (large fleets, mobile data, etc).
+    # Slow cycle: full inventory + patch scan + WU policy enforcement.
+    # Default 30 min (was 6h). Now that self-update lives in the fast
+    # cycle, the slow cycle's only unique job is the heavy inventory
+    # snapshot — 30 min keeps the dashboard fresh with no real overhead.
+    slow_interval_h = max(0.25, float(cfg.get("checkin_interval_hours", 0.5)))
+    # Fast cycle: self-update + patches + actions. 30 s = sub-minute
+    # propagation of every new admin click + every server-side fix.
     fast_interval_s = max(15, int(cfg.get("deploy_poll_seconds", 30)))
 
-    log.info("Daemon mode: full check-in every %d h, deployment poll every %d s",
+    log.info("Daemon mode: full check-in every %.2f h, fast poll every %d s",
              slow_interval_h, fast_interval_s)
 
     # Run a full check-in immediately on start.
