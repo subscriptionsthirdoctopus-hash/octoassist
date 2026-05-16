@@ -485,10 +485,15 @@ def quick_deploy_category(
     win.auto_execute = True
 
     # Pre-pick all candidate packages so the deploy is truly one-click — no
-    # second-screen package selection. If filtering by vendor (not severity),
-    # narrow the package list to matching publishers; severity_filter is
-    # already enforced by window_candidate_packages.
+    # second-screen package selection. CRITICAL: Quick-deploy is Windows-only —
+    # filter out any apt:/dnf:/yum:/zypper: sources so we never push Linux
+    # packages to Windows endpoints (or vice-versa). The dashboard already
+    # filters at read-time, but the deploy path also needs to filter at write
+    # so the window's selected_packages doesn't contain Linux names.
     candidates = window_candidate_packages(db, win)
+    candidates = [c for c in candidates
+                  if not any((c.get("sources") or "").startswith(p)
+                             for p in _LINUX_SOURCE_PREFIXES)]
     if vendor:
         v_l = vendor.lower()
         candidates = [c for c in candidates if (c.get("vendor") or "").lower() == v_l]

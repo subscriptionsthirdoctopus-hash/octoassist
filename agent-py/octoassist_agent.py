@@ -1162,6 +1162,28 @@ def execute_pending_deployments(cfg: dict) -> int:
         any_reboot_needed = False
         any_success = False
         for pkg in packages:
+            # Safety: skip packages that clearly belong to a different OS.
+            # If the server-side filter ever regresses, the agent refuses
+            # rather than burning 10s per package on doomed installs.
+            if is_windows:
+                p_low = pkg.lower()
+                if any(p_low.startswith(prefix) for prefix in (
+                        "systemd", "libsystemd", "snapd", "sosreport",
+                        "software-properties-common", "ubuntu-", "linux-",
+                        "lib", "python3-", "perl-", "ruby-", "golang-",
+                        "grub-", "initramfs-", "openssh-", "ca-certificates",
+                        "apt-", "dpkg")):
+                    log.warning("Skipping non-Windows package on Windows host: %s", pkg)
+                    _http(f"{base}/api/v1/agent/deployments/{target_id}/attempt",
+                          method="POST",
+                          body={"package_name": pkg, "started_at": _now_iso(),
+                                "finished_at": _now_iso(), "exit_code": 0,
+                                "success": False, "needs_reboot": False,
+                                "stdout": None,
+                                "stderr": "skipped: non-Windows package name",
+                                "method": "skipped"},
+                          token=token)
+                    continue
             try:
                 attempt = _install_dispatch(pkg)
             except subprocess.TimeoutExpired:
