@@ -1761,9 +1761,19 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
                 checkin_once(cfg)
                 last_full_checkin = now
             else:
-                # Fast cycle: poll for two kinds of work, both cheap (1 GET each).
-                #   1. Pending patch deployments  (Install-WindowsUpdate / winget)
-                #   2. Pending remote actions    (run .exe, reboot, lock, toast, ...)
+                # Fast cycle: every poll we check for THREE kinds of work, all
+                # cheap HTTP GETs that 200-OK with empty body when there's
+                # nothing to do.
+                #   0. Self-update     — agent script bump (auto re-exec)
+                #   1. Patch deploys   — Install-WindowsUpdate / winget
+                #   2. Remote actions  — run .exe, reboot, lock, toast, ...
+                # Self-update FIRST so a brand-new handler lands and is
+                # immediately callable on this same iteration (post-execv).
+                try:
+                    _self_update_if_newer(cfg)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Fast self-update poll failed: %s", e)
+
                 deploys = 0
                 actions = 0
                 try:
