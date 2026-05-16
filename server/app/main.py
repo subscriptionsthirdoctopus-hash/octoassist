@@ -13,6 +13,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from .api.agent import router as agent_router
 from .api.agent_actions import router as agent_actions_router
 from .api.agent_deploy import router as agent_deploy_router
+from .api.uploads import router as uploads_router
 from .auth import NotAuthenticated, login_redirect_for
 from .config import settings
 from .csrf import CsrfMiddleware, get_or_create_token  # noqa: F401  (drafted, not active)
@@ -87,6 +88,7 @@ app.include_router(reports_router)      # /reports, /reports/{tickets,sla,assets
 app.include_router(patches_router)      # /patches, /patches/{agent_id}, /patches/export.csv
 app.include_router(software_router)     # /software (SAM), /software/product/{pub}/{prod}, /software/export.csv
 app.include_router(actions_router)      # /actions, /asset/{id}/{actions,processes,action}
+app.include_router(uploads_router)      # /api/v1/uploads, /files/{uuid}.{ext}
 app.include_router(agent_download_router) # /agent (download index), /agent/files/<name>
 app.include_router(users_router)        # /users, /users/new
 app.include_router(settings_router)     # /settings, /settings/idp/*

@@ -114,7 +114,48 @@ async def asset_action_queue(
             try: params["pid"] = int(p)
             except ValueError: raise HTTPException(status_code=400, detail="pid must be int")
     elif kind == RemoteActionKind.set_wallpaper:
-        params = {"url": (form.get("url") or "").strip()}
+        # Accept either an uploaded image OR a pasted URL
+        url = (form.get("url") or "").strip()
+        wallpaper_file = form.get("wallpaper_file")
+        file_supplied = (hasattr(wallpaper_file, "filename") and wallpaper_file.filename
+                         and wallpaper_file.size and wallpaper_file.size > 0)
+        if file_supplied:
+            from ..api.uploads import UPLOAD_DIR, _safe_ext, MAX_BYTES
+            from ..models import UploadedFile as _UF
+            import hashlib as _hl, uuid as _uuid
+            file_id = _uuid.uuid4().hex
+            ext = _safe_ext(wallpaper_file.filename)
+            target_path = UPLOAD_DIR / f"{file_id}{ext}"
+            h = _hl.sha256(); written = 0
+            try:
+                with open(target_path, "wb") as out:
+                    while True:
+                        chunk = await wallpaper_file.read(1024 * 256)
+                        if not chunk:
+                            break
+                        written += len(chunk)
+                        if written > MAX_BYTES:
+                            out.close(); target_path.unlink(missing_ok=True)
+                            raise HTTPException(status_code=413, detail="File too large (>1 GB)")
+                        h.update(chunk); out.write(chunk)
+            except HTTPException:
+                raise
+            except Exception as e:  # noqa: BLE001
+                target_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=500, detail=f"upload failed: {e}")
+            db.add(_UF(
+                id=file_id, tenant_id=user.tenant_id,
+                original_filename=wallpaper_file.filename[:255],
+                content_type=(wallpaper_file.content_type or "image/jpeg")[:120],
+                size_bytes=written, sha256=h.hexdigest(),
+                purpose="wallpaper", created_by_id=user.id,
+            ))
+            db.commit()
+            base = str(request.base_url).rstrip("/")
+            url = f"{base}/files/{file_id}{ext}"
+        if not url:
+            raise HTTPException(status_code=400, detail="Upload an image or paste a URL")
+        params = {"url": url}
     elif kind == RemoteActionKind.reset_password:
         params = {"username":     (form.get("username") or "").strip(),
                   "new_password":  form.get("new_password") or ""}

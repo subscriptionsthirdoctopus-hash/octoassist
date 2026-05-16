@@ -26,18 +26,27 @@
       The agent downloads it on the endpoint, runs it as SYSTEM with your silent-install args, then reports back.
     </p>
 
-    <form method="post" action="/software/deploy" style="display:grid;gap:10px;">
+    <form method="post" action="/software/deploy" enctype="multipart/form-data" style="display:grid;gap:10px;">
       <label>Installer label <span class="meta" style="font-weight:normal;">(for tracking — e.g. "Chrome 130 fleet rollout")</span>
         <input type="text" name="label" required maxlength="120"
                placeholder="e.g. Acrobat Reader 24.005 — Engineering OU"
                style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
       </label>
 
-      <label>Installer URL <span class="meta" style="font-weight:normal;">(must be HTTPS-reachable from endpoints)</span>
-        <input type="url" name="url" required
-               placeholder="https://example.com/installers/AcroRdrDC2400520320_en_US.exe"
-               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-      </label>
+      <div style="border:1px dashed var(--line);border-radius:6px;padding:14px;background:#f8fafc;">
+        <strong style="font-size:13px;display:block;margin-bottom:8px;">📤 Source (pick one)</strong>
+        <label style="display:block;margin-bottom:8px;">Upload installer file <span class="meta" style="font-weight:normal;">(.exe / .msi / .msu, up to 1 GB)</span>
+          <input type="file" name="installer_file"
+                 accept=".exe,.msi,.msu,.bat,.cmd"
+                 style="display:block;margin-top:4px;font-size:13px;">
+        </label>
+        <p class="meta" style="margin:6px 0;font-size:11.5px;text-align:center;color:var(--slate);">— or —</p>
+        <label>Paste installer URL <span class="meta" style="font-weight:normal;">(must be HTTPS-reachable from endpoints)</span>
+          <input type="url" name="url"
+                 placeholder="https://example.com/installers/setup.exe"
+                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+        </label>
+      </div>
 
       <label>Silent-install args <span class="meta" style="font-weight:normal;">(leave blank for safe defaults: <code>/quiet /norestart</code> for MSI, <code>/S</code> for NSIS, <code>/silent</code> common otherwise)</span>
         <input type="text" name="args"

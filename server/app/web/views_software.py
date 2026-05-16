@@ -129,25 +129,84 @@ def software_deploy_form(
 
 
 @router.post("/software/deploy")
-def software_deploy_submit(
-    label: str = Form(...),
-    url: str = Form(...),
-    args: str = Form(""),
-    target_mode: str = Form("agent"),
-    agent_id: int | None = Form(None),
-    hostname_pattern: str = Form("%"),
+async def software_deploy_submit(
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    if not url.strip():
-        raise HTTPException(status_code=400, detail="URL is required")
+    """Accept either an uploaded installer file OR a pasted URL. Multipart form."""
+    from fastapi import UploadFile
+    from ..api.uploads import UPLOAD_DIR
+    import hashlib, os, uuid as _uuid
+    from ..models import UploadedFile
+
+    form = await request.form()
+    label = (form.get("label") or "").strip()[:120]
+    url   = (form.get("url") or "").strip()
+    args  = (form.get("args") or "").strip()
+    target_mode      = form.get("target_mode", "agent")
+    agent_id_raw     = form.get("agent_id")
+    hostname_pattern = form.get("hostname_pattern", "%")
+
+    installer_file = form.get("installer_file")
+    # An empty UploadFile means no file selected — its filename will be empty.
+    file_supplied = (hasattr(installer_file, "filename") and installer_file.filename
+                     and installer_file.size and installer_file.size > 0)
+
+    if not file_supplied and not url:
+        raise HTTPException(status_code=400, detail="Either upload a file OR paste a URL")
+    if not label:
+        raise HTTPException(status_code=400, detail="Label is required")
+
+    # If an upload came in, save it and replace the URL with the public file URL
+    if file_supplied:
+        from ..api.uploads import _safe_ext, MAX_BYTES
+        file_id = _uuid.uuid4().hex
+        ext = _safe_ext(installer_file.filename)
+        target_path = UPLOAD_DIR / f"{file_id}{ext}"
+        h = hashlib.sha256()
+        written = 0
+        try:
+            with open(target_path, "wb") as out:
+                while True:
+                    chunk = await installer_file.read(1024 * 256)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_BYTES:
+                        out.close(); target_path.unlink(missing_ok=True)
+                        raise HTTPException(status_code=413, detail="File too large (>1 GB)")
+                    h.update(chunk); out.write(chunk)
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            target_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=f"upload failed: {e}")
+
+        db.add(UploadedFile(
+            id=file_id, tenant_id=user.tenant_id,
+            original_filename=installer_file.filename[:255],
+            content_type=(installer_file.content_type or "application/octet-stream")[:120],
+            size_bytes=written, sha256=h.hexdigest(),
+            purpose="installer", created_by_id=user.id,
+        ))
+        db.commit()
+
+        # Build absolute URL the agent will fetch
+        base = str(request.base_url).rstrip("/")
+        url = f"{base}/files/{file_id}{ext}"
+
     params = {
-        "label": label.strip()[:120],
-        "url":   url.strip(),
-        "args":  args.strip(),
+        "label": label,
+        "url":   url,
+        "args":  args,
     }
     queued = 0
     if target_mode == "agent":
+        try:
+            agent_id = int(agent_id_raw) if agent_id_raw else None
+        except (TypeError, ValueError):
+            agent_id = None
         if not agent_id:
             raise HTTPException(status_code=400, detail="Pick an endpoint")
         try:

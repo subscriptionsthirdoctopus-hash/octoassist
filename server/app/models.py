@@ -654,6 +654,38 @@ class ChangeEvent(Base):
 
 
 # ---------------------------------------------------------------------------
+# Admin-uploaded files — installers, wallpapers, scripts
+# ---------------------------------------------------------------------------
+# When the admin pushes a .exe via Software → Deploy or sets a wallpaper, we
+# accept a multipart upload from the browser and persist it on disk under
+# /srv/octoassist/uploads/<uuid>.<ext>. The UploadedFile row holds metadata
+# only — the actual bytes are on the filesystem (mounted Docker volume).
+#
+# Agents download via the unauthenticated /files/<uuid>.<ext> route: the UUID
+# is 128 bits of entropy and only ever appears in a RemoteAction row that's
+# tenant-scoped + agent-bearer-protected, so it's effectively unguessable.
+
+class UploadedFile(Base):
+    __tablename__ = "uploaded_files"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)   # UUID hex
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False, default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False, default="installer")  # installer / wallpaper / script
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    created_by: Mapped["User | None"] = relationship()
+
+    __table_args__ = (
+        Index("ix_uploaded_files_tenant_created", "tenant_id", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Remote Action framework — admin-triggered commands the agent runs as SYSTEM
 # ---------------------------------------------------------------------------
 # Generic command channel that complements patch deployments. Each row =

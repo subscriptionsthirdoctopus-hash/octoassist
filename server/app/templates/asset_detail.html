@@ -65,10 +65,21 @@
       <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary">Queue notification</button></div>
     </form>
 
-    <form method="post" action="/asset/{{ agent.id }}/action" id="act-wallpaper" style="display:none;">
+    <form method="post" action="/asset/{{ agent.id }}/action" id="act-wallpaper" enctype="multipart/form-data" style="display:none;">
       <input type="hidden" name="kind" value="set_wallpaper">
-      <label>Image URL<input type="url" name="url" required style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;" placeholder="https://example.com/wallpapers/corporate.jpg"></label>
-      <p class="meta" style="font-size:12px;margin:6px 0 0;">Image is downloaded to <code>%ProgramData%\OctoAssist\wallpaper.jpg</code> and applied to every signed-in user's desktop. JPG / PNG / BMP supported.</p>
+      <div style="border:1px dashed var(--line);border-radius:6px;padding:12px;background:#f8fafc;">
+        <strong style="font-size:13px;display:block;margin-bottom:6px;">📤 Wallpaper source (pick one)</strong>
+        <label style="display:block;margin-bottom:8px;">Upload image <span class="meta" style="font-weight:normal;">(.jpg / .png / .bmp, up to 1 GB)</span>
+          <input type="file" name="wallpaper_file" accept="image/jpeg,image/png,image/bmp,.jpg,.jpeg,.png,.bmp"
+                 style="display:block;margin-top:4px;font-size:13px;">
+        </label>
+        <p class="meta" style="margin:6px 0;font-size:11.5px;text-align:center;color:var(--slate);">— or —</p>
+        <label>Paste image URL
+          <input type="url" name="url" placeholder="https://example.com/wallpaper.jpg"
+                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+        </label>
+      </div>
+      <p class="meta" style="font-size:12px;margin:6px 0 0;">Image is downloaded to <code>%ProgramData%\OctoAssist\wallpaper.jpg</code> and applied to every signed-in user's desktop. Refresh fires via SystemParametersInfo so the change appears live.</p>
       <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary">Apply wallpaper</button></div>
     </form>
 
