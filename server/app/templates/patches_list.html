@@ -143,6 +143,13 @@
     Per-machine view. Each endpoint reports back what Windows Update + winget see as pending.
     <strong>Fully Updated</strong> means a successful scan with zero pending patches — that's the goal state.
   </p>
+  <p class="meta" style="margin:0 0 12px;font-size:12px;">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;"></span> Online (≤2 min ago) — deploys land within 30 sec
+    &nbsp;·&nbsp;
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d97706;margin-right:4px;vertical-align:middle;"></span> Lagging (2-5 min)
+    &nbsp;·&nbsp;
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:4px;vertical-align:middle;"></span> Offline (powered off / no network) — deploys queue until it returns
+  </p>
   {% if win_dash %}
   <table class="data">
     <thead>
@@ -161,7 +168,16 @@
     <tbody>
       {% for r in win_dash %}
       <tr>
-        <td><a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a></td>
+        <td>
+          {% if r.online == 'online' %}
+            <span title="Online — last seen within 2 minutes" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:6px;vertical-align:middle;"></span>
+          {% elif r.online == 'lagging' %}
+            <span title="Lagging — last seen within 5 minutes (waking up?)" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d97706;margin-right:6px;vertical-align:middle;"></span>
+          {% else %}
+            <span title="Offline — not heard from in 5+ minutes (powered off or no network)" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:6px;vertical-align:middle;"></span>
+          {% endif %}
+          <a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a>
+        </td>
         <td style="font-size:12.5px;color:var(--slate);">{{ r.os_caption }}</td>
         <td>{% if r.last_scan_at %}{{ r.last_scan_at | ist }}{% else %}<span style="color:var(--slate);font-size:12px;">unknown</span>{% endif %}</td>
         <td><strong>{{ r.pending_count }}</strong></td>

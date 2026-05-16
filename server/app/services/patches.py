@@ -180,6 +180,14 @@ def windows_endpoint_dashboard(db: Session, tenant_id: int) -> list[dict]:
             weight = crit * 4 + imp * 2 + mod * 1 + low * 0.5 + unk * 0.5
             compliance = max(0, int(round(100 - min(100, weight * 5))))
 
+        # Online classification: with the 30-sec poll, an agent that hasn't
+        # called in for >2 min is suspect; >5 min is "offline" (powered off,
+        # no network, daemon stopped). Drives the green/amber/red dot.
+        online = "offline"
+        if agent.last_seen_at is not None:
+            age = (_now() - agent.last_seen_at).total_seconds()
+            if age <= 120:    online = "online"      # ✓ within 2 polls
+            elif age <= 300:  online = "lagging"    # ⚠ recent but stale
         out.append({
             "agent_id":          agent.id,
             "hostname":          agent.hostname,
@@ -200,6 +208,7 @@ def windows_endpoint_dashboard(db: Session, tenant_id: int) -> list[dict]:
             "scan_failed":       scan_known and not scan_success,
             "needs_refresh":     not scan_known,  # old-agent flag
             "compliance_pct":    compliance,
+            "online":            online,
         })
 
     # Sort: needs_refresh / scan_failed first, then by pending desc, then host.

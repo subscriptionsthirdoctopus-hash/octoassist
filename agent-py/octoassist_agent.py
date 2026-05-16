@@ -1017,12 +1017,20 @@ def _install_windows_update(kb_or_name: str) -> dict:
     if p.upper().startswith("KB") and p[2:].split(maxsplit=1)[0].isdigit():
         ps_arg = f"-KBArticleID '{p}'"
     else:
-        # Strip trailing "(version)" so the wildcard match isn't too tight
+        # PSWindowsUpdate's -Title parameter does a REGEX match against each
+        # update's Title property (NOT a glob). So we have to:
+        #   (1) Strip the trailing "(version)" off the recorded title — minor
+        #       version drift between scan + install would otherwise miss.
+        #   (2) Regex-escape every character so the title matches literally.
+        #   (3) PowerShell-escape single quotes for the surrounding ' '.
+        # The escaped string then acts as a substring regex (PSWindowsUpdate
+        # uses [regex]::IsMatch which returns true if the pattern is found
+        # anywhere in Title) — exactly the behaviour we want.
         import re as _re
         title_core = _re.sub(r"\s*\([^)]+\)\s*$", "", p).strip()
-        # PowerShell-escape single quotes
-        safe = title_core.replace("'", "''")
-        ps_arg = f"-Title '*{safe}*'"
+        regex_safe = _re.escape(title_core)            # escape regex specials
+        safe       = regex_safe.replace("'", "''")     # ps-escape single quotes
+        ps_arg = f"-Title '{safe}'"
     # Install via PSWindowsUpdate. -MicrosoftUpdate matches the scanner so
     # we can deploy drivers, .NET, OEM hardware, AI components — same set
     # the end-user would see in Settings → Windows Update.
@@ -1356,7 +1364,11 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
     cfg = load_config()
     cfg = register_if_needed(cfg)
     slow_interval_h = max(1, int(cfg.get("checkin_interval_hours", 6)))
-    fast_interval_s = max(30, int(cfg.get("deploy_poll_seconds", 300)))
+    # Default 30-second deployment poll: when admin clicks Push, the
+    # endpoint picks the work up almost immediately. 30s is the floor we
+    # actively recommend; admin can override via deploy_poll_seconds in
+    # agent.json if they want to back off (large fleets, mobile data, etc).
+    fast_interval_s = max(15, int(cfg.get("deploy_poll_seconds", 30)))
 
     log.info("Daemon mode: full check-in every %d h, deployment poll every %d s",
              slow_interval_h, fast_interval_s)

@@ -31,18 +31,15 @@
 
 {# Awaiting-checkin nudge: shown when window is in_progress but no target has progressed beyond `planned` #}
 {% if window.status.value == 'in_progress' and progress.counts.planned == progress.total and progress.counts.planned > 0 %}
-<section class="card" style="margin-bottom:16px;background:#fef3c7;border-left:4px solid #d97706;">
-  <h3 style="margin:0 0 6px;font-size:14px;">⏱ Waiting for endpoints to check in</h3>
-  <p style="margin:0 0 10px;font-size:13px;line-height:1.5;">
-    This deployment is queued. Each agent picks it up <strong>on its next scheduled check-in</strong>
-    (every 6 hours), at which point it installs the approved packages via
-    <code>Install-WindowsUpdate -MicrosoftUpdate</code> / <code>winget upgrade</code> as SYSTEM —
-    no user-side action needed. To force a check-in <em>right now</em>, run the
-    one-line refresh command on each endpoint listed below.
+<section class="card" style="margin-bottom:16px;background:#dbeafe;border-left:4px solid #2563eb;">
+  <h3 style="margin:0 0 6px;font-size:14px;">⏱ Queued — endpoints will pick this up within 30 seconds</h3>
+  <p style="margin:0;font-size:13px;line-height:1.5;">
+    Agents poll every <strong>30 seconds</strong> for new work. Online endpoints will start installing
+    in moments via <code>Install-WindowsUpdate -MicrosoftUpdate</code> / <code>winget upgrade</code>
+    as SYSTEM — no user-side action. If an endpoint is currently offline (powered off, no network),
+    it picks this up the moment it next reaches the server.
+    <br><strong>You don't have to do anything.</strong> Refresh this page in 30 seconds.
   </p>
-  <button type="button" class="primary" onclick="showRefreshModalForWindow()">
-    Show "trigger now" command
-  </button>
 </section>
 {% endif %}
 
