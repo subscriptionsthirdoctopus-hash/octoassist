@@ -8,6 +8,10 @@ class AgentRegisterRequest(BaseModel):
     enrolment_key: str
     machine_id: str
     hostname: str
+    # OctoAssist is Windows-only. Agent must self-declare its OS family on
+    # registration; the server rejects non-Windows. Optional for back-compat
+    # with older agents (they're rejected if hostname doesn't look Windows).
+    os_family: str | None = None   # "Windows" / "Linux" / "Darwin"
 
 
 class AgentRegisterResponse(BaseModel):

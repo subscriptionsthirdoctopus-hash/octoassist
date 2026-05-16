@@ -1245,7 +1245,9 @@ def register_if_needed(cfg: dict) -> dict:
     code, body = _http(
         cfg["server_url"].rstrip("/") + "/api/v1/agent/register",
         method="POST",
-        body={"enrolment_key": cfg["enrolment_key"], "machine_id": machine_id, "hostname": hostname},
+        body={"enrolment_key": cfg["enrolment_key"],
+              "machine_id": machine_id, "hostname": hostname,
+              "os_family": platform.system()},  # "Windows" / "Linux" / "Darwin"
     )
     if code != 200:
         raise SystemExit(f"Registration failed: {code} {body}")

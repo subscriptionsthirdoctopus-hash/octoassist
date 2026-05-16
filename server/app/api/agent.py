@@ -22,6 +22,16 @@ def register(req: AgentRegisterRequest, db: Session = Depends(get_db)) -> AgentR
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid enrolment key")
 
+    # OctoAssist is Windows-only. Reject Linux / macOS at registration so
+    # non-Windows endpoints never end up in any dashboard or deployment queue.
+    family = (req.os_family or "").strip().lower()
+    if family and family != "windows":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(f"OctoAssist is Windows-only. Registration refused from "
+                    f"os_family='{req.os_family}'. Install on Windows 10 / 11."),
+        )
+
     agent = db.query(Agent).filter(Agent.machine_id == req.machine_id).first()
     if agent is None:
         agent = Agent(tenant_id=tenant.id, machine_id=req.machine_id, hostname=req.hostname)
@@ -111,6 +121,18 @@ def checkin(
     agent: Agent = Depends(authenticate_agent),
     db: Session = Depends(get_db),
 ) -> CheckinResponse:
+    # OctoAssist is Windows-only. If an agent's inventory reports a non-Windows
+    # OS, refuse to ingest. This catches:
+    #   (a) older agents that registered before os_family validation
+    #   (b) agents whose OS changed (e.g. dual-boot, OS swap) post-registration
+    os_caption = ((req.os or {}).get("caption") or "").lower()
+    if os_caption and "windows" not in os_caption and "microsoft" not in os_caption:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(f"OctoAssist is Windows-only. Agent reports OS='{os_caption}'. "
+                    f"Inventory rejected; please uninstall OctoAssist on non-Windows hosts."),
+        )
+
     now = datetime.now(timezone.utc)
     snapshot = AssetSnapshot(
         agent_id=agent.id,
