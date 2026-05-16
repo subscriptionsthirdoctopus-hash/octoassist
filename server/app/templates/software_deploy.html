@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Deploy Software — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Software</h1>
+      <p class="meta">Push installers (.exe / .msi / .msu) to Windows endpoints. Runs as SYSTEM, no user prompt.</p>
+    </div>
+  </div>
+</section>
+
+<nav class="card" style="display:flex;gap:6px;margin-bottom:18px;padding:6px;background:#f8fafc;">
+  <a href="/software"        class="button"         style="flex:0;">📊 Inventory</a>
+  <a href="/software/deploy" class="button primary" style="flex:0;">📥 Deploy software</a>
+</nav>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<div class="cards" style="grid-template-columns:1fr 1fr;gap:18px;">
+  <div class="card">
+    <h3 style="margin:0 0 10px;">Push installer to endpoint(s)</h3>
+    <p class="meta" style="margin:0 0 14px;font-size:12.5px;">
+      Paste a public URL to the installer (Azure storage / SharePoint / corporate file server / vendor download link).
+      The agent downloads it on the endpoint, runs it as SYSTEM with your silent-install args, then reports back.
+    </p>
+
+    <form method="post" action="/software/deploy" style="display:grid;gap:10px;">
+      <label>Installer label <span class="meta" style="font-weight:normal;">(for tracking — e.g. "Chrome 130 fleet rollout")</span>
+        <input type="text" name="label" required maxlength="120"
+               placeholder="e.g. Acrobat Reader 24.005 — Engineering OU"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+      </label>
+
+      <label>Installer URL <span class="meta" style="font-weight:normal;">(must be HTTPS-reachable from endpoints)</span>
+        <input type="url" name="url" required
+               placeholder="https://example.com/installers/AcroRdrDC2400520320_en_US.exe"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+      </label>
+
+      <label>Silent-install args <span class="meta" style="font-weight:normal;">(leave blank for safe defaults: <code>/quiet /norestart</code> for MSI, <code>/S</code> for NSIS, <code>/silent</code> common otherwise)</span>
+        <input type="text" name="args"
+               placeholder="/quiet /norestart"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+      </label>
+
+      <label>Target
+        <select name="target_mode" id="target-mode" onchange="onTargetModeChange()"
+                style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+          <option value="agent">One specific endpoint</option>
+          <option value="pattern">Hostname pattern (% wildcard)</option>
+          <option value="all">All endpoints</option>
+        </select>
+      </label>
+
+      <div id="row-agent">
+        <label>Endpoint
+          <select name="agent_id" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+            {% for a in agents %}
+            <option value="{{ a.id }}">{{ a.hostname }}{% if a.last_seen_at %} — last seen {{ a.last_seen_at | ist }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div id="row-pattern" style="display:none;">
+        <label>Hostname pattern (SQL LIKE — <code>%</code> = wildcard)
+          <input type="text" name="hostname_pattern" value="%"
+                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
+          <p class="meta" style="margin:4px 0 0;font-size:11.5px;">
+            Examples: <code>%</code> all endpoints · <code>HO-TIPL-LAP-%</code> all HO laptops · <code>Sweety</code> exact match
+          </p>
+        </label>
+      </div>
+
+      <div class="form-actions" style="margin-top:6px;">
+        <button type="submit" class="primary"
+                onclick="return confirm('Queue this deploy?\n\nAgents pick it up on next 30-second poll and install as SYSTEM — no user prompt on the endpoint.');">
+          Queue deploy →
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 8px;">Quick tips</h3>
+    <ul style="font-size:13px;line-height:1.55;padding-left:20px;margin:0;">
+      <li><strong>.msi files</strong> run via <code>msiexec /i</code>. Default args: <code>/quiet /norestart</code>.</li>
+      <li><strong>.exe installers</strong> use whatever the vendor documents:
+        <ul style="margin:4px 0 0;padding-left:18px;">
+          <li>NSIS (most apps): <code>/S</code></li>
+          <li>InnoSetup: <code>/VERYSILENT /SUPPRESSMSGBOXES /NORESTART</code></li>
+          <li>InstallShield: <code>/s /v"/qn /norestart"</code></li>
+          <li>Adobe / Microsoft custom: see vendor docs</li>
+        </ul>
+      </li>
+      <li><strong>Endpoint must reach the URL</strong> over HTTPS (or HTTP) for the download to succeed.</li>
+      <li>Agent runs as <strong>SYSTEM</strong> — no UAC prompt, no user-side dialog.</li>
+      <li>Status updates within <strong>30 seconds</strong>; result is in the table below.</li>
+    </ul>
+  </div>
+</div>
+
+<section style="margin-top:24px;">
+  <h2 style="margin:0 0 10px;">Recent deploys</h2>
+  {% if actions %}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>When (IST)</th>
+        <th>Endpoint</th>
+        <th>Installer</th>
+        <th>Args</th>
+        <th>Status</th>
+        <th>Exit</th>
+        <th>Created by</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in actions %}
+      <tr>
+        <td>{{ a.created_at | ist }}</td>
+        <td><a href="/asset/{{ a.agent_id }}">{{ a.agent.hostname if a.agent else "—" }}</a></td>
+        <td>
+          <strong>{{ a.params.get('label', '—') }}</strong>
+          <div class="meta" style="font-size:11.5px;word-break:break-all;">{{ a.params.get('url', '')[:80] }}{% if a.params.get('url','')|length > 80 %}…{% endif %}</div>
+        </td>
+        <td><code style="font-size:11.5px;">{{ a.params.get('args') or '—' }}</code></td>
+        <td>
+          {% set s = a.status.value %}
+          {% if s == 'succeeded' %}<span class="status status-resolved">✓ succeeded</span>
+          {% elif s == 'failed' %}<span class="status status-cancelled">✗ failed</span>
+          {% elif s == 'in_progress' %}<span class="status status-in_progress">running</span>
+          {% elif s == 'cancelled' %}<span class="status status-on_hold">cancelled</span>
+          {% else %}<span class="status status-on_hold">⏱ queued</span>{% endif %}
+        </td>
+        <td>{{ a.exit_code if a.exit_code is not none else "—" }}</td>
+        <td>{{ a.created_by.display_name if a.created_by else "—" }}</td>
+        <td><a href="/software/deploy/{{ a.id }}" class="link-button">details</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <p>No deploys queued yet. Push your first installer with the form above.</p>
+  </div>
+  {% endif %}
+</section>
+
+<script>
+function onTargetModeChange() {
+  var mode = document.getElementById('target-mode').value;
+  document.getElementById('row-agent').style.display   = (mode === 'agent') ? '' : 'none';
+  document.getElementById('row-pattern').style.display = (mode === 'pattern') ? '' : 'none';
+}
+</script>
+{% endblock %}

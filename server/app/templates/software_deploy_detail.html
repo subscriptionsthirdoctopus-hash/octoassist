@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Deploy #{{ action.id }} — {{ action.params.get('label', '—') }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/software/deploy">← Software → Deploy</a></p>
+  <h1>{{ action.params.get('label', '—') }}</h1>
+  <p class="meta">
+    Deploy #{{ action.id }} ·
+    target: <a href="/asset/{{ action.agent_id }}">{{ action.agent.hostname if action.agent else "—" }}</a> ·
+    queued {{ action.created_at | ist }} by {{ action.created_by.display_name if action.created_by else "—" }}
+  </p>
+</section>
+
+<div class="cards" style="grid-template-columns:1fr 1fr 1fr;">
+  <div class="card">
+    <h3 style="margin:0 0 6px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Status</h3>
+    {% set s = action.status.value %}
+    {% if s == 'succeeded' %}<p style="font-size:22px;margin:0;color:#16a34a;font-weight:700;">✓ Succeeded</p>
+    {% elif s == 'failed' %}<p style="font-size:22px;margin:0;color:#dc2626;font-weight:700;">✗ Failed</p>
+    {% elif s == 'in_progress' %}<p style="font-size:22px;margin:0;color:#d97706;font-weight:700;">⏳ Running</p>
+    {% elif s == 'cancelled' %}<p style="font-size:22px;margin:0;color:#64748b;font-weight:700;">⊘ Cancelled</p>
+    {% else %}<p style="font-size:22px;margin:0;color:#64748b;font-weight:700;">⏱ Queued</p>{% endif %}
+    {% if action.exit_code is not none %}
+    <p class="meta" style="margin:6px 0 0;">Exit code: <strong>{{ action.exit_code }}</strong></p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 6px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Timing</h3>
+    <dl style="margin:0;font-size:13px;">
+      <dt>Queued</dt><dd>{{ action.created_at | ist }}</dd>
+      <dt>Started</dt><dd>{% if action.started_at %}{{ action.started_at | ist }}{% else %}—{% endif %}</dd>
+      <dt>Finished</dt><dd>{% if action.finished_at %}{{ action.finished_at | ist }}{% else %}—{% endif %}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 6px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Installer</h3>
+    <p style="margin:0 0 4px;font-size:13px;word-break:break-all;"><code>{{ action.params.get('url','—') }}</code></p>
+    <p class="meta" style="margin:6px 0 0;font-size:12px;">Args: <code>{{ action.params.get('args') or '(defaults)' }}</code></p>
+    {% if action.result and action.result.get('downloaded_bytes') %}
+    <p class="meta" style="margin:6px 0 0;font-size:12px;">Downloaded: {{ "%.1f"|format(action.result.downloaded_bytes / 1024 / 1024) }} MB</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if action.stdout %}
+<section style="margin-top:16px;">
+  <h3 style="font-size:14px;">stdout</h3>
+  <pre class="code" style="background:#f8fafc;padding:12px;border-radius:4px;font-size:11.5px;max-height:300px;overflow:auto;">{{ action.stdout }}</pre>
+</section>
+{% endif %}
+
+{% if action.stderr %}
+<section style="margin-top:16px;">
+  <h3 style="font-size:14px;color:#dc2626;">stderr</h3>
+  <pre class="code" style="background:#fef2f2;color:#991b1b;padding:12px;border-radius:4px;font-size:11.5px;max-height:300px;overflow:auto;">{{ action.stderr }}</pre>
+</section>
+{% endif %}
+{% endblock %}

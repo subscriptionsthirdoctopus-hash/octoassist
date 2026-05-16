@@ -1381,6 +1381,240 @@ def cmd_once(_args: argparse.Namespace) -> int:
     return 0 if checkin_once(cfg) else 1
 
 
+# ---------------------------------------------------------- remote actions
+
+def execute_pending_actions(cfg: dict) -> int:
+    """Poll /api/v1/agent/actions, dispatch each to a handler, post results.
+
+    Generic command channel — every "do X on the endpoint" feature in OctoAssist
+    flows through here. The dashboard creates a RemoteAction row; the agent
+    sees it on next 30-sec poll; the right handler runs; result is posted back.
+
+    Adding a new action kind = new handler function + dict entry below.
+    Returns count of actions processed (succeeded or failed).
+    """
+    if platform.system() != "Windows":
+        return 0  # remote-action surface is Windows-only by design
+
+    base = cfg["server_url"].rstrip("/")
+    token = cfg["agent_token"]
+    try:
+        code, body = _http(base + "/api/v1/agent/actions", method="GET", token=token)
+    except Exception as e:  # noqa: BLE001
+        log.warning("actions: pickup failed: %s", e)
+        return 0
+    if code != 200:
+        return 0
+    try:
+        actions = json.loads(body)
+    except Exception:
+        return 0
+    if not actions:
+        return 0
+
+    processed = 0
+    for a in actions:
+        action_id = a["id"]
+        kind      = a.get("kind", "")
+        params    = a.get("params") or {}
+        log.info("action %s: %s — running", action_id, kind)
+
+        # Mark in_progress server-side
+        try:
+            _http(f"{base}/api/v1/agent/actions/{action_id}/start",
+                  method="POST", token=token)
+        except Exception:
+            pass
+
+        # Dispatch — each handler returns a dict with success/exit_code/stdout/stderr/result
+        handler = _ACTION_HANDLERS.get(kind)
+        if handler is None:
+            result = {"success": False, "exit_code": -1,
+                      "stderr": f"unknown action kind: {kind}", "stdout": None,
+                      "result": None}
+        else:
+            try:
+                result = handler(params)
+            except subprocess.TimeoutExpired:
+                result = {"success": False, "exit_code": 124,
+                          "stderr": "timeout", "stdout": None, "result": None}
+            except Exception as e:  # noqa: BLE001
+                result = {"success": False, "exit_code": 1,
+                          "stderr": f"{type(e).__name__}: {e}",
+                          "stdout": None, "result": None}
+
+        # Truncate output to keep payloads small
+        if isinstance(result.get("stdout"), str):
+            result["stdout"] = result["stdout"][-15000:]
+        if isinstance(result.get("stderr"), str):
+            result["stderr"] = result["stderr"][-4000:]
+
+        try:
+            _http(f"{base}/api/v1/agent/actions/{action_id}/result",
+                  method="POST", body=result, token=token)
+        except Exception as e:  # noqa: BLE001
+            log.warning("action %s: result POST failed: %s", action_id, e)
+        log.info("action %s: done success=%s exit=%s",
+                 action_id, result.get("success"), result.get("exit_code"))
+        processed += 1
+
+    return processed
+
+
+# -------------------- action handlers --------------------
+
+def _action_run_executable(params: dict) -> dict:
+    """Download a URL (.exe / .msi / .msu), run it with the given args, capture output."""
+    url = params.get("url")
+    args = params.get("args", "")
+    if not url:
+        return {"success": False, "exit_code": -1, "stderr": "missing 'url' param",
+                "stdout": None, "result": None}
+
+    # Pick a filename from the URL or default to .exe
+    import urllib.parse, hashlib
+    fname = (urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]
+             or f"octo_install_{hashlib.sha256(url.encode()).hexdigest()[:10]}.exe")
+    if not fname.lower().endswith((".exe", ".msi", ".msu", ".bat", ".cmd")):
+        fname += ".exe"
+    target = Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / fname
+
+    log.info("run_executable: downloading %s -> %s", url, target)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "OctoAssist-Agent/1"})
+        with urllib.request.urlopen(req, timeout=300) as resp, open(target, "wb") as f:
+            while True:
+                chunk = resp.read(64 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+    except Exception as e:  # noqa: BLE001
+        return {"success": False, "exit_code": -1,
+                "stderr": f"download failed: {e}", "stdout": None, "result": None}
+
+    size = target.stat().st_size if target.exists() else 0
+    log.info("run_executable: downloaded %d bytes; running with args=%r", size, args)
+
+    is_msi = target.suffix.lower() == ".msi"
+    if is_msi:
+        # msiexec must run msi files
+        cmd = ["msiexec", "/i", str(target)] + (args.split() if args else ["/quiet", "/norestart"])
+    else:
+        # Treat as a generic installer / exe
+        cmd = [str(target)] + (args.split() if args else [])
+
+    proc = _run(cmd, capture_output=True, text=True, timeout=3600)
+
+    # Best-effort cleanup of the downloaded file
+    try:
+        target.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "",
+        "stderr": proc.stderr or "",
+        "result": {"downloaded_bytes": size, "filename": fname, "args": args},
+    }
+
+
+def _action_reboot(params: dict) -> dict:
+    delay = int(params.get("delay_seconds", 60))
+    reason = (params.get("reason") or "OctoAssist-initiated reboot")[:127]
+    proc = _run(["shutdown.exe", "/r", "/t", str(delay), "/f", "/c", reason],
+                capture_output=True, text=True, timeout=15)
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
+        "result": {"delay_seconds": delay, "reason": reason},
+    }
+
+
+def _action_lock_workstation(_params: dict) -> dict:
+    proc = _run(["rundll32.exe", "user32.dll,LockWorkStation"],
+                capture_output=True, text=True, timeout=10)
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
+        "result": None,
+    }
+
+
+def _action_send_toast(params: dict) -> dict:
+    """Show a Windows alert message in every active session via msg.exe."""
+    title = (params.get("title") or "OctoAssist")[:80]
+    body  = (params.get("body")  or "")[:500]
+    text  = (f"{title}\n\n{body}" if body else title)
+    proc = _run(["msg.exe", "*", "/TIME:600", text],
+                capture_output=True, text=True, timeout=20)
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
+        "result": None,
+    }
+
+
+def _action_list_processes(_params: dict) -> dict:
+    ps = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+Get-Process | Where-Object { $_.MainWindowTitle -ne '' -or $_.WorkingSet -gt 50MB } |
+  Sort-Object -Property WorkingSet -Descending |
+  Select-Object -First 60 -Property Name, Id, @{N='RAM_MB';E={[math]::Round($_.WorkingSet/1MB,1)}}, CPU, Path |
+  ConvertTo-Json -Compress
+"""
+    proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                capture_output=True, text=True, timeout=30)
+    try:
+        data = json.loads(proc.stdout or "[]")
+        if isinstance(data, dict):
+            data = [data]
+    except Exception:
+        data = []
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": None, "stderr": proc.stderr or "",
+        "result": {"processes": data},
+    }
+
+
+def _action_kill_process(params: dict) -> dict:
+    name = params.get("name")
+    pid  = params.get("pid")
+    if not name and not pid:
+        return {"success": False, "exit_code": -1,
+                "stderr": "missing name or pid", "stdout": None, "result": None}
+    if pid:
+        ps = f"Stop-Process -Id {int(pid)} -Force -ErrorAction Stop"
+    else:
+        # Strip .exe; Stop-Process -Name doesn't want the extension
+        safe = str(name).strip().rstrip(".exeEXE")
+        ps = f"Stop-Process -Name '{safe}' -Force -ErrorAction Stop"
+    proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                capture_output=True, text=True, timeout=20)
+    return {
+        "success": proc.returncode == 0,
+        "exit_code": proc.returncode,
+        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
+        "result": {"target": name or f"pid={pid}"},
+    }
+
+
+_ACTION_HANDLERS = {
+    "run_executable":  _action_run_executable,
+    "reboot":          _action_reboot,
+    "lock_workstation": _action_lock_workstation,
+    "send_toast":      _action_send_toast,
+    "list_processes":  _action_list_processes,
+    "kill_process":    _action_kill_process,
+}
+
+
 def cmd_daemon(_args: argparse.Namespace) -> int:
     """Long-running daemon with two cadences:
 
@@ -1426,22 +1660,31 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
                 checkin_once(cfg)
                 last_full_checkin = now
             else:
-                # Fast cycle: just pick up + execute pending deployments.
-                # If there's nothing pending the call is cheap (1 HTTP GET).
+                # Fast cycle: poll for two kinds of work, both cheap (1 GET each).
+                #   1. Pending patch deployments  (Install-WindowsUpdate / winget)
+                #   2. Pending remote actions    (run .exe, reboot, lock, toast, ...)
+                deploys = 0
+                actions = 0
                 try:
-                    n = execute_pending_deployments(cfg)
-                    if n:
-                        log.info("Fast cycle: processed %d deployment target(s)", n)
-                        # After running deployments, push a fresh inventory so
-                        # the server's patch state reflects what just installed.
-                        try:
-                            snap = collect_snapshot()
-                            _http(cfg["server_url"].rstrip("/") + "/api/v1/agent/checkin",
-                                  method="POST", body=snap, token=cfg["agent_token"])
-                        except Exception as e:  # noqa: BLE001
-                            log.warning("post-deploy resync failed: %s", e)
+                    deploys = execute_pending_deployments(cfg)
                 except Exception as e:  # noqa: BLE001
                     log.warning("Fast deployment poll failed: %s", e)
+                try:
+                    actions = execute_pending_actions(cfg)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Fast action poll failed: %s", e)
+
+                if deploys or actions:
+                    log.info("Fast cycle: %d deployment(s) + %d action(s) processed",
+                             deploys, actions)
+                    # Push fresh inventory after side-effects (new software
+                    # installed, processes killed, etc. should be reflected).
+                    try:
+                        snap = collect_snapshot()
+                        _http(cfg["server_url"].rstrip("/") + "/api/v1/agent/checkin",
+                              method="POST", body=snap, token=cfg["agent_token"])
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("post-action resync failed: %s", e)
         except KeyboardInterrupt:
             return 0
         except Exception as e:  # noqa: BLE001

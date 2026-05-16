@@ -8,16 +8,16 @@ Routes:
 from pathlib import Path
 from urllib.parse import quote, unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
 from ..auth import require_staff
 from ..database import get_db
-from ..models import Tenant, User
-from ..services import charts, sam
+from ..models import Agent, RemoteAction, RemoteActionKind, Tenant, User
+from ..services import charts, remote_actions as ra_svc, sam
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -103,6 +103,93 @@ def software_export(
         iter([body]),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="octoassist-software-sam.csv"'},
+    )
+
+
+# ---------- Software → Deploy tab (run .exe / .msi on endpoints) ----------
+
+@router.get("/software/deploy", response_class=HTMLResponse)
+def software_deploy_form(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    agents = (db.query(Agent)
+                .filter(Agent.tenant_id == user.tenant_id)
+                .order_by(Agent.hostname).all())
+    actions = ra_svc.recent(db, tenant_id=user.tenant_id,
+                            kind=RemoteActionKind.run_executable, limit=50)
+    return templates.TemplateResponse(
+        request=request, name="software_deploy.html",
+        context=_ctx(user, db, agents=agents, actions=actions,
+                     flash=flash, error=error),
+    )
+
+
+@router.post("/software/deploy")
+def software_deploy_submit(
+    label: str = Form(...),
+    url: str = Form(...),
+    args: str = Form(""),
+    target_mode: str = Form("agent"),
+    agent_id: int | None = Form(None),
+    hostname_pattern: str = Form("%"),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    if not url.strip():
+        raise HTTPException(status_code=400, detail="URL is required")
+    params = {
+        "label": label.strip()[:120],
+        "url":   url.strip(),
+        "args":  args.strip(),
+    }
+    queued = 0
+    if target_mode == "agent":
+        if not agent_id:
+            raise HTTPException(status_code=400, detail="Pick an endpoint")
+        try:
+            ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                         agent_id=agent_id, kind=RemoteActionKind.run_executable,
+                         params=params)
+            queued = 1
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    else:
+        # 'pattern' or 'all' — both go through queue_for_fleet
+        pattern = "%" if target_mode == "all" else (hostname_pattern or "%")
+        actions = ra_svc.queue_for_fleet(
+            db, tenant_id=user.tenant_id, creator=user,
+            kind=RemoteActionKind.run_executable, params=params,
+            hostname_pattern=pattern,
+        )
+        queued = len(actions)
+    if queued == 0:
+        return RedirectResponse(
+            url="/software/deploy?error=No+endpoints+matched+that+pattern",
+            status_code=303,
+        )
+    return RedirectResponse(
+        url=f"/software/deploy?flash=Queued+on+{queued}+endpoint(s).+Agents+pick+up+within+30+seconds.",
+        status_code=303,
+    )
+
+
+@router.get("/software/deploy/{action_id}", response_class=HTMLResponse)
+def software_deploy_detail(
+    action_id: int,
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    a = db.get(RemoteAction, action_id)
+    if a is None or a.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        request=request, name="software_deploy_detail.html",
+        context=_ctx(user, db, action=a),
     )
 
 
