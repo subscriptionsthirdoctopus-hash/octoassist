@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Roadmap — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
+  <h1>🗺️ Roadmap &amp; Status</h1>
+  <p class="meta">Every feature, where it stands. Updated as builds ship.</p>
+</section>
+
+<style>
+  .road { display:flex; flex-direction:column; gap:12px; max-width:980px; }
+  .road-row {
+    display:grid;
+    grid-template-columns: 56px 1fr 130px 90px 90px;
+    gap:14px; align-items:center;
+    padding:14px 18px;
+    background:white; border:1px solid var(--line,#e2e8f0); border-radius:8px;
+  }
+  .road-row.done    { border-left:4px solid #16a34a; }
+  .road-row.partial { border-left:4px solid #d97706; }
+  .road-row.queued  { border-left:4px solid #94a3b8; }
+  .road-num { font-size:22px; font-weight:700; color:var(--slate,#64748b); text-align:center; }
+  .road-title { font-weight:700; margin:0 0 4px; }
+  .road-sub { font-size:12.5px; color:var(--slate,#64748b); margin:0; line-height:1.45; }
+  .pill-done    { background:#dcfce7; color:#15803d; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+  .pill-partial { background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+  .pill-queued  { background:#e2e8f0; color:#475569; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+  .road-meta { font-size:12px; color:var(--slate,#64748b); text-align:center; }
+</style>
+
+<div class="road">
+
+  <div class="road-row done">
+    <div class="road-num">1</div>
+    <div>
+      <p class="road-title">Settings reorganised into clickable tiles + Users moved in</p>
+      <p class="road-sub">Top nav cleaned up. Settings is a 6-tile grid (Users / SSO / SLA / Notifications / Tenant / Roadmap). Each tile opens its own dedicated page.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">no risk</div>
+  </div>
+
+  <div class="road-row partial">
+    <div class="road-num">2</div>
+    <div>
+      <p class="road-title">Remote-action framework</p>
+      <p class="road-sub">Generic command channel that every future feature rides on. <code>remote_actions</code> table + <code>/api/v1/agent/actions</code> endpoints + agent dispatcher skeleton. Adding new actions = new enum value + handler, no new PowerShell on endpoints.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-partial">⏳ In flight</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">foundational</div>
+  </div>
+
+  <div class="road-row queued">
+    <div class="road-num">3</div>
+    <div>
+      <p class="road-title">Run .exe / .msi action + Software → Deploy tab</p>
+      <p class="road-sub">Push installers to one or many endpoints. Admin uploads installer + silent-args, agent runs as SYSTEM, captures exit code, reports back. Lives under Software, not Patches.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row queued">
+    <div class="road-num">4</div>
+    <div>
+      <p class="road-title">List + kill running processes (per-asset tab)</p>
+      <p class="road-sub">"Running apps" view per endpoint. Admin clicks Kill → <code>Stop-Process -Name -Force</code>. Useful for stuck Outlook / Adobe / locked Office docs.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row queued">
+    <div class="road-num">5</div>
+    <div>
+      <p class="road-title">Reboot now / scheduled · Lock workstation · Send toast notification</p>
+      <p class="road-sub">Three one-click actions. Reboot with grace period (user gets balloon). Lock = <code>LockWorkStation</code>. Toast = "Save your work, restart in 1 hour" style messages.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row queued">
+    <div class="road-num">6</div>
+    <div>
+      <p class="road-title">Set wallpaper (fleet-wide branding)</p>
+      <p class="road-sub">Upload an image, push to all (or selected) endpoints. Per-user wallpaper registry + refresh on next sign-in.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row queued">
+    <div class="road-num">7</div>
+    <div>
+      <p class="road-title">Reset local user password</p>
+      <p class="road-sub">Set local account password via <code>net user</code>. Audit-logged with admin who triggered it. Local accounts only — not domain.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">credentials</div>
+  </div>
+
+  <div class="road-row queued">
+    <div class="road-num">8</div>
+    <div>
+      <p class="road-title">Custom PowerShell admin action (break-glass)</p>
+      <p class="road-sub">Run arbitrary PowerShell on an endpoint. Admin-only, requires confirmation, fully audit-logged with stdout/stderr capture. Last resort for everything not in the catalog above.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-queued">Queued</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">high power</div>
+  </div>
+
+</div>
+
+<div class="card" style="margin-top:18px;background:#f8fafc;">
+  <h3 style="margin:0 0 8px;font-size:14px;">Architectural commitment</h3>
+  <p style="margin:0;font-size:13px;line-height:1.5;">
+    After <code>install.ps1</code> runs <strong>once</strong> per endpoint, OctoAssist never asks you to touch
+    that laptop again. Every item on this roadmap (and every future feature) ships via the same
+    remote-action channel — admin clicks in dashboard, agent picks it up within 30 seconds, runs as SYSTEM,
+    reports back. End users see nothing.
+  </p>
+</div>
+{% endblock %}

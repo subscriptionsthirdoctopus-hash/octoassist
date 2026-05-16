@@ -286,6 +286,31 @@ def window_transition(
     return RedirectResponse(url=f"/patches/windows/{window_id}", status_code=303)
 
 
+@router.post("/patches/windows/{window_id}/delete")
+def window_delete(
+    window_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """Hard-delete a patch window + its targets + attempts. Used when an
+    admin wants to clean up old / cancelled / mistaken deployments. Will
+    not delete windows whose targets are currently in_progress on an
+    endpoint (would corrupt the agent's view) — admin must cancel first.
+    """
+    from ..models import PatchWindowTargetStatus
+    win = db.get(PatchWindow, window_id)
+    if win is None or win.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    if any(t.status == PatchWindowTargetStatus.in_progress for t in win.targets):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete — at least one target is in_progress on its endpoint. Cancel the window first.",
+        )
+    db.delete(win)  # cascades to targets + attempts
+    db.commit()
+    return RedirectResponse(url="/patches/windows?flash=Window+deleted", status_code=303)
+
+
 @router.post("/patches/windows/{window_id}/retry-failed")
 def window_retry_failed(
     window_id: int,

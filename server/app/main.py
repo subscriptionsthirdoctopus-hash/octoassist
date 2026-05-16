@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .api.agent import router as agent_router
+from .api.agent_actions import router as agent_actions_router
 from .api.agent_deploy import router as agent_deploy_router
 from .auth import NotAuthenticated, login_redirect_for
 from .config import settings
@@ -70,8 +71,9 @@ _root_templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 install_on(_root_templates)
 
 # JSON API
-app.include_router(agent_router)        # /api/v1/agent/*  — Bearer (used by OctoAssistAgent.exe)
-app.include_router(agent_deploy_router) # /api/v1/agent/deployments/* — Phase 6 auto-install
+app.include_router(agent_router)         # /api/v1/agent/*  — Bearer (used by OctoAssistAgent.exe)
+app.include_router(agent_deploy_router)  # /api/v1/agent/deployments/* — Phase 6 auto-install
+app.include_router(agent_actions_router) # /api/v1/agent/actions/*   — Phase 10 remote-action channel
 
 # Browser routes
 app.include_router(login_router)        # /login, /logout

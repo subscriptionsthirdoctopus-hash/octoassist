@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Single Sign-On — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
+  <h1>🔐 Single Sign-On</h1>
+  <p class="meta">
+    Configure an external identity provider so users sign in with their corporate Microsoft account
+    instead of an OctoAssist password. Auto-provisioning creates an OctoAssist user the first time
+    they sign in, with a default role you choose below.
+  </p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+
+{% if not is_https %}
+<div class="alert error">
+  <strong>HTTPS required for SSO.</strong> Microsoft Entra ID rejects redirect URIs that aren't HTTPS (except <code>localhost</code>).
+</div>
+{% endif %}
+
+{% if idps %}
+<table class="data">
+  <thead>
+    <tr><th>Provider</th><th>Type</th><th>Status</th><th>Last test</th><th>Auto-provision</th><th>Default role</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for i in idps %}
+    <tr>
+      <td><a href="/settings/idp/{{ i.id }}">{{ i.display_name }}</a></td>
+      <td>{{ i.kind.value }}</td>
+      <td>{% if i.is_enabled %}<span class="status status-resolved">enabled</span>{% else %}<span class="status status-on_hold">disabled</span>{% endif %}</td>
+      <td>
+        {% if i.last_test_at %}
+          {% if i.last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
+          <span class="meta-inline">·</span>
+          {{ i.last_test_at | ist }}
+        {% else %}—{% endif %}
+      </td>
+      <td>{{ "yes" if i.auto_provision else "no" }}</td>
+      <td>{{ i.default_role.value }}</td>
+      <td><a href="/settings/idp/{{ i.id }}" class="link-button">configure</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <p>No identity providers configured yet.</p>
+</div>
+{% endif %}
+
+<div class="cards" style="margin-top:16px;">
+  <div class="card">
+    <h3>Microsoft Entra ID</h3>
+    <p>Sign in with M365 / Azure AD (Entra ID). OIDC Authorization Code flow.</p>
+    <form method="post" action="/settings/idp/entra/new" class="inline-form">
+      <button type="submit" class="primary">+ Add Entra ID</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3>On-prem Active Directory (LDAP)</h3>
+    <p class="meta">Coming in a later phase. Requires network reachability from this server to your domain controllers (LDAP/LDAPS port 389/636).</p>
+    <button class="button" disabled>Not yet available</button>
+  </div>
+  <div class="card">
+    <h3>Other (Google, Okta, …)</h3>
+    <p class="meta">Generic OIDC providers planned. Open a request and tell us which one.</p>
+    <button class="button" disabled>Not yet available</button>
+  </div>
+</div>
+{% endblock %}

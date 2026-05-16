@@ -38,17 +38,87 @@ def settings_home(
     db: Session = Depends(get_db),
     flash: str | None = None,
 ):
+    """Tile-grid landing page. Counts shown on each tile for at-a-glance state."""
+    tenant = db.query(Tenant).first()
+    from sqlalchemy import func as _f
+    users_count      = (db.query(_f.count(User.id))
+                          .filter(User.tenant_id == user.tenant_id,
+                                  User.is_active == True).scalar()) or 0  # noqa: E712
+    idps_count       = (db.query(_f.count(IdentityProvider.id))
+                          .filter(IdentityProvider.tenant_id == user.tenant_id).scalar()) or 0
+    categories_count = (db.query(_f.count(Category.id))
+                          .filter(Category.tenant_id == user.tenant_id,
+                                  Category.is_active == True).scalar()) or 0  # noqa: E712
+    return templates.TemplateResponse(
+        request=request, name="settings.html",
+        context={
+            "current_user": user, "tenant": tenant,
+            "users_count": int(users_count),
+            "idps_count": int(idps_count),
+            "categories_count": int(categories_count),
+            "flash": flash,
+        },
+    )
+
+
+# Dedicated sub-pages, opened from the tile grid
+@router.get("/settings/identity", response_class=HTMLResponse)
+def settings_identity(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
     tenant = db.query(Tenant).first()
     idps = (db.query(IdentityProvider)
               .filter(IdentityProvider.tenant_id == user.tenant_id)
               .order_by(IdentityProvider.created_at).all())
     return templates.TemplateResponse(
-        request=request, name="settings.html",
-        context={
-            "current_user": user, "tenant": tenant, "idps": idps,
-            "flash": flash,
-            "is_https": request.url.scheme == "https",
-        },
+        request=request, name="settings_identity.html",
+        context={"current_user": user, "tenant": tenant, "idps": idps,
+                 "flash": flash,
+                 "is_https": request.url.scheme == "https"},
+    )
+
+
+@router.get("/settings/notifications", response_class=HTMLResponse)
+def settings_notifications(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request, name="settings_notifications.html",
+        context={"current_user": user, "tenant": tenant, "flash": flash},
+    )
+
+
+@router.get("/settings/tenant", response_class=HTMLResponse)
+def settings_tenant(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request, name="settings_tenant.html",
+        context={"current_user": user, "tenant": tenant, "flash": flash},
+    )
+
+
+@router.get("/settings/roadmap", response_class=HTMLResponse)
+def settings_roadmap(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request, name="settings_roadmap.html",
+        context={"current_user": user, "tenant": tenant},
     )
 
 

@@ -138,6 +138,21 @@
     </form>
   </div>
   {% endif %}
+
+  <div class="card" style="border-left:4px solid #dc2626;">
+    <h3 style="color:#dc2626;">🗑️ Delete</h3>
+    <p class="meta" style="margin:0 0 8px;font-size:12.5px;">
+      Removes this window + all targets + attempt history. Use when this was a mistake,
+      or to clean up old / cancelled deployments. Cannot delete while any target is
+      currently in-progress on an endpoint — cancel first.
+    </p>
+    <form method="post" action="/patches/windows/{{ window.id }}/delete" class="inline-form"
+          onsubmit="return confirm('Permanently DELETE this window?\n\n• {{ window.targets|length }} target(s)\n• Attempt history\n• Selected packages\n\nThis cannot be undone.');">
+      <button type="submit" class="primary" style="background:#dc2626;border-color:#dc2626;">
+        Delete window permanently
+      </button>
+    </form>
+  </div>
 </section>
 
 {# ---------- Per-target table ---------- #}

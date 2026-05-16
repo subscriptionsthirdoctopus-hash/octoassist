@@ -653,6 +653,70 @@ class ChangeEvent(Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# Remote Action framework — admin-triggered commands the agent runs as SYSTEM
+# ---------------------------------------------------------------------------
+# Generic command channel that complements patch deployments. Each row =
+# one command targeted at one agent. Admin creates from the dashboard,
+# agent picks up on next 30-sec poll, runs the requested action, posts
+# results back. Adding a new action means adding a new enum value + an
+# agent-side handler — no new PowerShell on endpoints.
+
+class RemoteActionKind(str, enum.Enum):
+    run_executable    = "run_executable"     # Push + run .exe / .msi
+    list_processes    = "list_processes"     # Get-Process snapshot
+    kill_process      = "kill_process"       # Stop-Process by name or PID
+    reboot            = "reboot"             # shutdown /r /t <s>
+    lock_workstation  = "lock_workstation"   # rundll32 LockWorkStation
+    send_toast        = "send_toast"         # Windows toast notification
+    set_wallpaper     = "set_wallpaper"      # Per-user wallpaper push
+    reset_password    = "reset_password"     # net user <name> <pw>
+    custom_powershell = "custom_powershell"  # Break-glass; audit-logged
+
+
+class RemoteActionStatus(str, enum.Enum):
+    pending     = "pending"      # waiting for agent to pick up
+    in_progress = "in_progress"  # agent has started
+    succeeded   = "succeeded"
+    failed      = "failed"
+    cancelled   = "cancelled"
+
+
+class RemoteAction(Base):
+    """One admin-issued command targeted at one agent."""
+    __tablename__ = "remote_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    agent_id: Mapped[int]  = mapped_column(ForeignKey("agents.id",  ondelete="CASCADE"), nullable=False)
+    kind: Mapped[RemoteActionKind] = mapped_column(
+        Enum(RemoteActionKind, name="remote_action_kind"), nullable=False,
+    )
+    params: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[RemoteActionStatus] = mapped_column(
+        Enum(RemoteActionStatus, name="remote_action_status"),
+        nullable=False, default=RemoteActionStatus.pending,
+    )
+    # Agent-reported result
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stdout:    Mapped[str | None] = mapped_column(Text, nullable=True)
+    stderr:    Mapped[str | None] = mapped_column(Text, nullable=True)
+    result:    Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # structured payload
+    # Lifecycle
+    created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    started_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    agent: Mapped["Agent"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
+
+    __table_args__ = (
+        Index("ix_remote_actions_agent_status", "agent_id", "status"),
+        Index("ix_remote_actions_tenant_created", "tenant_id", "created_at"),
+    )
+
+
 class KbCategory(Base):
     __tablename__ = "kb_categories"
 

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Tenant — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
+  <h1>🏢 Tenant</h1>
+  <p class="meta">Organisation name, enrolment key, agent install one-liner.</p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+
+<div class="card">
+  <dl>
+    <dt>Name</dt><dd>{{ tenant.name }}</dd>
+    <dt>Created</dt><dd>{{ tenant.created_at | ist }}</dd>
+    <dt>Enrolment key</dt>
+    <dd>
+      <div class="key-row">
+        <code id="enrol-key" class="key-value">{{ tenant.enrolment_key }}</code>
+        <button type="button" class="button" onclick="copyEnrolKey()">Copy</button>
+        <form method="post" action="/settings/tenant/regenerate-enrolment-key" class="inline-form"
+              onsubmit="return confirm('Generate a NEW enrolment key?\n\nExisting agents already registered will continue to work normally.\nOnly future MSI installs will need this new key.\n\nContinue?');">
+          <button type="submit" class="button">Regenerate</button>
+        </form>
+      </div>
+      <p class="meta" style="margin:6px 0 0;font-size:12px;">
+        The enrolment key is shared across all endpoints in this tenant. After first check-in
+        each agent receives its own long-lived bearer token, so regenerating the key does
+        <strong>not</strong> log out existing endpoints — only new MSI installs need it.
+      </p>
+    </dd>
+  </dl>
+</div>
+
+<div class="card" style="margin-top:16px;background:#eff6ff;border-left:4px solid var(--accent,#2563eb);">
+  <h3 style="margin:0 0 8px;">Agent install one-liner</h3>
+  <p class="meta" style="margin:0 0 10px;">
+    Paste on each Windows endpoint in <strong>elevated PowerShell</strong>, once per endpoint.
+    Idempotent — re-running is a no-op. Auto-installs Python + PSWindowsUpdate + the agent;
+    registers a SYSTEM Scheduled Task that polls every 30 seconds.
+  </p>
+  <pre class="code" style="white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;font-size:13px;">iex (iwr -useb {{ request.base_url|string|trim('/') }}/agent/install.ps1).Content</pre>
+</div>
+<script>
+function copyEnrolKey() {
+  const el = document.getElementById('enrol-key');
+  const text = el.innerText.trim();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = event.target;
+      const orig = btn.innerText;
+      btn.innerText = 'Copied!';
+      setTimeout(() => { btn.innerText = orig; }, 1200);
+    });
+  }
+}
+</script>
+{% endblock %}
