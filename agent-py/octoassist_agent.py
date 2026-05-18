@@ -1586,13 +1586,94 @@ def _action_reboot(params: dict, cfg: dict) -> dict:
 
 
 def _action_lock_workstation(_params: dict, _cfg: dict) -> dict:
-    proc = _run(["rundll32.exe", "user32.dll,LockWorkStation"],
-                capture_output=True, text=True, timeout=10)
+    """Lock every active user desktop.
+
+    rundll32 user32.dll,LockWorkStation only locks the *calling* desktop —
+    when invoked from SYSTEM context that desktop is session 0, not the
+    user's interactive session, so the call silently no-ops while exiting 0.
+    To actually lock the user, we have to launch rundll32 INSIDE the user's
+    session via WTSQueryUserToken + CreateProcessAsUser (the canonical
+    Windows pattern for service-to-user process launching).
+    """
+    ps = r"""
+$ErrorActionPreference = 'Stop'
+$src = @"
+using System;
+using System.Runtime.InteropServices;
+public class OctoLock {
+    [DllImport("wtsapi32.dll", SetLastError=true)]
+    public static extern bool WTSQueryUserToken(uint sessionId, out IntPtr token);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern bool CloseHandle(IntPtr h);
+    [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool CreateProcessAsUser(
+        IntPtr hToken, string lpApplicationName, string lpCommandLine,
+        IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles,
+        uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory,
+        ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+    [DllImport("userenv.dll", SetLastError=true)]
+    public static extern bool CreateEnvironmentBlock(out IntPtr lpEnvironment, IntPtr hToken, bool bInherit);
+    [DllImport("userenv.dll", SetLastError=true)]
+    public static extern bool DestroyEnvironmentBlock(IntPtr lpEnvironment);
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+    public struct STARTUPINFO {
+        public Int32 cb; public string lpReserved; public string lpDesktop;
+        public string lpTitle; public Int32 dwX; public Int32 dwY;
+        public Int32 dwXSize; public Int32 dwYSize; public Int32 dwXCountChars;
+        public Int32 dwYCountChars; public Int32 dwFillAttribute; public Int32 dwFlags;
+        public Int16 wShowWindow; public Int16 cbReserved2; public IntPtr lpReserved2;
+        public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION {
+        public IntPtr hProcess; public IntPtr hThread;
+        public Int32 dwProcessId; public Int32 dwThreadId;
+    }
+}
+"@
+Add-Type -TypeDefinition $src
+$active = @()
+quser 2>$null | Select-Object -Skip 1 | ForEach-Object {
+    if ($_ -match '\s+(\d+)\s+Active') { $active += [int]$matches[1] }
+}
+$launched = 0
+foreach ($sid in $active) {
+    $token = [IntPtr]::Zero
+    if ([OctoLock]::WTSQueryUserToken([uint32]$sid, [ref]$token)) {
+        $envBlock = [IntPtr]::Zero
+        [OctoLock]::CreateEnvironmentBlock([ref]$envBlock, $token, $false) | Out-Null
+        $si = New-Object OctoLock+STARTUPINFO
+        $si.cb = [System.Runtime.InteropServices.Marshal]::SizeOf($si)
+        $si.lpDesktop = 'winsta0\default'
+        $pi = New-Object OctoLock+PROCESS_INFORMATION
+        if ([OctoLock]::CreateProcessAsUser($token, $null,
+                'rundll32.exe user32.dll,LockWorkStation',
+                [IntPtr]::Zero, [IntPtr]::Zero, $false, 0x00000400,
+                $envBlock, $null, [ref]$si, [ref]$pi)) {
+            $launched++
+            [OctoLock]::CloseHandle($pi.hProcess) | Out-Null
+            [OctoLock]::CloseHandle($pi.hThread)  | Out-Null
+        }
+        if ($envBlock -ne [IntPtr]::Zero) { [OctoLock]::DestroyEnvironmentBlock($envBlock) | Out-Null }
+        [OctoLock]::CloseHandle($token) | Out-Null
+    }
+}
+"LOCKED:$launched"
+"""
+    proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                 "-Command", ps],
+                capture_output=True, text=True, timeout=25)
+    locked = 0
+    m = re.search(r"LOCKED:(\d+)", proc.stdout or "")
+    if m:
+        locked = int(m.group(1))
+    success = locked > 0
     return {
-        "success": proc.returncode == 0,
-        "exit_code": proc.returncode,
-        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
-        "result": None,
+        "success": success,
+        "exit_code": 0 if success else (proc.returncode or 1),
+        "stdout": (proc.stdout or "")[-500:],
+        "stderr": ("" if success else (proc.stderr or "no active user sessions")[-500:]),
+        "result": {"locked_sessions": locked},
     }
 
 
