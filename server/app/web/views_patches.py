@@ -252,6 +252,8 @@ def window_save_packages(
 def window_detail(
     window_id: int,
     request: Request,
+    flash: str | None = None,
+    error: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -263,6 +265,7 @@ def window_detail(
         request=request, name="patches_window_detail.html",
         context=_ctx(user, db,
                      window=win, progress=progress,
+                     flash=flash, error=error,
                      statuses=[s.value for s in PatchWindowStatus],
                      target_statuses=[s.value for s in PatchWindowTargetStatus]),
     )
@@ -302,9 +305,12 @@ def window_delete(
     if win is None or win.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
     if any(t.status == PatchWindowTargetStatus.in_progress for t in win.targets):
-        raise HTTPException(
-            status_code=409,
-            detail="Cannot delete — at least one target is in_progress on its endpoint. Cancel the window first.",
+        msg = ("Cannot delete: one or more endpoints are mid-install. "
+               "Click Cancel window first, then retry delete.")
+        from urllib.parse import quote
+        return RedirectResponse(
+            url=f"/patches/windows/{window_id}?error={quote(msg)}",
+            status_code=303,
         )
     db.delete(win)  # cascades to targets + attempts
     db.commit()
