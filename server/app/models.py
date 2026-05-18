@@ -85,6 +85,38 @@ class Agent(Base):
     snapshots: Mapped[list["AssetSnapshot"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
 
 
+class EntraDevice(Base):
+    """A Windows endpoint discovered via Microsoft Graph /devices but not
+    necessarily managed by an OctoAssist agent yet.
+
+    Populated by services.entra_devices.sync_devices (Application permission
+    Device.Read.All). Lets the dashboard show 'coverage' — which Windows
+    laptops in the tenant don't have the agent installed yet. When a row
+    matches an Agent by hostname (case-insensitive), the /assets view
+    suppresses the Entra row in favour of the live agent data.
+    """
+    __tablename__ = "entra_devices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    entra_device_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    operating_system: Mapped[str | None]    = mapped_column(String(60),  nullable=True)
+    os_version: Mapped[str | None]          = mapped_column(String(60),  nullable=True)
+    manufacturer: Mapped[str | None]        = mapped_column(String(120), nullable=True)
+    model: Mapped[str | None]               = mapped_column(String(120), nullable=True)
+    is_compliant: Mapped[bool | None]       = mapped_column(Boolean,     nullable=True)
+    is_managed: Mapped[bool | None]         = mapped_column(Boolean,     nullable=True)
+    account_enabled: Mapped[bool | None]    = mapped_column(Boolean,     nullable=True)
+    approx_last_signin_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    primary_user_id: Mapped[int | None]     = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    primary_user: Mapped["User | None"] = relationship(foreign_keys=[primary_user_id])
+
+
 class AssetSnapshot(Base):
     __tablename__ = "asset_snapshots"
 

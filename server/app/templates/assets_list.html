@@ -2,10 +2,38 @@
 {% block title %}Asset Register — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
-  <h1>Asset Register</h1>
-  <p class="meta">{{ agent_count }} endpoint{{ "" if agent_count == 1 else "s" }} reporting{% if tenant %} • {{ tenant.name }}{% endif %}</p>
+  <div class="row-between" style="align-items:flex-start;">
+    <div>
+      <h1>Asset Register</h1>
+      <p class="meta">
+        {{ agent_count }} OctoAssist endpoint{{ "" if agent_count == 1 else "s" }} reporting
+        {% if discovered_rows %} • {{ discovered_rows|length }} discovered Windows device{{ "" if discovered_rows|length == 1 else "s" }} without agent{% endif %}
+        {% if tenant %} • {{ tenant.name }}{% endif %}
+      </p>
+    </div>
+    <div class="actions" style="display:flex;gap:8px;align-items:center;">
+      {% if entra_idp %}
+      <form method="post" action="/assets/sync-entra" class="inline-form"
+            onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…';">
+        <button type="submit" class="button">↻ Sync Windows devices from Entra</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
 </section>
 
+{% if flash %}
+<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;">
+  <p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p>
+</div>
+{% endif %}
+{% if error %}
+<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;">
+  <p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p>
+</div>
+{% endif %}
+
+<h2 style="margin-top:16px;">OctoAssist-managed endpoints ({{ agent_count }})</h2>
 {% if rows %}
 <table class="data">
   <thead>
@@ -26,11 +54,8 @@
     <tr>
       <td><a href="/asset/{{ r.id }}">{{ r.hostname }}</a></td>
       <td>
-        {% if r.assigned_name %}
-          <strong>{{ r.assigned_name }}</strong>
-        {% else %}
-          <span style="color:var(--slate);">{{ r.logged_in_user }}</span>
-        {% endif %}
+        {% if r.assigned_name %}<strong>{{ r.assigned_name }}</strong>
+        {% else %}<span style="color:var(--slate);">{{ r.logged_in_user }}</span>{% endif %}
       </td>
       <td>{{ r.department or "—" }}</td>
       <td>{{ r.location or "—" }}</td>
@@ -48,5 +73,49 @@
   <h2>No endpoints yet</h2>
   <p>Visit <a href="/enrolment">Enrolment</a> for the agent enrolment key and install instructions.</p>
 </div>
+{% endif %}
+
+{% if discovered_rows %}
+<h2 style="margin-top:32px;">Discovered Windows devices — no OctoAssist agent yet ({{ discovered_rows|length }})</h2>
+<p class="meta" style="margin-top:0;">
+  Pulled from your Entra tenant via Microsoft Graph. These are Windows endpoints registered with temaindia.com
+  that haven't installed OctoAssist yet — your coverage gap. Run the enrolment installer on each to bring it
+  under management.
+</p>
+<table class="data">
+  <thead>
+    <tr>
+      <th>Hostname</th>
+      <th>Assigned to</th>
+      <th>Department</th>
+      <th>Location</th>
+      <th>OS Version</th>
+      <th>Make / Model</th>
+      <th>Compliant?</th>
+      <th>Last Entra Sign-in</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in discovered_rows %}
+    <tr>
+      <td>{{ d.hostname }}</td>
+      <td>
+        {% if d.assigned_name %}<strong>{{ d.assigned_name }}</strong>
+        {% else %}<span style="color:var(--slate);">—</span>{% endif %}
+      </td>
+      <td>{{ d.department or "—" }}</td>
+      <td>{{ d.location or "—" }}</td>
+      <td>{{ d.os }} {{ d.os_version }}</td>
+      <td>{{ d.manufacturer }} {{ d.model }}</td>
+      <td>
+        {% if d.is_compliant is true %}<span style="color:#16a34a;">✓ yes</span>
+        {% elif d.is_compliant is false %}<span style="color:#dc2626;">✗ no</span>
+        {% else %}—{% endif %}
+      </td>
+      <td>{% if d.last_signin_at %}{{ d.last_signin_at | ist }}{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endif %}
 {% endblock %}

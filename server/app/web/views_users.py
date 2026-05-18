@@ -31,11 +31,22 @@ def list_users(
     created_password: str | None = None,
     flash: str | None = None,
     error: str | None = None,
+    q: str = "",
     db: Session = Depends(get_db),
 ):
-    rows = (db.query(User)
-              .filter(User.tenant_id == user.tenant_id)
-              .order_by(User.role, User.email).all())
+    from sqlalchemy import func, or_
+    query = db.query(User).filter(User.tenant_id == user.tenant_id)
+    needle = (q or "").strip()
+    if needle:
+        like = f"%{needle.lower()}%"
+        query = query.filter(or_(
+            func.lower(User.email).like(like),
+            func.lower(User.full_name).like(like),
+            func.lower(func.coalesce(User.department, "")).like(like),
+            func.lower(func.coalesce(User.location,   "")).like(like),
+            func.lower(func.coalesce(User.job_title,  "")).like(like),
+        ))
+    rows = query.order_by(User.role, User.email).all()
     tenant = db.query(Tenant).first()
     entra_idp = (db.query(IdentityProvider)
                    .filter(IdentityProvider.tenant_id == user.tenant_id,
@@ -52,6 +63,7 @@ def list_users(
             "created_password": created_password,
             "flash": flash, "error": error,
             "entra_idp": entra_idp,
+            "q": needle,
         },
     )
 
