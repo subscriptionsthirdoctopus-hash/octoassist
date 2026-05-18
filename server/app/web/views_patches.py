@@ -304,7 +304,15 @@ def window_delete(
     win = db.get(PatchWindow, window_id)
     if win is None or win.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
-    if any(t.status == PatchWindowTargetStatus.in_progress for t in win.targets):
+    # Block delete ONLY if the window itself is still live AND a target is
+    # mid-install. A cancelled / completed window cannot harm the agent
+    # (it short-circuits cancelled windows on the next poll), so any stuck
+    # in_progress target row is just stale DB state — safe to delete.
+    window_is_live = win.status not in (PatchWindowStatus.cancelled,
+                                        PatchWindowStatus.completed)
+    if window_is_live and any(
+        t.status == PatchWindowTargetStatus.in_progress for t in win.targets
+    ):
         msg = ("Cannot delete: one or more endpoints are mid-install. "
                "Click Cancel window first, then retry delete.")
         from urllib.parse import quote

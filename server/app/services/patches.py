@@ -409,6 +409,17 @@ def transition_window(db: Session, *, window: PatchWindow, new_status: PatchWind
         window.completed_at = now
     if new_status == PatchWindowStatus.cancelled and window.cancelled_at is None:
         window.cancelled_at = now
+        # Flip any live targets (planned / in_progress) to skipped so the
+        # window can be cleanly deleted later and the agent doesn't keep
+        # any stale work in its view. The agent already short-circuits any
+        # work for a cancelled-window target on its next poll, but updating
+        # the row makes the DB self-consistent immediately.
+        from ..models import PatchWindowTargetStatus
+        for t in window.targets:
+            if t.status in (PatchWindowTargetStatus.planned,
+                            PatchWindowTargetStatus.in_progress):
+                t.status = PatchWindowTargetStatus.skipped
+                t.note = ((t.note or "") + " · window cancelled").strip(" ·")[:1000]
     db.commit()
     db.refresh(window)
 
