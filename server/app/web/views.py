@@ -42,6 +42,7 @@ def assets_index(
     for a in agents:
         snap = _latest_snapshot(db, a.id)
         payload = snap.payload if snap else {}
+        pu = a.primary_user  # SQLAlchemy lazy-loads the relationship
         rows.append({
             "id": a.id,
             "hostname": a.hostname,
@@ -49,6 +50,10 @@ def assets_index(
             "cpu": payload.get("cpu", {}).get("name", "—"),
             "ram_gb": payload.get("memory", {}).get("total_gb"),
             "logged_in_user": payload.get("logged_in_user") or "—",
+            "assigned_name":  (pu.full_name if pu else None) or (pu.email if pu else None),
+            "assigned_id":    pu.id if pu else None,
+            "department":     pu.department if pu else None,
+            "location":       a.location or (pu.location if pu else None),
             "last_seen_at": a.last_seen_at,
             "software_count": len(payload.get("software", [])),
         })

@@ -70,7 +70,18 @@ class Agent(Base):
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Phase B asset → user enrichment. Populated on every check-in by
+    # services.asset_linker from the agent's reported logged_in_user. Location
+    # is denormalised from the linked User so ticket routing can read it without
+    # an extra join. ON DELETE SET NULL: deleting a user (e.g. someone leaves
+    # the company) leaves their old laptop visible but unassigned.
+    primary_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     tenant: Mapped[Tenant] = relationship(back_populates="agents")
+    primary_user: Mapped["User | None"] = relationship(foreign_keys=[primary_user_id])
     snapshots: Mapped[list["AssetSnapshot"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
 
 

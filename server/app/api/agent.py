@@ -142,6 +142,14 @@ def checkin(
     db.add(snapshot)
     agent.last_seen_at = now
 
+    # Phase B: link this laptop to its primary user (best-effort, never raises).
+    from ..services.asset_linker import link_agent_to_user
+    try:
+        link_agent_to_user(db, agent=agent, logged_in_user=req.logged_in_user)
+    except Exception:  # noqa: BLE001
+        # User linking is enrichment; never block a check-in over it.
+        pass
+
     if req.patches is not None:
         _upsert_patch_observations(db, agent.id, req.patches, now)
 
