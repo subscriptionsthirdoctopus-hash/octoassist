@@ -912,6 +912,53 @@ Set-ItemProperty -Path $au   -Name 'NoAutoRebootWithLoggedOnUsers'              
         return {"applied": False, "reason": str(e)[:200]}
 
 
+def _ensure_pswindowsupdate(timeout: int = 300) -> bool:
+    """Install PSWindowsUpdate + its NuGet prerequisite if missing.
+
+    Called at the top of every check-in / patch scan so endpoints
+    self-heal when the original install.ps1 didn't manage to lay it
+    down (transient PSGallery outage, NuGet not yet bootstrapped, AV
+    interference, etc.). Returns True if the module is available
+    afterwards.
+
+    Idempotent — quick no-op when the module is already present.
+    """
+    if platform.system() != "Windows":
+        return False
+    try:
+        r = _run(["powershell", "-NoProfile", "-Command",
+                  "if (Get-Module -ListAvailable PSWindowsUpdate) { 'yes' } else { 'no' }"],
+                 capture_output=True, text=True, timeout=20)
+        if "yes" in (r.stdout or ""):
+            return True
+    except Exception:
+        pass
+
+    log.info("PSWindowsUpdate not installed; auto-installing...")
+    ps = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+if (-not (Get-PackageProvider NuGet -ErrorAction SilentlyContinue)) {
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers | Out-Null
+}
+Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {
+    Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop
+}
+if (Get-Module -ListAvailable PSWindowsUpdate) { 'INSTALLED' } else { 'FAILED' }
+"""
+    try:
+        r = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                 capture_output=True, text=True, timeout=timeout)
+        if "INSTALLED" in (r.stdout or ""):
+            log.info("PSWindowsUpdate auto-installed successfully")
+            return True
+        log.warning("PSWindowsUpdate auto-install attempted but module still missing. "
+                    "stderr tail: %s", ((r.stderr or "") + (r.stdout or ""))[-400:])
+    except Exception as e:  # noqa: BLE001
+        log.warning("PSWindowsUpdate auto-install failed: %s", e)
+    return False
+
+
 def _patch_scan_metadata() -> dict:
     """Probe whether the patch scan completed successfully (was PSWindowsUpdate
     installed? did Get-WindowsUpdate return data? when?). Used by the server
@@ -950,6 +997,11 @@ def _patch_scan_metadata() -> dict:
 
 
 def collect_snapshot() -> dict:
+    # Self-heal: install PSWindowsUpdate if missing. Endpoints that ended up
+    # with the module missing (transient PSGallery issue at install time,
+    # NuGet bootstrap failure, AV interference) get fixed automatically on
+    # the next check-in. No admin action required.
+    _ensure_pswindowsupdate()
     # Apply the WindowsUpdate lock-down policy on every check-in (idempotent).
     # If a user disables it via gpedit, the next check-in re-applies it.
     update_policy = _windows_enforce_managed_update_policy()
