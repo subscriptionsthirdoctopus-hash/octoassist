@@ -1597,17 +1597,66 @@ def _action_lock_workstation(_params: dict, _cfg: dict) -> dict:
 
 
 def _action_send_toast(params: dict, cfg: dict) -> dict:
-    """Show a Windows alert message in every active session via msg.exe."""
+    """Pop a dialog in every logged-in user session via WTSSendMessage.
+
+    msg.exe '*' from SYSTEM context is unreliable on modern Windows (depends
+    on the AllowRemoteRPC registry value and the user being in the same
+    desktop group). WTSSendMessage works from SYSTEM regardless and is the
+    canonical API for cross-session messaging.
+
+    Title + body are passed via environment variables so user-supplied text
+    cannot break out of PowerShell quoting.
+    """
     title = (params.get("title") or "OctoAssist")[:80]
-    body  = (params.get("body")  or "")[:500]
-    text  = (f"{title}\n\n{body}" if body else title)
-    proc = _run(["msg.exe", "*", "/TIME:600", text],
-                capture_output=True, text=True, timeout=20)
+    body  = (params.get("body")  or "")[:500] or title
+    ps = r"""
+$ErrorActionPreference = 'Stop'
+$src = @"
+using System;
+using System.Runtime.InteropServices;
+public class OctoToast {
+    [DllImport("wtsapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool WTSSendMessage(
+        IntPtr hServer, int SessionId,
+        [MarshalAs(UnmanagedType.LPWStr)] string pTitle, int TitleLength,
+        [MarshalAs(UnmanagedType.LPWStr)] string pMessage, int MessageLength,
+        int Style, int Timeout, out int pResponse, bool bWait);
+}
+"@
+Add-Type -TypeDefinition $src
+$title = $env:OA_TOAST_TITLE
+$body  = $env:OA_TOAST_BODY
+$sessions = @()
+quser 2>$null | Select-Object -Skip 1 | ForEach-Object {
+    if ($_ -match '\s+(\d+)\s+(Active|Disc)') { $sessions += [int]$matches[1] }
+}
+$count = 0
+foreach ($sid in $sessions) {
+    $resp = 0
+    if ([OctoToast]::WTSSendMessage([IntPtr]::Zero, $sid, $title,
+            $title.Length*2, $body, $body.Length*2, 0x40, 0, [ref]$resp, $false)) {
+        $count++
+    }
+}
+"DELIVERED:$count"
+"""
+    env = os.environ.copy()
+    env["OA_TOAST_TITLE"] = title
+    env["OA_TOAST_BODY"]  = body
+    proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                 "-Command", ps],
+                capture_output=True, text=True, timeout=25, env=env)
+    delivered = 0
+    m = re.search(r"DELIVERED:(\d+)", proc.stdout or "")
+    if m:
+        delivered = int(m.group(1))
+    success = delivered > 0
     return {
-        "success": proc.returncode == 0,
-        "exit_code": proc.returncode,
-        "stdout": proc.stdout or "", "stderr": proc.stderr or "",
-        "result": None,
+        "success": success,
+        "exit_code": 0 if success else (proc.returncode or 1),
+        "stdout": (proc.stdout or "")[-500:],
+        "stderr": ("" if success else (proc.stderr or "no active user sessions")[-500:]),
+        "result": {"delivered_to_sessions": delivered},
     }
 
 
