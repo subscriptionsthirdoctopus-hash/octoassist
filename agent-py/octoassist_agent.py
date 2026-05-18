@@ -1434,7 +1434,7 @@ def execute_pending_actions(cfg: dict) -> int:
                       "result": None}
         else:
             try:
-                result = handler(params)
+                result = handler(params, cfg)
             except subprocess.TimeoutExpired:
                 result = {"success": False, "exit_code": 124,
                           "stderr": "timeout", "stdout": None, "result": None}
@@ -1463,7 +1463,7 @@ def execute_pending_actions(cfg: dict) -> int:
 
 # -------------------- action handlers --------------------
 
-def _action_run_executable(params: dict) -> dict:
+def _action_run_executable(params: dict, cfg: dict) -> dict:
     """Download a URL (.exe / .msi / .msu), run it with the given args, capture output."""
     url = params.get("url")
     args = params.get("args", "")
@@ -1520,7 +1520,7 @@ def _action_run_executable(params: dict) -> dict:
     }
 
 
-def _action_reboot(params: dict) -> dict:
+def _action_reboot(params: dict, cfg: dict) -> dict:
     delay = int(params.get("delay_seconds", 60))
     reason = (params.get("reason") or "OctoAssist-initiated reboot")[:127]
     proc = _run(["shutdown.exe", "/r", "/t", str(delay), "/f", "/c", reason],
@@ -1533,7 +1533,7 @@ def _action_reboot(params: dict) -> dict:
     }
 
 
-def _action_lock_workstation(_params: dict) -> dict:
+def _action_lock_workstation(_params: dict, _cfg: dict) -> dict:
     proc = _run(["rundll32.exe", "user32.dll,LockWorkStation"],
                 capture_output=True, text=True, timeout=10)
     return {
@@ -1544,7 +1544,7 @@ def _action_lock_workstation(_params: dict) -> dict:
     }
 
 
-def _action_send_toast(params: dict) -> dict:
+def _action_send_toast(params: dict, cfg: dict) -> dict:
     """Show a Windows alert message in every active session via msg.exe."""
     title = (params.get("title") or "OctoAssist")[:80]
     body  = (params.get("body")  or "")[:500]
@@ -1559,7 +1559,7 @@ def _action_send_toast(params: dict) -> dict:
     }
 
 
-def _action_list_processes(_params: dict) -> dict:
+def _action_list_processes(_params: dict, _cfg: dict) -> dict:
     ps = r"""
 $ErrorActionPreference = 'SilentlyContinue'
 Get-Process | Where-Object { $_.MainWindowTitle -ne '' -or $_.WorkingSet -gt 50MB } |
@@ -1583,7 +1583,7 @@ Get-Process | Where-Object { $_.MainWindowTitle -ne '' -or $_.WorkingSet -gt 50M
     }
 
 
-def _action_kill_process(params: dict) -> dict:
+def _action_kill_process(params: dict, cfg: dict) -> dict:
     name = params.get("name")
     pid  = params.get("pid")
     if not name and not pid:
@@ -1605,7 +1605,7 @@ def _action_kill_process(params: dict) -> dict:
     }
 
 
-def _action_set_wallpaper(params: dict) -> dict:
+def _action_set_wallpaper(params: dict, cfg: dict) -> dict:
     """Download an image URL, save to %ProgramData%\\OctoAssist\\wallpaper.jpg,
     set it as the per-user wallpaper for every logged-in user via registry +
     SystemParametersInfo. Safe to re-run.
@@ -1661,7 +1661,7 @@ public static class W {{
     }
 
 
-def _action_reset_password(params: dict) -> dict:
+def _action_reset_password(params: dict, cfg: dict) -> dict:
     """Reset a LOCAL user's password via `net user`. Domain accounts unaffected.
     Audit-trail-friendly: the new password isn't echoed back in stdout.
     """
@@ -1685,7 +1685,7 @@ def _action_reset_password(params: dict) -> dict:
     }
 
 
-def _action_custom_powershell(params: dict) -> dict:
+def _action_custom_powershell(params: dict, cfg: dict) -> dict:
     """Break-glass: run admin-supplied PowerShell. Audit-logged on the server.
     Capped at 10 min timeout. ExecutionPolicy Bypass; runs as SYSTEM.
     """
@@ -1703,6 +1703,43 @@ def _action_custom_powershell(params: dict) -> dict:
     }
 
 
+def _action_force_refresh(_params: dict, cfg: dict) -> dict:
+    """Admin-triggered immediate full check-in. Runs the same heavy work
+    as the slow cycle (self-update + full inventory + patch scan + WU
+    policy enforcement) without waiting for the next scheduled tick.
+
+    Posts a fresh AssetSnapshot so the dashboard reflects the endpoint's
+    current state within seconds of the admin clicking "↻ Refresh now".
+    """
+    try:
+        _self_update_if_newer(cfg)
+    except Exception as e:  # noqa: BLE001
+        log.warning("force_refresh: self-update step skipped: %s", e)
+    try:
+        snap = collect_snapshot()
+        base = cfg["server_url"].rstrip("/")
+        code, body = _http(base + "/api/v1/agent/checkin",
+                           method="POST", body=snap, token=cfg["agent_token"])
+        if code != 200:
+            return {"success": False, "exit_code": code,
+                    "stdout": None, "stderr": (body or "")[:1500],
+                    "result": None}
+        return {
+            "success": True, "exit_code": 0,
+            "stdout": None, "stderr": None,
+            "result": {
+                "os":             (snap.get("os") or {}).get("caption"),
+                "software_count": len(snap.get("software") or []),
+                "patches_count":  len(snap.get("patches") or []),
+                "snapshot_at":    snap.get("snapshot_at"),
+            },
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"success": False, "exit_code": 1,
+                "stdout": None, "stderr": f"{type(e).__name__}: {e}",
+                "result": None}
+
+
 _ACTION_HANDLERS = {
     "run_executable":    _action_run_executable,
     "reboot":            _action_reboot,
@@ -1713,6 +1750,7 @@ _ACTION_HANDLERS = {
     "set_wallpaper":     _action_set_wallpaper,
     "reset_password":    _action_reset_password,
     "custom_powershell": _action_custom_powershell,
+    "force_refresh":     _action_force_refresh,
 }
 
 
@@ -1738,10 +1776,11 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
     cfg = load_config()
     cfg = register_if_needed(cfg)
     # Slow cycle: full inventory + patch scan + WU policy enforcement.
-    # Default 30 min (was 6h). Now that self-update lives in the fast
-    # cycle, the slow cycle's only unique job is the heavy inventory
-    # snapshot — 30 min keeps the dashboard fresh with no real overhead.
-    slow_interval_h = max(0.25, float(cfg.get("checkin_interval_hours", 0.5)))
+    # Default 2 hours. Now that self-update lives in the fast cycle, the
+    # slow cycle's only unique job is the heavy inventory snapshot.
+    # Admin can also force an immediate refresh from the dashboard via
+    # the force_refresh remote action — no need to wait for the schedule.
+    slow_interval_h = max(0.25, float(cfg.get("checkin_interval_hours", 2)))
     # Fast cycle: self-update + patches + actions. 30 s = sub-minute
     # propagation of every new admin click + every server-side fix.
     fast_interval_s = max(15, int(cfg.get("deploy_poll_seconds", 30)))

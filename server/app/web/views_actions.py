@@ -161,6 +161,8 @@ async def asset_action_queue(
                   "new_password":  form.get("new_password") or ""}
     elif kind == RemoteActionKind.custom_powershell:
         params = {"script": form.get("script") or ""}
+    elif kind == RemoteActionKind.force_refresh:
+        params = {}   # no params; agent does the work
 
     try:
         action = ra_svc.queue(db,

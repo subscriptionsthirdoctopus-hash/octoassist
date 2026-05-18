@@ -704,6 +704,7 @@ class RemoteActionKind(str, enum.Enum):
     set_wallpaper     = "set_wallpaper"      # Per-user wallpaper push
     reset_password    = "reset_password"     # net user <name> <pw>
     custom_powershell = "custom_powershell"  # Break-glass; audit-logged
+    force_refresh     = "force_refresh"      # Immediate full inventory + patch scan
 
 
 class RemoteActionStatus(str, enum.Enum):

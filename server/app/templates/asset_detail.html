@@ -31,6 +31,10 @@
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;">
     {# Single-click actions — POST with hidden 'kind' #}
+    <form method="post" action="/asset/{{ agent.id }}/action">
+      <input type="hidden" name="kind" value="force_refresh">
+      <button type="submit" class="button primary" style="width:100%;">↻ Refresh now</button>
+    </form>
     <form method="post" action="/asset/{{ agent.id }}/action"
           onsubmit="return confirm('Reboot {{ agent.hostname|e }} in 60 seconds?\n\nA Windows balloon notification will warn the user; cancel with shutdown /a.');">
       <input type="hidden" name="kind" value="reboot">
