@@ -1,6 +1,7 @@
 """Admin: list and create users (agents and requesters)."""
 import secrets
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -10,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_admin
 from ..database import get_db
-from ..models import Tenant, User, UserRole
+from ..models import IdentityProvider, IdentityProviderKind, Tenant, User, UserRole
 from ..security import hash_password
+from ..services import entra_directory
+from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -26,12 +29,19 @@ def list_users(
     user: User = Depends(require_admin),
     created_email: str | None = None,
     created_password: str | None = None,
+    flash: str | None = None,
+    error: str | None = None,
     db: Session = Depends(get_db),
 ):
     rows = (db.query(User)
               .filter(User.tenant_id == user.tenant_id)
               .order_by(User.role, User.email).all())
     tenant = db.query(Tenant).first()
+    entra_idp = (db.query(IdentityProvider)
+                   .filter(IdentityProvider.tenant_id == user.tenant_id,
+                           IdentityProvider.kind == IdentityProviderKind.entra,
+                           IdentityProvider.is_enabled == True)  # noqa: E712
+                   .first())
     return templates.TemplateResponse(
         request=request,
         name="user_list.html",
@@ -40,6 +50,8 @@ def list_users(
             "roles": [r.value for r in UserRole],
             "created_email": created_email,
             "created_password": created_password,
+            "flash": flash, "error": error,
+            "entra_idp": entra_idp,
         },
     )
 
@@ -107,3 +119,93 @@ def activate_user(
     target.is_active = True
     db.commit()
     return RedirectResponse(url="/users", status_code=303)
+
+
+# ---------- Bulk-select role change ----------
+
+@router.post("/users/bulk-update")
+async def bulk_update_users(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Apply one of {promote_agent, promote_admin, demote_requester,
+    deactivate, activate} to every user_id checkbox in the form. The bulk
+    toolbar in user_list.html POSTs `action=<verb>&user_ids=1&user_ids=2&...`.
+    """
+    form = await request.form()
+    action  = (form.get("action") or "").strip()
+    raw_ids = form.getlist("user_ids")
+    try:
+        ids = [int(x) for x in raw_ids if str(x).strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Bad user_ids")
+    if not ids:
+        return RedirectResponse(url="/users?error=No+users+selected", status_code=303)
+
+    role_map = {
+        "promote_agent":     UserRole.agent,
+        "promote_admin":     UserRole.admin,
+        "demote_requester":  UserRole.requester,
+    }
+
+    targets = (db.query(User)
+                 .filter(User.id.in_(ids),
+                         User.tenant_id == user.tenant_id)
+                 .all())
+    n = 0
+    for t in targets:
+        # Guard: don't let an admin demote / deactivate themselves and
+        # accidentally lock the tenant out.
+        if t.id == user.id and action in ("demote_requester", "deactivate"):
+            continue
+        if action in role_map:
+            t.role = role_map[action]
+            n += 1
+        elif action == "deactivate":
+            t.is_active = False
+            n += 1
+        elif action == "activate":
+            t.is_active = True
+            n += 1
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+    db.commit()
+    msg = f"Applied '{action}' to {n} user(s)"
+    return RedirectResponse(url=f"/users?flash={quote(msg)}", status_code=303)
+
+
+# ---------- Entra Graph sync ----------
+
+@router.post("/users/sync-entra")
+async def sync_entra_users(
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Pull every active member user from the linked Entra tenant and upsert
+    them into the OctoAssist users table as `requester`. Admin then bulk-
+    promotes the people who should be staff via the checkbox UI.
+    """
+    idp = (db.query(IdentityProvider)
+             .filter(IdentityProvider.tenant_id == user.tenant_id,
+                     IdentityProvider.kind == IdentityProviderKind.entra,
+                     IdentityProvider.is_enabled == True)  # noqa: E712
+             .first())
+    if idp is None:
+        return RedirectResponse(
+            url="/users?error=No+enabled+Entra+identity+provider.+Configure+one+in+Settings+%E2%86%92+Identity+providers.",
+            status_code=303,
+        )
+    cfg = parse_entra_config(idp.config or {})
+    report = await entra_directory.sync_users(db, tenant_id=user.tenant_id, cfg=cfg)
+    if report.errors:
+        # Surface the first error in the banner (typically permission-related)
+        head = report.errors[0][:240]
+        return RedirectResponse(
+            url=f"/users?error={quote(f'Sync had errors. {report.summary()} — first: {head}')}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        url=f"/users?flash={quote(f'Synced from Entra: {report.summary()}')}",
+        status_code=303,
+    )

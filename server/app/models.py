@@ -319,6 +319,15 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Entra ID enrichment — populated by directory sync (services.entra_directory)
+    # and the SSO callback. entra_oid is the immutable Microsoft Graph user "id"
+    # GUID; matches by it before falling back to email so renames survive.
+    entra_oid:  Mapped[str | None] = mapped_column(String(64),  nullable=True, unique=True)
+    location:   Mapped[str | None] = mapped_column(String(200), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    job_title:  Mapped[str | None] = mapped_column(String(200), nullable=True)
+    synced_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     tenant: Mapped[Tenant] = relationship(back_populates="users")
     reported_tickets: Mapped[list["Ticket"]] = relationship(
         back_populates="reporter",

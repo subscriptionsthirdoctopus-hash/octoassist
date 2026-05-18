@@ -2,9 +2,32 @@
 {% block title %}Users — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
-  <h1>Users</h1>
-  <p class="meta">Admin-provisioned. End-users can log into the portal to file their own tickets.</p>
+  <div class="row-between" style="align-items:flex-start;">
+    <div>
+      <h1>Users</h1>
+      <p class="meta">Admin-provisioned + auto-synced from Microsoft Entra. End-users live in the requester role.</p>
+    </div>
+    <div class="actions" style="display:flex;gap:8px;align-items:center;">
+      {% if entra_idp %}
+      <form method="post" action="/users/sync-entra" class="inline-form"
+            onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…';">
+        <button type="submit" class="button">↻ Sync from Entra</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
 </section>
+
+{% if flash %}
+<div class="card" style="max-width:none;margin-bottom:16px;background:#dcfce7;border-left:4px solid #16a34a;">
+  <p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p>
+</div>
+{% endif %}
+{% if error %}
+<div class="card" style="max-width:none;margin-bottom:16px;background:#fee2e2;border-left:4px solid #dc2626;">
+  <p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p>
+</div>
+{% endif %}
 
 {% if created_email and created_password %}
 <div class="alert success">
@@ -14,7 +37,8 @@
 {% endif %}
 
 <div class="card form">
-  <h3>Create a user</h3>
+  <h3>Create a user manually</h3>
+  <p class="meta" style="margin-top:0;">For service accounts or one-offs. For your real team, use <strong>↻ Sync from Entra</strong> above, then bulk-promote below.</p>
   <form method="post" action="/users/new" class="row-form">
     <label>Email
       <input type="email" name="email" required>
@@ -33,31 +57,61 @@
   </form>
 </div>
 
-<table class="data">
-  <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead>
-  <tbody>
-    {% for u in rows %}
-    <tr class="{% if not u.is_active %}row-disabled{% endif %}">
-      <td>{{ u.email }}</td>
-      <td>{{ u.full_name or "—" }}</td>
-      <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
-      <td>{{ "active" if u.is_active else "disabled" }}</td>
-      <td>{% if u.last_login_at %}{{ u.last_login_at | ist }}{% else %}—{% endif %}</td>
-      <td>
-        {% if u.id != current_user.id %}
-          {% if u.is_active %}
-          <form method="post" action="/users/{{ u.id }}/deactivate" class="inline-form">
-            <button type="submit" class="link-button">deactivate</button>
-          </form>
-          {% else %}
-          <form method="post" action="/users/{{ u.id }}/activate" class="inline-form">
-            <button type="submit" class="link-button">activate</button>
-          </form>
+<form method="post" action="/users/bulk-update" id="bulk-form">
+  <div class="card" style="max-width:none;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <strong style="margin-right:auto;">Bulk action on selected:</strong>
+    <button type="submit" name="action" value="promote_agent"    class="button">→ Make technician (agent)</button>
+    <button type="submit" name="action" value="promote_admin"    class="button">→ Make admin</button>
+    <button type="submit" name="action" value="demote_requester" class="button">→ Demote to requester</button>
+    <button type="submit" name="action" value="deactivate"       class="button" style="color:var(--red,#dc2626);">Deactivate</button>
+    <button type="submit" name="action" value="activate"         class="button">Reactivate</button>
+  </div>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width:32px;"><input type="checkbox" id="check-all" onclick="document.querySelectorAll('input[name=user_ids]').forEach(c=>c.checked=this.checked);"></th>
+        <th>Email</th>
+        <th>Name</th>
+        <th>Role</th>
+        <th>Department</th>
+        <th>Location</th>
+        <th>Title</th>
+        <th>Status</th>
+        <th>Last login</th>
+        <th>Synced</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in rows %}
+      <tr class="{% if not u.is_active %}row-disabled{% endif %}">
+        <td>
+          {% if u.id != current_user.id %}
+          <input type="checkbox" name="user_ids" value="{{ u.id }}">
           {% endif %}
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+        </td>
+        <td>{{ u.email }}{% if u.entra_oid %} <span title="Synced from Entra ID" style="color:var(--teal);font-size:11px;">⌬</span>{% endif %}</td>
+        <td>{{ u.full_name or "—" }}</td>
+        <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
+        <td>{{ u.department or "—" }}</td>
+        <td>{{ u.location or "—" }}</td>
+        <td>{{ u.job_title or "—" }}</td>
+        <td>{{ "active" if u.is_active else "disabled" }}</td>
+        <td>{% if u.last_login_at %}{{ u.last_login_at | ist }}{% else %}—{% endif %}</td>
+        <td>{% if u.synced_at %}{{ u.synced_at | ist }}{% else %}—{% endif %}</td>
+        <td>
+          {% if u.id != current_user.id %}
+            {% if u.is_active %}
+            <button type="submit" class="link-button" formaction="/users/{{ u.id }}/deactivate" formmethod="post">deactivate</button>
+            {% else %}
+            <button type="submit" class="link-button" formaction="/users/{{ u.id }}/activate"   formmethod="post">activate</button>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
 {% endblock %}
