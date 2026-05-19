@@ -525,6 +525,80 @@ def quick_deploy_category(
     return win
 
 
+def create_bulk_window(
+    db: Session, *,
+    tenant_id: int,
+    creator: User,
+    name: str | None,
+    agent_ids: list[int],
+    package_names: list[str],
+    scheduled_for: datetime | None = None,
+) -> PatchWindow:
+    """Phase E bulk deploy: explicit list of endpoints + explicit list of
+    packages, no hostname pattern. Creates a window with hand-picked targets
+    and selected_packages, auto-executes (or schedules if scheduled_for is
+    in the future).
+    """
+    from datetime import timezone as _tz, timedelta as _td
+
+    if not agent_ids:
+        raise ValueError("create_bulk_window: at least one agent_id required")
+    if not package_names:
+        raise ValueError("create_bulk_window: at least one package required")
+
+    IST = _tz(_td(hours=5, minutes=30), name="IST")
+    now_ist = _now().astimezone(IST).strftime("%Y-%m-%d %H:%M IST")
+    label = (name or "").strip() or f"Bulk deploy — {len(agent_ids)} endpoint(s) × {len(package_names)} package(s) — {now_ist}"
+    desc = (f"Bulk deploy — hand-picked {len(agent_ids)} endpoint(s) "
+            f"and {len(package_names)} package(s). Auto-executes on next agent check-in.")
+
+    is_scheduled = scheduled_for is not None and scheduled_for > _now()
+
+    win = PatchWindow(
+        tenant_id=tenant_id,
+        name=label[:160],
+        description=desc,
+        severity_filter=None,
+        hostname_pattern="(bulk)",
+        scheduled_for=scheduled_for or _now(),
+        notes="created via bulk-deploy",
+        created_by_id=creator.id,
+        status=PatchWindowStatus.draft,
+        auto_execute=True,
+        selected_packages=package_names,
+    )
+    db.add(win)
+    db.flush()
+
+    # Materialise targets ONLY for the selected agent_ids — bypassing pattern.
+    counts: dict[int, int] = {}
+    for aid, c in (db.query(PatchObservation.agent_id, func.count(PatchObservation.id))
+                     .join(Agent, Agent.id == PatchObservation.agent_id)
+                     .filter(Agent.tenant_id == tenant_id,
+                             Agent.id.in_(agent_ids),
+                             PatchObservation.resolved_at.is_(None))
+                     .group_by(PatchObservation.agent_id).all()):
+        counts[int(aid)] = int(c)
+    for aid in agent_ids:
+        db.add(PatchWindowTarget(
+            window_id=win.id,
+            agent_id=aid,
+            status=PatchWindowTargetStatus.planned,
+            missing_at_plan=counts.get(aid, 0),
+        ))
+
+    db.commit()
+    db.refresh(win)
+
+    if not is_scheduled:
+        transition_window(db, window=win, new_status=PatchWindowStatus.in_progress)
+    else:
+        win.status = PatchWindowStatus.scheduled
+        db.commit()
+        db.refresh(win)
+    return win
+
+
 def deploy_to_single_endpoint(
     db: Session, *,
     tenant_id: int,

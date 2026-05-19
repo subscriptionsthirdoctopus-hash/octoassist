@@ -130,6 +130,85 @@ def quick_deploy(
     return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
 
 
+# ---------- Phase E: Bulk deploy from a single page (endpoints × packages) ----------
+
+@router.get("/patches/bulk-deploy", response_class=HTMLResponse)
+def bulk_deploy_form(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """Single-screen bulk patch deploy:
+    - left table: every Windows agent with pending patches (checkbox per row)
+    - right table: every distinct missing package across the fleet (checkbox per row)
+    Submit creates a PatchWindow with hand-picked targets + selected_packages and
+    auto-executes."""
+    tid = user.tenant_id
+    win_dash = patches_svc.windows_endpoint_dashboard(db, tid)
+    endpoints = [r for r in win_dash if r.get("pending_count", 0) > 0]
+
+    # Distinct packages across the fleet, with affected-endpoint counts.
+    from sqlalchemy import func as _f
+    rows = (db.query(PatchObservation.package_name,
+                     PatchObservation.severity,
+                     PatchObservation.source,
+                     _f.count(_f.distinct(PatchObservation.agent_id)))
+              .join(Agent, Agent.id == PatchObservation.agent_id)
+              .filter(Agent.tenant_id == tid,
+                      PatchObservation.resolved_at.is_(None))
+              .group_by(PatchObservation.package_name,
+                        PatchObservation.severity,
+                        PatchObservation.source)
+              .order_by(_f.count(_f.distinct(PatchObservation.agent_id)).desc(),
+                        PatchObservation.package_name).all())
+    packages = []
+    for name, sev, src, n in rows:
+        if any((src or "").startswith(p) for p in patches_svc._LINUX_SOURCE_PREFIXES):
+            continue  # Windows-only
+        packages.append({
+            "name": name,
+            "severity": sev.value if sev is not None else "—",
+            "source": src or "—",
+            "affected": int(n),
+        })
+
+    return templates.TemplateResponse(
+        request=request, name="patches_bulk_deploy.html",
+        context=_ctx(user, db, endpoints=endpoints, packages=packages),
+    )
+
+
+@router.post("/patches/bulk-deploy")
+async def bulk_deploy_submit(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote as _q
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    try:
+        agent_ids = [int(x) for x in form.getlist("agent_ids") if str(x).strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="bad agent_ids")
+    package_names = [s.strip() for s in form.getlist("package_names") if s.strip()]
+    if not agent_ids:
+        return RedirectResponse(url="/patches/bulk-deploy?error=Pick+at+least+one+endpoint", status_code=303)
+    if not package_names:
+        return RedirectResponse(url="/patches/bulk-deploy?error=Pick+at+least+one+package", status_code=303)
+    scheduled_for = _parse_dt(form.get("scheduled_for") or "")
+    try:
+        win = patches_svc.create_bulk_window(
+            db, tenant_id=user.tenant_id, creator=user,
+            name=name or None,
+            agent_ids=agent_ids, package_names=package_names,
+            scheduled_for=scheduled_for,
+        )
+    except ValueError as e:
+        return RedirectResponse(url=f"/patches/bulk-deploy?error={_q(str(e))}", status_code=303)
+    return RedirectResponse(url=f"/patches/windows/{win.id}", status_code=303)
+
+
 @router.get("/patches/aging", response_class=HTMLResponse)
 def patches_aging(
     request: Request,
