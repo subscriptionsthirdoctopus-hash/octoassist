@@ -5,7 +5,7 @@
   <div class="row-between">
     <div>
       <h1>My Tickets</h1>
-      <p class="meta">Welcome, {{ current_user.full_name or current_user.email }}. Below are tickets you've logged.</p>
+      <p class="meta">Welcome, {{ current_user.full_name or current_user.email }}. {% if open_count %}<strong>{{ open_count }}</strong> open · {% endif %}{{ rows|length }} total shown</p>
     </div>
     <div class="actions">
       <a class="button primary" href="/portal/new?kind=incident">+ Report an Issue</a>
@@ -14,16 +14,41 @@
   </div>
 </section>
 
+<style>
+  .portal-filters { display:flex; gap:10px; align-items:end; margin: 8px 0 14px; flex-wrap:wrap; }
+  .portal-filters input, .portal-filters select { padding:8px 10px; border:1px solid var(--line,#e2e8f0); border-radius:6px; font-size:13px; min-width: 200px; }
+  .portal-filters button { padding:8px 14px; }
+  .portal-filters .clear { color: var(--slate,#64748b); font-size:12px; text-decoration:none; }
+  .ticket-icon { font-size: 18px; margin-right:6px; }
+  table.data td.ticket-cell { display:flex; align-items:center; gap:4px; }
+</style>
+
+<form method="get" action="/portal" class="portal-filters">
+  <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate,#64748b);">Search
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="Title, description, ticket #" autocomplete="off">
+  </label>
+  <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate,#64748b);">Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_"," ")|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="primary">Apply</button>
+  {% if q or filter_status %}<a class="clear" href="/portal">clear</a>{% endif %}
+</form>
+
 {% if rows %}
 <table class="data">
-  <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Resolve by</th></tr></thead>
+  <thead><tr><th>#</th><th>Title</th><th>Category</th><th>Status</th><th>Resolve by</th></tr></thead>
   <tbody>
     {% for t in rows %}
     {% set ttb = time_to_breach(t.due_resolution_at) %}
     <tr>
       <td><a href="/portal/ticket/{{ t.id }}">{{ t.ticket_number }}</a></td>
-      <td>{{ t.title }}</td>
-      <td>{{ t.kind.value.replace("_", " ") }}</td>
+      <td class="ticket-cell"><span class="ticket-icon">{{ icon_for(t.category) }}</span><a href="/portal/ticket/{{ t.id }}" style="color:inherit;text-decoration:none;">{{ t.title }}</a></td>
+      <td>{{ t.category.name if t.category else "—" }}</td>
       <td><span class="status status-{{ t.status.value }}">{{ t.status.value.replace("_", " ") }}</span></td>
       <td class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</td>
     </tr>
@@ -32,8 +57,13 @@
 </table>
 {% else %}
 <div class="empty">
+  {% if q or filter_status %}
+  <h2>No tickets match your filters</h2>
+  <p><a href="/portal">Clear filters</a> or log a new ticket.</p>
+  {% else %}
   <h2>You haven't logged any tickets yet</h2>
   <p>Use the buttons above to report an issue or request something.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

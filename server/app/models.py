@@ -787,6 +787,26 @@ class UploadedFile(Base):
     )
 
 
+class TicketAttachment(Base):
+    """Phase G: file attached to a ticket (or a comment) by reporter or staff.
+    Wraps the existing UploadedFile storage so we don't reinvent the upload
+    pipeline — just adds a many-to-one link to a Ticket."""
+    __tablename__ = "ticket_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    file_id: Mapped[str] = mapped_column(ForeignKey("uploaded_files.id", ondelete="CASCADE"), nullable=False)
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    file: Mapped["UploadedFile"] = relationship()
+    uploaded_by: Mapped["User | None"] = relationship()
+
+    __table_args__ = (
+        Index("ix_ticket_attachments_ticket", "ticket_id", "created_at"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Remote Action framework — admin-triggered commands the agent runs as SYSTEM
 # ---------------------------------------------------------------------------

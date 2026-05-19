@@ -3,25 +3,57 @@
 {% block content %}
 <section class="page-head">
   <h1>{% if ticket_kind == "incident" %}Report an Issue{% else %}Request Service{% endif %}</h1>
-  <p class="meta">{% if ticket_kind == "incident" %}Tell us what's broken or behaving unexpectedly.{% else %}Tell us what you need.{% endif %}</p>
+  <p class="meta">{% if ticket_kind == "incident" %}Tell us what's broken or behaving unexpectedly. Attach a screenshot if it helps.{% else %}Tell us what you need. Attach a screenshot or document if it helps.{% endif %}</p>
 </section>
 
-<form method="post" action="/portal/new" class="card form">
+<style>
+  .cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-top:6px; }
+  .cat-card { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:14px 8px;
+              border:1px solid var(--line,#e2e8f0); border-radius:8px; cursor:pointer; background:white;
+              transition: border-color .12s, transform .12s, box-shadow .12s; text-align:center; }
+  .cat-card:hover { transform: translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,.06); }
+  .cat-card .icon { font-size:26px; line-height:1; margin-bottom:6px; }
+  .cat-card .name { font-size:12.5px; font-weight:600; }
+  .cat-card .sub  { font-size:10.5px; color:var(--slate,#64748b); margin-top:3px; }
+  .cat-card input { position:absolute; opacity:0; pointer-events:none; }
+  .cat-card.selected { border-color: var(--accent,#2563eb); box-shadow:0 0 0 2px rgba(37,99,235,.12); }
+  .attach-zone { border:2px dashed var(--line,#e2e8f0); border-radius:8px; padding:14px; text-align:center;
+                 color:var(--slate,#64748b); font-size:13px; }
+  .attach-zone input { display:block; margin:6px auto 0; }
+  .attach-list { margin-top:8px; font-size:12px; color:#334155; }
+</style>
+
+<form method="post" action="/portal/new" class="card form" enctype="multipart/form-data" id="ticketForm">
   <label>Subject
-    <input type="text" name="title" required maxlength="255" placeholder="One-line summary">
+    <input type="text" name="title" required maxlength="255" placeholder="One-line summary" autofocus>
   </label>
 
-  <label>Category
-    <select name="category_id" required>
-      <option value="">Choose…</option>
-      {% for c in categories %}
-      <option value="{{ c.id }}">{{ c.name }}{% if c.requires_approval %} (approval required){% endif %}</option>
-      {% endfor %}
-    </select>
-  </label>
+  <label>Category</label>
+  {% if categories %}
+  <div class="cat-grid" id="catGrid">
+    {% for c in categories %}
+    <label class="cat-card" data-cat-id="{{ c.id }}">
+      <input type="radio" name="category_id" value="{{ c.id }}" required {% if loop.first %}checked{% endif %}>
+      <span class="icon">{{ icon_for(c) }}</span>
+      <span class="name">{{ c.name }}</span>
+      {% if c.requires_approval %}<span class="sub">approval required</span>{% endif %}
+    </label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="meta" style="color:#dc2626;">No categories available. Ask an admin to add some under Settings → SLA.</p>
+  {% endif %}
 
   <label>Details
     <textarea name="description" rows="6" placeholder="The more context you give us, the faster we can help."></textarea>
+  </label>
+
+  <label>Attachments <span class="meta" style="font-weight:normal;">(optional — screenshots, logs, docs)</span>
+    <div class="attach-zone">
+      Drop files here or
+      <input type="file" name="attachments" multiple>
+      <div class="attach-list" id="attachList"></div>
+    </div>
   </label>
 
   <div class="form-actions">
@@ -29,4 +61,36 @@
     <a href="/portal" class="link-button">Cancel</a>
   </div>
 </form>
+
+<script>
+(function(){
+  // Category card selection visual
+  var grid = document.getElementById("catGrid");
+  if (grid) {
+    function paint(){
+      grid.querySelectorAll(".cat-card").forEach(function(card){
+        var input = card.querySelector("input[type=radio]");
+        if (input && input.checked) card.classList.add("selected");
+        else card.classList.remove("selected");
+      });
+    }
+    grid.addEventListener("change", paint);
+    paint();
+  }
+  // Show selected filenames
+  var fileInput = document.querySelector("input[type=file][name=attachments]");
+  var list = document.getElementById("attachList");
+  if (fileInput && list) {
+    fileInput.addEventListener("change", function(){
+      if (!fileInput.files.length) { list.textContent = ""; return; }
+      var names = [];
+      for (var i=0; i<fileInput.files.length; i++) {
+        var f = fileInput.files[i];
+        names.push(f.name + " (" + (f.size/1024).toFixed(1) + " KB)");
+      }
+      list.textContent = names.join(" · ");
+    });
+  }
+})();
+</script>
 {% endblock %}
