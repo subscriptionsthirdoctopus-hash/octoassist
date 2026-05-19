@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from ..auth import require_staff
 from ..database import get_db
 from ..models import (
-    Change, ChangeRisk, ChangeStatus, ChangeType, Tenant, User, UserRole,
+    Change, ChangeEventKind, ChangeRisk, ChangeStatus, ChangeType, Tenant, User, UserRole,
 )
 from ..services import change as change_svc
 
@@ -29,7 +29,49 @@ router = APIRouter(tags=["changes"])
 
 
 def _ctx(user: User, db: Session, **extra) -> dict:
-    return {"current_user": user, "tenant": db.query(Tenant).first(), **extra}
+    return {"current_user": user, "tenant": db.query(Tenant).first(),
+            "format_change_event": _format_change_event, **extra}
+
+
+def _format_change_event(e) -> str:
+    """Render a ChangeEvent payload as a human sentence — same pattern as
+    _format_event in views_tickets. Keeps audit log readable."""
+    k = e.kind
+    a = e.after_value or {}
+    b = e.before_value or {}
+    if k == ChangeEventKind.created:
+        bits = []
+        if a.get("type"): bits.append(f"<b>{a['type']}</b>")
+        if a.get("risk"): bits.append(f"<b>{a['risk']}</b> risk")
+        suffix = f" ({', '.join(bits)})" if bits else ""
+        return f"Created{suffix}"
+    if k == ChangeEventKind.submitted_for_review:
+        return "Submitted for CAB review"
+    if k == ChangeEventKind.approved:
+        return "✓ Approved by CAB"
+    if k == ChangeEventKind.rejected:
+        return "✕ Rejected by CAB"
+    if k == ChangeEventKind.started:
+        return "▶ Implementation started"
+    if k == ChangeEventKind.completed:
+        return "✓ Completed"
+    if k == ChangeEventKind.failed:
+        return "⚠ Failed"
+    if k == ChangeEventKind.cancelled:
+        return "Cancelled"
+    if k == ChangeEventKind.field_changed:
+        # Show which fields shifted
+        changed = []
+        for key in (a.keys() if a else b.keys()):
+            before = b.get(key); after = a.get(key)
+            if before == after:
+                continue
+            label = key.replace("_", " ")
+            changed.append(f"<b>{label}</b>")
+        if changed:
+            return f"Edited {', '.join(changed)}"
+        return "Edited"
+    return k.value.replace("_", " ")
 
 
 def _parse_dt(s: str) -> datetime | None:

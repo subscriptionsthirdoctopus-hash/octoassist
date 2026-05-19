@@ -1,21 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Knowledge Base — OctoAssist{% endblock %}
 {% block content %}
+
+<style>
+  .kb-status { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid transparent; text-transform:capitalize; letter-spacing:.2px; }
+  .kb-status::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
+  .kb-status.published { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+  .kb-status.draft     { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+  .kb-status.archived  { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+
+  .kb-vis { font-size:11px; font-weight:600; padding:2px 8px; border-radius:5px; text-transform:uppercase; letter-spacing:.5px; }
+  .kb-vis.portal   { background:#dbeafe; color:#1e40af; }
+  .kb-vis.internal { background:#f1f5f9; color:var(--text-3); }
+
+  .kb-title { display:flex; flex-direction:column; gap:2px; min-width:280px; }
+  .kb-title a { color:var(--text-1); font-weight:600; font-size:13.5px; text-decoration:none; }
+  .kb-title a:hover { color:var(--accent); text-decoration:underline; }
+  .kb-title .summary { font-size:12px; color:var(--text-3); line-height:1.45; }
+
+  .filters .search-wrap { position:relative; flex:1; min-width:280px; max-width:420px; }
+  .filters .search-wrap input { padding-left:34px; }
+  .filters .search-wrap::before { content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none; }
+
+  .views-count { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--bg); border:1px solid var(--line); border-radius:999px; font-size:11.5px; color:var(--text-3); font-weight:500; }
+</style>
+
 <section class="page-head">
   <div class="row-between">
     <div>
       <h1>Knowledge Base</h1>
-      <p class="meta">{{ rows|length }} article{{ "" if rows|length == 1 else "s" }} · drafts and archived included</p>
+      <p class="meta">{{ rows|length }} article{{ "" if rows|length == 1 else "s" }} · drafts and archived included · deflect tickets with self-service answers</p>
     </div>
     <div class="actions">
-      <a class="button primary" href="/kb/new">+ New article</a>
       <a class="button" href="/kb/categories">Manage categories</a>
+      <a class="button primary" href="/kb/new">+ New article</a>
     </div>
   </div>
 </section>
 
 <form method="get" action="/kb" class="filters">
-  <label>Search<input type="text" name="q" value="{{ q }}" placeholder="title, summary, body"></label>
+  <div class="search-wrap">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search title, summary, body" autocomplete="off">
+  </div>
   <label>Category
     <select name="category_id">
       <option value="">All</option>
@@ -24,41 +50,46 @@
       {% endfor %}
     </select>
   </label>
-  <button type="submit">Search</button>
-  <a href="/kb" class="link-button">Clear</a>
+  <button type="submit" class="primary">Apply</button>
+  {% if q or filter_category_id %}<a href="/kb" class="link-button">Clear</a>{% endif %}
 </form>
 
 {% if rows %}
 <table class="data">
   <thead>
     <tr>
-      <th>Title</th>
-      <th>Category</th>
-      <th>Status</th>
-      <th>Visibility</th>
-      <th>Author</th>
-      <th>Views</th>
-      <th>Updated</th>
+      <th>Article</th>
+      <th style="width:140px;">Category</th>
+      <th style="width:110px;">Status</th>
+      <th style="width:90px;">Audience</th>
+      <th style="width:140px;">Author</th>
+      <th style="width:80px;">Views</th>
+      <th style="width:110px;">Updated</th>
     </tr>
   </thead>
   <tbody>
     {% for a in rows %}
     <tr>
-      <td><a href="/kb/{{ a.id }}"><strong>{{ a.title }}</strong></a>{% if a.summary %}<div class="meta-inline" style="display:block;color:var(--slate);font-size:12.5px;margin-top:2px;">{{ a.summary[:140] }}{% if a.summary|length > 140 %}…{% endif %}</div>{% endif %}</td>
-      <td>{{ a.category.name if a.category else "—" }}</td>
-      <td><span class="status status-{% if a.status.value == 'published' %}resolved{% elif a.status.value == 'draft' %}on_hold{% else %}cancelled{% endif %}">{{ a.status.value }}</span></td>
-      <td>{{ a.visibility.value }}</td>
-      <td>{{ a.author.display_name if a.author else "—" }}</td>
-      <td>{{ a.view_count }}</td>
-      <td>{{ a.updated_at | ist }}</td>
+      <td>
+        <div class="kb-title">
+          <a href="/kb/{{ a.id }}">{{ a.title }}</a>
+          {% if a.summary %}<span class="summary">{{ a.summary[:140] }}{% if a.summary|length > 140 %}…{% endif %}</span>{% endif %}
+        </div>
+      </td>
+      <td style="color:var(--text-2); font-size:13px;">{{ a.category.name if a.category else "—" }}</td>
+      <td><span class="kb-status {{ a.status.value }}">{{ a.status.value }}</span></td>
+      <td><span class="kb-vis {{ a.visibility.value }}">{{ a.visibility.value }}</span></td>
+      <td><span style="color:var(--text-1); font-weight:500; font-size:13px;">{{ a.author.display_name if a.author else "—" }}</span></td>
+      <td><span class="views-count">👁 {{ a.view_count }}</span></td>
+      <td style="color:var(--text-3); font-size:12.5px;">{{ a.updated_at | ist }}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% else %}
 <div class="empty">
-  <h2>No articles yet</h2>
-  <p><a href="/kb/new">Create the first article</a> to start deflecting tickets.</p>
+  <h2>No articles match</h2>
+  <p>Clear filters or <a href="/kb/new">create your first article</a> to start deflecting tickets.</p>
 </div>
 {% endif %}
 {% endblock %}
