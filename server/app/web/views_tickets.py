@@ -33,6 +33,7 @@ def list_tickets(
     status: str | None = None,
     kind: str | None = None,
     mine: int = 0,
+    location: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -49,7 +50,18 @@ def list_tickets(
             pass
     if mine:
         q = q.filter(Ticket.assignee_id == user.id)
+    if location:
+        from sqlalchemy import func as _f
+        q = q.filter(_f.lower(Ticket.location) == location.strip().lower())
     rows = q.order_by(Ticket.created_at.desc()).limit(200).all()
+    # Distinct locations available for the filter dropdown
+    from sqlalchemy import distinct
+    locations = sorted({
+        loc for (loc,) in db.query(distinct(Ticket.location))
+                            .filter(Ticket.tenant_id == user.tenant_id,
+                                    Ticket.location.is_not(None)).all()
+        if loc
+    })
     return templates.TemplateResponse(
         request=request,
         name="tickets_list.html",
@@ -58,6 +70,8 @@ def list_tickets(
                      filter_status=status or "",
                      filter_kind=kind or "",
                      filter_mine=bool(mine),
+                     filter_location=location or "",
+                     locations=locations,
                      statuses=[s.value for s in TicketStatus],
                      kinds=[k.value for k in TicketKind]),
     )

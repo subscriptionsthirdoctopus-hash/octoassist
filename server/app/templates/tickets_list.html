@@ -35,6 +35,16 @@
     <input type="checkbox" name="mine" value="1" {% if filter_mine %}checked{% endif %}>
     Assigned to me
   </label>
+  {% if locations %}
+  <label>Location
+    <select name="location">
+      <option value="">All</option>
+      {% for loc in locations %}
+      <option value="{{ loc }}" {% if filter_location == loc %}selected{% endif %}>{{ loc }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
   <button type="submit">Apply</button>
   <a href="/tickets" class="link-button">Clear</a>
 </form>
@@ -49,6 +59,7 @@
       <th>Priority</th>
       <th>Status</th>
       <th>Reporter</th>
+      <th>Location</th>
       <th>Assignee</th>
       <th>Resolve by</th>
     </tr>
@@ -63,6 +74,7 @@
       <td><span class="prio prio-{{ t.priority.value }}">{{ t.priority.value }}</span></td>
       <td><span class="status status-{{ t.status.value }}">{{ t.status.value.replace("_", " ") }}</span></td>
       <td>{{ t.reporter.display_name if t.reporter else "—" }}</td>
+      <td>{{ t.location or "—" }}</td>
       <td>{{ t.assignee.display_name if t.assignee else "—" }}</td>
       <td class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</td>
     </tr>

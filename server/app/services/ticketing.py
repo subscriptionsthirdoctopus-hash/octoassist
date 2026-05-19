@@ -10,6 +10,7 @@ from ..models import (
 from .audit import record
 from .sla import compute_sla
 from . import notifications
+from .location_routing import auto_assignee_for, derive_location_for
 
 
 def next_ticket_number(db: Session, tenant_id: int, kind: TicketKind) -> str:
@@ -36,6 +37,12 @@ def create_ticket(
     now = datetime.now(timezone.utc)
     due_response, due_resolution = compute_sla(category, prio, now)
 
+    # Phase C: derive ticket location from the reporter's primary asset (or
+    # their Entra profile fallback), then look up a routing rule to auto-
+    # assign. Both are best-effort — failures leave fields NULL/None.
+    location = derive_location_for(user=reporter, db=db)
+    auto_assignee = auto_assignee_for(location=location, tenant_id=tenant_id, db=db)
+
     ticket = Ticket(
         tenant_id=tenant_id,
         ticket_number=next_ticket_number(db, tenant_id, category.kind),
@@ -46,6 +53,8 @@ def create_ticket(
         priority=prio,
         status=TicketStatus.open,
         reporter_id=reporter.id,
+        assignee_id=auto_assignee.id if auto_assignee else None,
+        location=(location or None),
         due_response_at=due_response,
         due_resolution_at=due_resolution,
         created_at=now,
@@ -54,13 +63,18 @@ def create_ticket(
     db.add(ticket)
     db.flush()  # assign id
 
-    record(db, ticket=ticket, actor=reporter, kind=TicketEventKind.created, after={
+    after_payload = {
         "ticket_number": ticket.ticket_number,
         "title": ticket.title,
         "priority": ticket.priority.value,
         "category": category.name,
         "kind": ticket.kind.value,
-    })
+    }
+    if ticket.location:
+        after_payload["location"] = ticket.location
+    if auto_assignee:
+        after_payload["auto_assigned_to"] = auto_assignee.email
+    record(db, ticket=ticket, actor=reporter, kind=TicketEventKind.created, after=after_payload)
     db.commit()
     db.refresh(ticket)
     notifications.ticket_created(db, ticket)

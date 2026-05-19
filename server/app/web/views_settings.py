@@ -13,7 +13,7 @@ import secrets
 from ..auth import require_admin
 from ..database import get_db
 from ..models import (
-    Category, IdentityProvider, IdentityProviderKind, Tenant,
+    Agent, Category, IdentityProvider, IdentityProviderKind, LocationRule, Tenant,
     TicketKind, TicketPriority, User, UserRole,
 )
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
@@ -49,6 +49,8 @@ def settings_home(
     categories_count = (db.query(_f.count(Category.id))
                           .filter(Category.tenant_id == user.tenant_id,
                                   Category.is_active == True).scalar()) or 0  # noqa: E712
+    location_rules_count = (db.query(_f.count(LocationRule.id))
+                              .filter(LocationRule.tenant_id == user.tenant_id).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -56,8 +58,107 @@ def settings_home(
             "users_count": int(users_count),
             "idps_count": int(idps_count),
             "categories_count": int(categories_count),
+            "location_rules_count": int(location_rules_count),
             "flash": flash,
         },
+    )
+
+
+# ---------------------------- Location routing rules ----------------------------
+
+@router.get("/settings/locations", response_class=HTMLResponse)
+def settings_locations(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    """Per-location default assignee rules. New tickets stamped with `location`
+    by services.location_routing get auto-assigned to the rule's user."""
+    tenant = db.query(Tenant).first()
+    rules = (db.query(LocationRule)
+               .filter(LocationRule.tenant_id == user.tenant_id)
+               .order_by(LocationRule.location).all())
+    # Distinct locations OctoAssist already knows about (from users + agents) —
+    # let the admin pick from a dropdown instead of typing free text.
+    from sqlalchemy import distinct
+    user_locs  = {loc for (loc,) in db.query(distinct(User.location))
+                                       .filter(User.tenant_id == user.tenant_id,
+                                               User.location.is_not(None)).all() if loc}
+    agent_locs = {loc for (loc,) in db.query(distinct(Agent.location))
+                                       .filter(Agent.tenant_id == user.tenant_id,
+                                               Agent.location.is_not(None)).all() if loc}
+    known_locations = sorted(user_locs | agent_locs)
+    staff = (db.query(User)
+               .filter(User.tenant_id == user.tenant_id,
+                       User.is_active == True,  # noqa: E712
+                       User.role.in_([UserRole.admin, UserRole.agent]))
+               .order_by(User.full_name, User.email).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_locations.html",
+        context={
+            "current_user": user, "tenant": tenant,
+            "rules": rules, "known_locations": known_locations,
+            "staff": staff, "flash": flash, "error": error,
+        },
+    )
+
+
+@router.post("/settings/locations/new")
+def create_location_rule(
+    location: str = Form(...),
+    default_assignee_id: int = Form(...),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    loc = (location or "").strip()
+    if not loc:
+        return RedirectResponse(url="/settings/locations?error=Location+is+required", status_code=303)
+    assignee = db.get(User, default_assignee_id)
+    if assignee is None or assignee.tenant_id != user.tenant_id or not assignee.is_active:
+        return RedirectResponse(url="/settings/locations?error=Invalid+assignee", status_code=303)
+    if assignee.role not in (UserRole.admin, UserRole.agent):
+        return RedirectResponse(
+            url=f"/settings/locations?error={quote('Assignee must be admin or agent (not requester)')}",
+            status_code=303,
+        )
+    # Reject duplicate location (case-insensitive)
+    from sqlalchemy import func as _f
+    existing = (db.query(LocationRule)
+                  .filter(LocationRule.tenant_id == user.tenant_id,
+                          _f.lower(LocationRule.location) == loc.lower())
+                  .first())
+    if existing:
+        return RedirectResponse(
+            url=f"/settings/locations?error={quote(f'A rule for location {loc!r} already exists — delete it first')}",
+            status_code=303,
+        )
+    db.add(LocationRule(tenant_id=user.tenant_id, location=loc,
+                        default_assignee_id=assignee.id))
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/locations?flash={quote(f'Routing rule added: {loc} → {assignee.display_name}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/locations/{rule_id}/delete")
+def delete_location_rule(
+    rule_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    r = db.get(LocationRule, rule_id)
+    if r is None or r.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    loc = r.location
+    db.delete(r); db.commit()
+    return RedirectResponse(
+        url=f"/settings/locations?flash={quote(f'Routing rule for {loc} deleted')}",
+        status_code=303,
     )
 
 

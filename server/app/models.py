@@ -439,6 +439,12 @@ class Ticket(Base):
     reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
+    # Phase C: auto-filled at create-time from the reporter's primary asset
+    # (or their User.location if no asset is linked). Used for location-based
+    # routing — see services.location_routing. Denormalised; doesn't change
+    # if the reporter relocates after the ticket is opened.
+    location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     # SLA — captured at create time so historical tickets aren't retroactively
     # changed if the category SLA gets updated later.
     due_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -483,6 +489,28 @@ class Ticket(Base):
         if not self.is_open:
             return False
         return (now or _now()) > self.due_resolution_at
+
+
+class LocationRule(Base):
+    """Per-office routing rule. When a ticket is created with a location that
+    matches one of these rules (case-insensitive), the ticket is auto-assigned
+    to the rule's default_assignee. Admin manages these via /settings/locations.
+    """
+    __tablename__ = "location_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    location: Mapped[str] = mapped_column(String(200), nullable=False)
+    default_assignee_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    default_assignee: Mapped[User] = relationship(foreign_keys=[default_assignee_id])
+
+    __table_args__ = (
+        Index("ix_location_rules_tenant_loc", "tenant_id", "location", unique=True),
+    )
 
 
 class TicketComment(Base):

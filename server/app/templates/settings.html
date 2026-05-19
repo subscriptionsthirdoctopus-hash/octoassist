@@ -75,6 +75,20 @@
     <p class="tile-meta">Created {{ tenant.created_at | istdate }}</p>
   </a>
 
+  <a href="/settings/locations" class="settings-tile">
+    <span class="icon">📍</span>
+    <p class="tile-title">Locations &amp; Routing</p>
+    <p class="tile-sub">Per-office default ticket assignee — e.g. Mumbai tickets auto-assign to a Mumbai technician on creation.</p>
+    <p class="tile-meta">{{ location_rules_count }} routing rule{{ "" if location_rules_count == 1 else "s" }}</p>
+  </a>
+
+  <a href="/actions" class="settings-tile">
+    <span class="icon">⚡</span>
+    <p class="tile-title">Remote Actions</p>
+    <p class="tile-sub">Audit log of every remote action queued or executed on endpoints — reboots, lock, custom PowerShell, wallpaper, password resets.</p>
+    <p class="tile-meta">View history &amp; filter</p>
+  </a>
+
   <a href="/settings/roadmap" class="settings-tile">
     <span class="icon">🗺️</span>
     <p class="tile-title">Roadmap &amp; Status</p>
