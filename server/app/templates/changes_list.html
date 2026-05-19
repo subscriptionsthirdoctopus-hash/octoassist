@@ -1,78 +1,179 @@
 {% extends "base.html" %}
 {% block title %}Changes — OctoAssist{% endblock %}
 {% block content %}
+
+<style>
+  .kpi-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px; }
+  .kpi-tile { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:12px 14px; box-shadow:var(--shadow-1); display:flex; flex-direction:column; gap:2px; text-decoration:none; color:inherit; transition:border-color .12s, box-shadow .12s; }
+  .kpi-tile:hover { border-color:var(--line-strong); box-shadow:var(--shadow-2); text-decoration:none; }
+  .kpi-tile .kpi-label { font-size:11px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.6px; }
+  .kpi-tile .kpi-val { font-size:22px; font-weight:700; color:var(--text-1); line-height:1.1; letter-spacing:-0.01em; }
+  .kpi-tile.draft       { border-left:3px solid var(--text-4); }
+  .kpi-tile.review      { border-left:3px solid var(--amber); }
+  .kpi-tile.approved    { border-left:3px solid #16a34a; }
+  .kpi-tile.in_progress { border-left:3px solid var(--accent); }
+  .kpi-tile.completed   { border-left:3px solid var(--green); }
+  .kpi-tile.failed      { border-left:3px solid var(--red); }
+  .kpi-tile.total       { border-left:3px solid var(--text-3); }
+
+  .c-title { display:flex; flex-direction:column; gap:2px; min-width:220px; }
+  .c-title .c-link { color:var(--text-1); font-weight:600; font-size:13.5px; text-decoration:none; }
+  .c-title .c-link:hover { color:var(--accent); text-decoration:underline; }
+  .c-title .c-sub { font-size:11.5px; color:var(--text-3); }
+
+  /* Change-specific status pills */
+  .cstatus { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid transparent; text-transform:capitalize; letter-spacing:.2px; }
+  .cstatus::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
+  .cstatus.s-draft        { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+  .cstatus.s-under_review { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+  .cstatus.s-approved     { background:#dbeafe; color:#1e40af; border-color:#bfdbfe; }
+  .cstatus.s-rejected     { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+  .cstatus.s-in_progress  { background:#ede9fe; color:#5b21b6; border-color:#ddd6fe; }
+  .cstatus.s-completed    { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+  .cstatus.s-failed       { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+  .cstatus.s-cancelled    { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+
+  /* Type pills */
+  .ctype { font-size:11px; font-weight:600; padding:2px 8px; border-radius:5px; text-transform:capitalize; letter-spacing:.2px; border:1px solid var(--line); }
+  .ctype.normal    { background:var(--bg); color:var(--text-2); }
+  .ctype.standard  { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+  .ctype.emergency { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+
+  /* Risk pills */
+  .crisk { font-size:11px; font-weight:600; padding:2px 8px; border-radius:5px; text-transform:uppercase; letter-spacing:.5px; }
+  .crisk.low    { background:#dcfce7; color:#166534; }
+  .crisk.medium { background:#fef3c7; color:#92400e; }
+  .crisk.high   { background:#fee2e2; color:#991b1b; }
+
+  .filters .search-wrap { position:relative; flex:1; min-width:240px; max-width:380px; }
+  .filters .search-wrap input { padding-left:34px; }
+  .filters .search-wrap::before { content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none; }
+
+  /* CAB approval banner */
+  .cab-banner {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border:1px solid #fde68a; border-left:4px solid var(--amber);
+    border-radius:var(--r-md); padding:14px 18px; margin-bottom:16px;
+    box-shadow:var(--shadow-1);
+  }
+  .cab-banner h2 { margin:0 0 10px; font-size:15px; color:#78350f; display:flex; align-items:center; gap:8px; }
+  .cab-banner h2 .count-badge { background:var(--amber); color:white; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; }
+  .cab-banner .cab-tickets { display:flex; flex-direction:column; gap:6px; }
+  .cab-banner .cab-row { display:flex; align-items:center; gap:10px; padding:8px 12px; background:white; border:1px solid #fde68a; border-radius:var(--r-sm); font-size:13px; }
+  .cab-banner .cab-row .cnum { font-family:var(--font-mono); color:var(--text-2); text-decoration:none; font-weight:600; font-size:12.5px; }
+  .cab-banner .cab-row .ctitle { flex:1; color:var(--text-1); font-weight:500; text-decoration:none; }
+  .cab-banner .cab-row .when { color:var(--text-3); font-size:11.5px; }
+</style>
+
 <section class="page-head">
   <div class="row-between">
     <div>
       <h1>Changes</h1>
-      <p class="meta">{{ rows|length }} change{{ "" if rows|length == 1 else "s" }} · normal, standard, and emergency</p>
+      <p class="meta">CAB-managed change records · {{ rows|length }} shown{% if q or filter_status %} · filtered from {{ kpi.total }}{% else %} · {{ kpi.total }} total{% endif %}</p>
     </div>
     <div class="actions">
-      <a class="button primary" href="/changes/new">+ New Change</a>
+      <a class="button primary" href="/changes/new">+ New change</a>
     </div>
   </div>
 </section>
 
-{# ---------- CAB approval queue — only shown if there's something to approve ---------- #}
 {% if awaiting %}
-<section class="card" style="margin-bottom:18px;border-left:4px solid var(--orange,#d97706);background:#fffbeb;">
-  <div class="row-between" style="margin-bottom:8px;">
-    <h2 style="margin:0;font-size:16px;">
-      Awaiting your CAB approval
-      <span class="prio prio-high" style="margin-left:6px;">{{ awaiting|length }}</span>
-    </h2>
-    <p class="meta" style="margin:0;">You can approve or reject any change you didn't raise yourself.</p>
+<section class="cab-banner">
+  <h2>
+    ⚖️ Awaiting your CAB approval
+    <span class="count-badge">{{ awaiting|length }}</span>
+  </h2>
+  <p class="meta" style="margin:0 0 10px; font-size:12.5px;">You can approve or reject any change you didn't raise yourself.</p>
+  <div class="cab-tickets">
+    {% for c in awaiting %}
+    <div class="cab-row">
+      <a class="cnum" href="/changes/{{ c.id }}">{{ c.change_number }}</a>
+      <a class="ctitle" href="/changes/{{ c.id }}">{{ c.title }}</a>
+      <span class="ctype {{ c.change_type.value }}">{{ c.change_type.value }}</span>
+      <span class="crisk {{ c.risk.value }}">{{ c.risk.value }} risk</span>
+      <span class="when">by {{ c.requester.display_name if c.requester else "—" }}</span>
+      <a href="/changes/{{ c.id }}" class="button primary" style="padding:5px 12px;min-height:0;font-size:12px;">Review →</a>
+    </div>
+    {% endfor %}
   </div>
-  <table class="data" style="margin:0;">
-    <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Risk</th><th>Planned start</th><th>Requester</th><th></th></tr></thead>
-    <tbody>
-      {% for c in awaiting %}
-      <tr>
-        <td><a href="/changes/{{ c.id }}">{{ c.change_number }}</a></td>
-        <td>{{ c.title }}</td>
-        <td>{{ c.change_type.value }}</td>
-        <td><span class="prio prio-{{ 'critical' if c.risk.value == 'high' else ('high' if c.risk.value == 'medium' else 'low') }}">{{ c.risk.value }}</span></td>
-        <td>{% if c.planned_start %}{{ c.planned_start | ist }}{% else %}—{% endif %}</td>
-        <td>{{ c.requester.display_name if c.requester else "—" }}</td>
-        <td><a href="/changes/{{ c.id }}" class="button">Review →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </section>
 {% endif %}
 
+<div class="kpi-strip">
+  <a class="kpi-tile draft" href="/changes?status=draft">
+    <span class="kpi-label">Draft</span><span class="kpi-val">{{ kpi.draft }}</span>
+  </a>
+  <a class="kpi-tile review" href="/changes?status=under_review">
+    <span class="kpi-label">Under review</span><span class="kpi-val">{{ kpi.under_review }}</span>
+  </a>
+  <a class="kpi-tile approved" href="/changes?status=approved">
+    <span class="kpi-label">Approved</span><span class="kpi-val">{{ kpi.approved }}</span>
+  </a>
+  <a class="kpi-tile in_progress" href="/changes?status=in_progress">
+    <span class="kpi-label">In progress</span><span class="kpi-val">{{ kpi.in_progress }}</span>
+  </a>
+  <a class="kpi-tile completed" href="/changes?status=completed">
+    <span class="kpi-label">Completed</span><span class="kpi-val">{{ kpi.completed }}</span>
+  </a>
+  <a class="kpi-tile failed" href="/changes?status=failed">
+    <span class="kpi-label">Failed</span><span class="kpi-val">{{ kpi.failed }}</span>
+  </a>
+  <a class="kpi-tile total" href="/changes">
+    <span class="kpi-label">All</span><span class="kpi-val">{{ kpi.total }}</span>
+  </a>
+</div>
+
 <form method="get" action="/changes" class="filters">
+  <div class="search-wrap">
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="Search title, description, change #" autocomplete="off">
+  </div>
   <label>Status
     <select name="status">
       <option value="">All</option>
-      {% for s in statuses %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_", " ") }}</option>{% endfor %}
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_"," ") | capitalize }}</option>
+      {% endfor %}
     </select>
   </label>
-  <button type="submit">Apply</button>
-  <a href="/changes" class="link-button">Clear</a>
+  <button type="submit" class="primary">Apply</button>
+  {% if q or filter_status %}<a href="/changes" class="link-button">Clear</a>{% endif %}
 </form>
 
 {% if rows %}
 <table class="data">
-  <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Risk</th><th>Status</th><th>Planned</th><th>Requester</th></tr></thead>
+  <thead>
+    <tr>
+      <th style="width:90px;">Change</th>
+      <th>Title</th>
+      <th style="width:110px;">Type</th>
+      <th style="width:100px;">Risk</th>
+      <th style="width:130px;">Status</th>
+      <th style="width:140px;">Planned start</th>
+      <th style="width:160px;">Requester</th>
+    </tr>
+  </thead>
   <tbody>
     {% for c in rows %}
     <tr>
-      <td><a href="/changes/{{ c.id }}">{{ c.change_number }}</a></td>
-      <td>{{ c.title }}</td>
-      <td>{{ c.change_type.value }}</td>
-      <td><span class="prio prio-{{ 'critical' if c.risk.value == 'high' else ('high' if c.risk.value == 'medium' else 'low') }}">{{ c.risk.value }}</span></td>
-      <td><span class="status status-{{ 'resolved' if c.status.value in ('approved','completed') else ('cancelled' if c.status.value in ('rejected','failed','cancelled') else 'in_progress') }}">{{ c.status.value.replace("_", " ") }}</span></td>
-      <td>{% if c.planned_start %}{{ c.planned_start | ist }}{% else %}—{% endif %}</td>
-      <td>{{ c.requester.display_name if c.requester else "—" }}</td>
+      <td><a href="/changes/{{ c.id }}" style="font-family:var(--font-mono); font-size:12.5px; color:var(--text-2);">{{ c.change_number }}</a></td>
+      <td>
+        <div class="c-title">
+          <a class="c-link" href="/changes/{{ c.id }}">{{ c.title }}</a>
+          {% if c.description %}<span class="c-sub">{{ c.description[:80] }}{% if c.description|length > 80 %}…{% endif %}</span>{% endif %}
+        </div>
+      </td>
+      <td><span class="ctype {{ c.change_type.value }}">{{ c.change_type.value }}</span></td>
+      <td><span class="crisk {{ c.risk.value }}">{{ c.risk.value }}</span></td>
+      <td><span class="cstatus s-{{ c.status.value }}">{{ c.status.value.replace("_"," ") }}</span></td>
+      <td style="color:var(--text-2); font-size:12.5px;">{% if c.planned_start %}{{ c.planned_start | ist }}{% else %}—{% endif %}</td>
+      <td><span style="color:var(--text-1); font-weight:500;">{{ c.requester.display_name if c.requester else "—" }}</span></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% else %}
 <div class="empty">
-  <h2>No changes logged yet</h2>
+  <h2>No changes match</h2>
   <p>Open a change record before doing anything that touches production — get it through CAB, log the rollback plan, capture the audit trail.</p>
 </div>
 {% endif %}

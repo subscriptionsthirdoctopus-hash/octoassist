@@ -46,10 +46,20 @@ def _parse_dt(s: str) -> datetime | None:
 def list_changes(
     request: Request,
     status: str | None = None,
+    q: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    from sqlalchemy import func as _f, or_
     qy = db.query(Change).filter(Change.tenant_id == user.tenant_id)
+    needle = (q or "").strip()
+    if needle:
+        like = f"%{needle.lower()}%"
+        qy = qy.filter(or_(
+            _f.lower(Change.title).like(like),
+            _f.lower(Change.description).like(like),
+            _f.lower(Change.change_number).like(like),
+        ))
     if status:
         try:
             qy = qy.filter(Change.status == ChangeStatus(status))
@@ -65,9 +75,17 @@ def list_changes(
                           Change.requester_id != user.id)
                   .order_by(Change.created_at.asc()).all())
 
+    status_counts = dict(
+        db.query(Change.status, _f.count(Change.id))
+          .filter(Change.tenant_id == user.tenant_id)
+          .group_by(Change.status).all()
+    )
+    kpi = {s.value: int(status_counts.get(s, 0)) for s in ChangeStatus}
+    kpi["total"] = sum(kpi.values())
+
     return templates.TemplateResponse(
         request=request, name="changes_list.html",
-        context=_ctx(user, db, rows=rows,
+        context=_ctx(user, db, rows=rows, q=needle, kpi=kpi,
                      awaiting=awaiting,
                      statuses=[s.value for s in ChangeStatus],
                      filter_status=status or ""),

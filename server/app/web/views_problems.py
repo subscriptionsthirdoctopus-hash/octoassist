@@ -30,19 +30,38 @@ def _ctx(user: User, db: Session, **extra) -> dict:
 def list_problems(
     request: Request,
     status: str | None = None,
+    q: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    from sqlalchemy import func as _f, or_
     qy = db.query(Problem).filter(Problem.tenant_id == user.tenant_id)
+    needle = (q or "").strip()
+    if needle:
+        like = f"%{needle.lower()}%"
+        qy = qy.filter(or_(
+            _f.lower(Problem.title).like(like),
+            _f.lower(Problem.description).like(like),
+            _f.lower(Problem.problem_number).like(like),
+        ))
     if status:
         try:
             qy = qy.filter(Problem.status == ProblemStatus(status))
         except ValueError:
             pass
     rows = qy.order_by(Problem.created_at.desc()).limit(200).all()
+    status_counts = dict(
+        db.query(Problem.status, _f.count(Problem.id))
+          .filter(Problem.tenant_id == user.tenant_id)
+          .group_by(Problem.status).all()
+    )
+    kpi = {s.value: int(status_counts.get(s, 0)) for s in ProblemStatus}
+    kpi["total"] = sum(kpi.values())
     return templates.TemplateResponse(
         request=request, name="problems_list.html",
-        context=_ctx(user, db, rows=rows, statuses=[s.value for s in ProblemStatus], filter_status=status or ""),
+        context=_ctx(user, db, rows=rows, kpi=kpi, q=needle,
+                     statuses=[s.value for s in ProblemStatus],
+                     filter_status=status or ""),
     )
 
 

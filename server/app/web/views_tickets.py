@@ -75,26 +75,35 @@ def list_tickets(
     kind: str | None = None,
     mine: int = 0,
     location: str | None = None,
+    q: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Ticket).filter(Ticket.tenant_id == user.tenant_id)
+    from sqlalchemy import func as _f, or_
+    qy = db.query(Ticket).filter(Ticket.tenant_id == user.tenant_id)
+    needle = (q or "").strip()
+    if needle:
+        like = f"%{needle.lower()}%"
+        qy = qy.filter(or_(
+            _f.lower(Ticket.title).like(like),
+            _f.lower(Ticket.description).like(like),
+            _f.lower(Ticket.ticket_number).like(like),
+        ))
     if status:
         try:
-            q = q.filter(Ticket.status == TicketStatus(status))
+            qy = qy.filter(Ticket.status == TicketStatus(status))
         except ValueError:
             pass
     if kind:
         try:
-            q = q.filter(Ticket.kind == TicketKind(kind))
+            qy = qy.filter(Ticket.kind == TicketKind(kind))
         except ValueError:
             pass
     if mine:
-        q = q.filter(Ticket.assignee_id == user.id)
+        qy = qy.filter(Ticket.assignee_id == user.id)
     if location:
-        from sqlalchemy import func as _f
-        q = q.filter(_f.lower(Ticket.location) == location.strip().lower())
-    rows = q.order_by(Ticket.created_at.desc()).limit(200).all()
+        qy = qy.filter(_f.lower(Ticket.location) == location.strip().lower())
+    rows = qy.order_by(Ticket.created_at.desc()).limit(200).all()
     # Distinct locations available for the filter dropdown
     from sqlalchemy import distinct
     locations = sorted({
@@ -103,11 +112,22 @@ def list_tickets(
                                     Ticket.location.is_not(None)).all()
         if loc
     })
+    # KPI counts — total scope of the tenant, not the current filter
+    status_counts = dict(
+        db.query(Ticket.status, _f.count(Ticket.id))
+          .filter(Ticket.tenant_id == user.tenant_id)
+          .group_by(Ticket.status).all()
+    )
+    kpi = {s.value: int(status_counts.get(s, 0)) for s in TicketStatus}
+    kpi["total"] = sum(kpi.values())
+    kpi["live"] = kpi.get("open", 0) + kpi.get("in_progress", 0) + kpi.get("on_hold", 0)
     return templates.TemplateResponse(
         request=request,
         name="tickets_list.html",
         context=_ctx(user, db,
                      rows=rows,
+                     q=needle,
+                     kpi=kpi,
                      filter_status=status or "",
                      filter_kind=kind or "",
                      filter_mine=bool(mine),
