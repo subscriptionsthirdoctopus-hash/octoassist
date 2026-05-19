@@ -22,100 +22,156 @@
   </div>
 </section>
 
-{% if flash %}
-<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;">
-  <p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p>
-</div>
-{% endif %}
-{% if error %}
-<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;">
-  <p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p>
-</div>
-{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
 
-<h2 style="margin-top:16px;">OctoAssist-managed endpoints ({{ agent_count }})</h2>
+<form method="get" action="/assets" class="card" style="max-width:none;margin-bottom:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+  <label style="flex:1;min-width:240px;">Search
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="hostname, assignee, OS, make/model…"
+           style="width:100%;padding:6px 10px;font-size:13px;">
+  </label>
+  {% if departments %}
+  <label>Department
+    <select name="department" style="padding:6px;">
+      <option value="">All</option>
+      {% for d in departments %}<option value="{{ d }}" {% if filter_department == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  {% if locations %}
+  <label>Location
+    <select name="location" style="padding:6px;">
+      <option value="">All</option>
+      {% for l in locations %}<option value="{{ l }}" {% if filter_location == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <label>Compliance
+    <select name="compliant" style="padding:6px;">
+      <option value="">All</option>
+      <option value="yes" {% if filter_compliant == "yes" %}selected{% endif %}>compliant</option>
+      <option value="no"  {% if filter_compliant == "no"  %}selected{% endif %}>non-compliant</option>
+    </select>
+  </label>
+  <button type="submit" class="button">Apply</button>
+  {% if q or filter_department or filter_location or filter_compliant %}<a href="/assets" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
+</form>
+
+<details style="margin-bottom:16px;">
+  <summary style="cursor:pointer;font-weight:600;font-size:14px;">+ Manually add a Windows endpoint</summary>
+  <div class="card form" style="max-width:none;margin-top:8px;">
+    <p class="meta" style="margin-top:0;">Use when a laptop isn't in Entra yet (BYOD trial, just-bought, etc.) but you want to track it. Goes into the Discovered list with a `manual-…` id; doesn't run the agent.</p>
+    <form method="post" action="/assets/manual-add" class="row-form" style="gap:10px;flex-wrap:wrap;">
+      <label style="flex:1;min-width:160px;">Hostname *
+        <input type="text" name="hostname" required placeholder="e.g. LAP-FINANCE-021">
+      </label>
+      <label style="flex:1;min-width:200px;">Assigned to (user email)
+        <input type="email" name="primary_user_email" placeholder="arun.d@temaindia.com">
+      </label>
+      <label>OS
+        <input type="text" name="operating_system" value="Windows" style="width:120px;">
+      </label>
+      <label>Make
+        <input type="text" name="manufacturer" placeholder="Dell" style="width:140px;">
+      </label>
+      <label>Model
+        <input type="text" name="model" placeholder="Latitude 5530" style="width:160px;">
+      </label>
+      <button type="submit" class="primary">Add to discovered list</button>
+    </form>
+  </div>
+</details>
+
+<h2 style="margin-top:8px;">OctoAssist-managed endpoints ({{ rows|length }})</h2>
 {% if rows %}
-<table class="data">
-  <thead>
-    <tr>
-      <th>Hostname</th>
-      <th>Assigned to</th>
-      <th>Department</th>
-      <th>Location</th>
-      <th>Operating System</th>
-      <th>CPU</th>
-      <th>RAM</th>
-      <th>Software</th>
-      <th>Last Seen</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in rows %}
-    <tr>
-      <td><a href="/asset/{{ r.id }}">{{ r.hostname }}</a></td>
-      <td>
-        {% if r.assigned_name %}<strong>{{ r.assigned_name }}</strong>
-        {% else %}<span style="color:var(--slate);">{{ r.logged_in_user }}</span>{% endif %}
-      </td>
-      <td>{{ r.department or "—" }}</td>
-      <td>{{ r.location or "—" }}</td>
-      <td>{{ r.os }}</td>
-      <td>{{ r.cpu }}</td>
-      <td>{% if r.ram_gb %}{{ "%.1f"|format(r.ram_gb) }} GB{% else %}—{% endif %}</td>
-      <td>{{ r.software_count }}</td>
-      <td>{% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}never{% endif %}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<form method="post" action="/assets/bulk-delete-managed" id="managed-bulk-form">
+  <div class="card" style="max-width:none;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
+    <strong>Bulk action on selected:</strong>
+    <button type="submit" class="button"
+            style="background:#dc2626;color:white;border-color:#dc2626;"
+            onclick="return confirm('Permanently DELETE the selected OctoAssist endpoint record(s)?\nIf the agent is still installed on the laptop, it will RE-register on next check-in (~30 sec). To remove for good, uninstall OctoAssistAgent on the laptop first.');">🗑 Delete selected</button>
+  </div>
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width:32px;"><input type="checkbox" onclick="document.querySelectorAll('input[name=agent_ids]').forEach(c=>c.checked=this.checked);"></th>
+        <th>Hostname</th>
+        <th>Assigned to</th>
+        <th>Department</th>
+        <th>Location</th>
+        <th>Operating System</th>
+        <th>CPU</th>
+        <th>RAM</th>
+        <th>Software</th>
+        <th>Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><input type="checkbox" name="agent_ids" value="{{ r.id }}"></td>
+        <td><a href="/asset/{{ r.id }}">{{ r.hostname }}</a></td>
+        <td>{% if r.assigned_name %}<strong>{{ r.assigned_name }}</strong>{% else %}<span style="color:var(--slate);">{{ r.logged_in_user }}</span>{% endif %}</td>
+        <td>{{ r.department or "—" }}</td>
+        <td>{{ r.location or "—" }}</td>
+        <td>{{ r.os }}</td>
+        <td>{{ r.cpu }}</td>
+        <td>{% if r.ram_gb %}{{ "%.1f"|format(r.ram_gb) }} GB{% else %}—{% endif %}</td>
+        <td>{{ r.software_count }}</td>
+        <td>{% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}never{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
 {% else %}
-<div class="empty">
-  <h2>No endpoints yet</h2>
-  <p>Visit <a href="/enrolment">Enrolment</a> for the agent enrolment key and install instructions.</p>
-</div>
+<div class="empty"><h2>No managed endpoints match these filters</h2><p>Clear filters or visit <a href="/enrolment">Enrolment</a> for install instructions.</p></div>
 {% endif %}
 
 {% if discovered_rows %}
 <h2 style="margin-top:32px;">Discovered Windows devices — no OctoAssist agent yet ({{ discovered_rows|length }})</h2>
-<p class="meta" style="margin-top:0;">
-  Pulled from your Entra tenant via Microsoft Graph. These are Windows endpoints registered with temaindia.com
-  that haven't installed OctoAssist yet — your coverage gap. Run the enrolment installer on each to bring it
-  under management.
-</p>
-<table class="data">
-  <thead>
-    <tr>
-      <th>Hostname</th>
-      <th>Assigned to</th>
-      <th>Department</th>
-      <th>Location</th>
-      <th>OS Version</th>
-      <th>Make / Model</th>
-      <th>Compliant?</th>
-      <th>Last Entra Sign-in</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for d in discovered_rows %}
-    <tr>
-      <td>{{ d.hostname }}</td>
-      <td>
-        {% if d.assigned_name %}<strong>{{ d.assigned_name }}</strong>
-        {% else %}<span style="color:var(--slate);">—</span>{% endif %}
-      </td>
-      <td>{{ d.department or "—" }}</td>
-      <td>{{ d.location or "—" }}</td>
-      <td>{{ d.os }} {{ d.os_version }}</td>
-      <td>{{ d.manufacturer }} {{ d.model }}</td>
-      <td>
-        {% if d.is_compliant is true %}<span style="color:#16a34a;">✓ yes</span>
-        {% elif d.is_compliant is false %}<span style="color:#dc2626;">✗ no</span>
-        {% else %}—{% endif %}
-      </td>
-      <td>{% if d.last_signin_at %}{{ d.last_signin_at | ist }}{% else %}—{% endif %}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<p class="meta" style="margin-top:0;">Pulled from your Entra tenant via Microsoft Graph (plus any manually-added rows). These haven't installed OctoAssist yet — your coverage gap.</p>
+<form method="post" action="/assets/bulk-delete-discovered" id="discovered-bulk-form">
+  <div class="card" style="max-width:none;margin-bottom:8px;display:flex;gap:8px;align-items:center;">
+    <strong>Bulk action on selected:</strong>
+    <button type="submit" class="button"
+            style="background:#dc2626;color:white;border-color:#dc2626;"
+            onclick="return confirm('DELETE the selected discovered device record(s)?\nIf the device still exists in Entra, it WILL reappear on the next sync. Use this to hide retired or out-of-scope devices from the coverage list.');">🗑 Delete selected</button>
+  </div>
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width:32px;"><input type="checkbox" onclick="document.querySelectorAll('input[name=device_ids]').forEach(c=>c.checked=this.checked);"></th>
+        <th>Hostname</th>
+        <th>Assigned to</th>
+        <th>Department</th>
+        <th>Location</th>
+        <th>OS Version</th>
+        <th>Make / Model</th>
+        <th>Compliant?</th>
+        <th>Last Entra Sign-in</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in discovered_rows %}
+      <tr>
+        <td><input type="checkbox" name="device_ids" value="{{ d.id }}"></td>
+        <td>{{ d.hostname }}</td>
+        <td>{% if d.assigned_name %}<strong>{{ d.assigned_name }}</strong>{% else %}<span style="color:var(--slate);">—</span>{% endif %}</td>
+        <td>{{ d.department or "—" }}</td>
+        <td>{{ d.location or "—" }}</td>
+        <td>{{ d.os }} {{ d.os_version }}</td>
+        <td>{{ d.manufacturer }} {{ d.model }}</td>
+        <td>
+          {% if d.is_compliant is true %}<span style="color:#16a34a;">✓ yes</span>
+          {% elif d.is_compliant is false %}<span style="color:#dc2626;">✗ no</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if d.last_signin_at %}{{ d.last_signin_at | ist }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
 {% endif %}
 {% endblock %}

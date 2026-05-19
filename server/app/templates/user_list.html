@@ -18,12 +18,49 @@
   </div>
 </section>
 
-<form method="get" action="/users" class="card" style="max-width:none;margin-bottom:12px;display:flex;gap:8px;align-items:center;">
-  <input type="search" name="q" value="{{ q or '' }}" placeholder="Search by email, name, department, location, or job title…"
-         style="flex:1;min-width:0;padding:6px 10px;font-size:13px;" autofocus>
-  <button type="submit" class="button">Search</button>
-  {% if q %}<a href="/users" class="button" style="text-decoration:none;">Clear</a>{% endif %}
-  <span class="meta" style="margin-left:auto;font-size:12px;">{{ rows|length }} match{{ "" if rows|length == 1 else "es" }}{% if q %} for <code>{{ q }}</code>{% endif %}</span>
+<form method="get" action="/users" class="card" style="max-width:none;margin-bottom:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+  <label style="flex:1;min-width:240px;">Search
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="email, name, department, location, title…"
+           style="width:100%;padding:6px 10px;font-size:13px;" autofocus>
+  </label>
+  <label>Role
+    <select name="role" style="padding:6px;">
+      <option value="">All</option>
+      {% for r in roles %}
+      <option value="{{ r }}" {% if filter_role == r %}selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status" style="padding:6px;">
+      <option value="">All</option>
+      <option value="active"   {% if filter_status == "active" %}selected{% endif %}>active</option>
+      <option value="disabled" {% if filter_status == "disabled" %}selected{% endif %}>disabled</option>
+    </select>
+  </label>
+  {% if departments %}
+  <label>Department
+    <select name="department" style="padding:6px;">
+      <option value="">All</option>
+      {% for d in departments %}
+      <option value="{{ d }}" {% if filter_department == d %}selected{% endif %}>{{ d }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  {% if locations %}
+  <label>Location
+    <select name="location" style="padding:6px;">
+      <option value="">All</option>
+      {% for l in locations %}
+      <option value="{{ l }}" {% if filter_location == l %}selected{% endif %}>{{ l }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit" class="button">Apply</button>
+  {% if q or filter_role or filter_status or filter_department or filter_location %}<a href="/users" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
+  <span class="meta" style="margin-left:auto;font-size:12px;">{{ rows|length }} match{{ "" if rows|length == 1 else "es" }}</span>
 </form>
 
 {% if flash %}
@@ -73,6 +110,9 @@
     <button type="submit" name="action" value="demote_requester" class="button">→ Demote to requester</button>
     <button type="submit" name="action" value="deactivate"       class="button" style="color:var(--red,#dc2626);">Deactivate</button>
     <button type="submit" name="action" value="activate"         class="button">Reactivate</button>
+    <button type="submit" name="action" value="delete"           class="button"
+            style="background:#dc2626;color:white;border-color:#dc2626;"
+            onclick="return confirm('Permanently DELETE the selected user(s)?\nUsers with ticket history will be skipped automatically (use Deactivate for those).\nThis cannot be undone.');">🗑 Delete</button>
   </div>
 
   <table class="data">
