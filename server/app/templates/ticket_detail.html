@@ -192,6 +192,12 @@
       {% endfor %}
     </div>
 
+    {% if attach_error %}
+    <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:9px 12px;border-radius:6px;margin-top:10px;">
+      <p style="margin:0;font-size:12.5px;color:#7f1d1d;">⚠ {{ attach_error }}</p>
+    </div>
+    {% endif %}
+
     {# Reply form — public vs internal tabs #}
     <form method="post" action="/tickets/{{ ticket.id }}/comment" class="reply-card" enctype="multipart/form-data" id="replyForm">
       <div class="reply-tabs">
@@ -202,10 +208,12 @@
       <textarea name="body" rows="3" placeholder="Type your reply…" required></textarea>
       <div class="reply-actions">
         <label style="font-size:11.5px;color:var(--slate,#64748b);">
-          Attach: <input type="file" name="attachments" multiple>
+          Attach (<strong>max 2 MB/file</strong>):
+          <input type="file" name="attachments" multiple data-max-bytes="2097152" id="replyFiles">
         </label>
         <button type="submit" class="primary" id="replyBtn">Post reply</button>
       </div>
+      <div id="replyAttachErr" style="color:#dc2626;font-size:11.5px;margin-top:6px;display:none;"></div>
     </form>
 
     <h3 class="section">📜 Audit log</h3>
@@ -333,6 +341,24 @@
 
 <script>
 (function(){
+  // 2 MB per-file pre-flight on the reply attachment input
+  var files = document.getElementById("replyFiles");
+  var ferr  = document.getElementById("replyAttachErr");
+  var fform = document.getElementById("replyForm");
+  if (files && fform) {
+    var FMAX = parseInt(files.dataset.maxBytes || "2097152", 10);
+    function fcheck(){
+      var bad = [];
+      for (var i=0; i<files.files.length; i++) {
+        if (files.files[i].size > FMAX) bad.push(files.files[i].name);
+      }
+      if (bad.length) { ferr.style.display="block"; ferr.textContent="Too large (max 2 MB): " + bad.join(", "); return false; }
+      ferr.style.display="none"; ferr.textContent=""; return true;
+    }
+    files.addEventListener("change", fcheck);
+    fform.addEventListener("submit", function(e){ if (!fcheck()) e.preventDefault(); });
+  }
+
   // Reply tab switching (public vs internal note)
   var tabPub = document.getElementById("tabPublic");
   var tabInt = document.getElementById("tabInternal");

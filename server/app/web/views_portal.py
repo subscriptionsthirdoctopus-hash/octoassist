@@ -22,6 +22,12 @@ install_on(templates)
 
 router = APIRouter(tags=["portal"])
 
+# Ticket attachments are screenshots, error logs, short docs — not installers
+# (which use the 1 GB admin upload pipeline). 2 MB is enough for any screenshot
+# and forces users to compress / link larger files instead of clogging the
+# uploads volume.
+TICKET_ATTACH_MAX_BYTES = 2 * 1024 * 1024
+
 # Friendly icon per category name (case-insensitive substring match). Falls back
 # to a kind-level default. Kept here so adding a new category in Settings → SLA
 # doesn't break the portal — it just gets the default icon.
@@ -91,17 +97,22 @@ def _ctx(user: User, db: Session, **extra) -> dict:
 
 async def _attach_uploaded_files(
     db: Session, *, request: Request, ticket: Ticket, user: User, field_name: str,
-) -> int:
+) -> tuple[int, list[str]]:
     """Read multipart files from `field_name`, save via the UploadedFile pipeline,
-    create TicketAttachment rows. Returns count saved. Silent on file failures
-    (the comment/ticket creation still succeeds)."""
-    from ..api.uploads import UPLOAD_DIR, MAX_BYTES, _safe_ext
+    create TicketAttachment rows. Returns (saved_count, rejected_filenames).
+    Rejects any single file over TICKET_ATTACH_MAX_BYTES so callers can warn
+    the user — silently dropping looked like a bug."""
+    from ..api.uploads import UPLOAD_DIR, _safe_ext
     import hashlib as _hl, uuid as _uuid
     form = await request.form()
     files = form.getlist(field_name) if hasattr(form, "getlist") else []
     saved = 0
+    rejected: list[str] = []
     for f in files:
         if not hasattr(f, "filename") or not f.filename or not getattr(f, "size", 0):
+            continue
+        if f.size > TICKET_ATTACH_MAX_BYTES:
+            rejected.append(f.filename[:120])
             continue
         file_id = _uuid.uuid4().hex
         ext = _safe_ext(f.filename)
@@ -114,12 +125,16 @@ async def _attach_uploaded_files(
                     if not chunk:
                         break
                     written += len(chunk)
-                    if written > MAX_BYTES:
+                    if written > TICKET_ATTACH_MAX_BYTES:
                         out.close(); target.unlink(missing_ok=True)
+                        rejected.append(f.filename[:120])
+                        written = 0
                         break
                     h.update(chunk); out.write(chunk)
         except Exception:
             target.unlink(missing_ok=True)
+            continue
+        if written == 0:
             continue
         db.add(UploadedFile(
             id=file_id, tenant_id=user.tenant_id,
@@ -132,7 +147,7 @@ async def _attach_uploaded_files(
         saved += 1
     if saved:
         db.commit()
-    return saved
+    return saved, rejected
 
 
 # ============================ Routes ============================
@@ -240,14 +255,19 @@ async def new_ticket_submit(
         title=title, description=description,
     )
     # Attach any uploaded files
-    await _attach_uploaded_files(db, request=request, ticket=ticket, user=user, field_name="attachments")
-    return RedirectResponse(url=f"/portal/ticket/{ticket.id}", status_code=303)
+    _, rejected = await _attach_uploaded_files(db, request=request, ticket=ticket, user=user, field_name="attachments")
+    url = f"/portal/ticket/{ticket.id}"
+    if rejected:
+        from urllib.parse import quote
+        url += f"?attach_error={quote('Too large (max 2 MB): ' + ', '.join(rejected))}"
+    return RedirectResponse(url=url, status_code=303)
 
 
 @router.get("/portal/ticket/{ticket_id}", response_class=HTMLResponse)
 def view_ticket(
     ticket_id: int,
     request: Request,
+    attach_error: str | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
@@ -274,7 +294,8 @@ def view_ticket(
         })
     return templates.TemplateResponse(
         request=request, name="portal_ticket_detail.html",
-        context=_ctx(user, db, ticket=t, attachments=att_rows),
+        context=_ctx(user, db, ticket=t, attachments=att_rows,
+                     attach_error=attach_error),
     )
 
 
@@ -292,5 +313,9 @@ async def post_comment(
     body = (form.get("body") or "").strip()
     if body:
         ticketing.add_comment(db, ticket=t, author=user, body=body, is_internal=False)
-    await _attach_uploaded_files(db, request=request, ticket=t, user=user, field_name="attachments")
-    return RedirectResponse(url=f"/portal/ticket/{ticket_id}", status_code=303)
+    _, rejected = await _attach_uploaded_files(db, request=request, ticket=t, user=user, field_name="attachments")
+    url = f"/portal/ticket/{ticket_id}"
+    if rejected:
+        from urllib.parse import quote
+        url += f"?attach_error={quote('Too large (max 2 MB): ' + ', '.join(rejected))}"
+    return RedirectResponse(url=url, status_code=303)

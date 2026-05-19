@@ -56,11 +56,12 @@
     <textarea name="description" rows="6" placeholder="The more context you give us, the faster we can help."></textarea>
   </label>
 
-  <label>Attachments <span class="meta" style="font-weight:normal;">(optional — screenshots, logs, docs)</span>
+  <label>Attachments <span class="meta" style="font-weight:normal;">(optional — screenshots, logs, docs · <strong>max 2 MB per file</strong>)</span>
     <div class="attach-zone">
       Drop files here or
-      <input type="file" name="attachments" multiple>
+      <input type="file" name="attachments" multiple data-max-bytes="2097152">
       <div class="attach-list" id="attachList"></div>
+      <div id="attachErr" style="color:#dc2626;font-size:12px;margin-top:6px;display:none;"></div>
     </div>
   </label>
 
@@ -118,20 +119,39 @@
     grid.addEventListener("change", paint);
     paint();
   }
-  // Show selected filenames
+  // Show selected filenames + enforce 2 MB per file client-side
   var fileInput = document.querySelector("input[type=file][name=attachments]");
   var list = document.getElementById("attachList");
-  if (fileInput && list) {
-    fileInput.addEventListener("change", function(){
-      if (!fileInput.files.length) { list.textContent = ""; return; }
-      var names = [];
-      for (var i=0; i<fileInput.files.length; i++) {
-        var f = fileInput.files[i];
-        names.push(f.name + " (" + (f.size/1024).toFixed(1) + " KB)");
+  var errBox = document.getElementById("attachErr");
+  var form = document.getElementById("ticketForm");
+  var MAX = fileInput ? parseInt(fileInput.dataset.maxBytes || "2097152", 10) : 2097152;
+  function checkFiles() {
+    if (!fileInput || !fileInput.files.length) {
+      if (list) list.textContent = "";
+      if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
+      return true;
+    }
+    var names = [], tooBig = [];
+    for (var i=0; i<fileInput.files.length; i++) {
+      var f = fileInput.files[i];
+      names.push(f.name + " (" + (f.size/1024).toFixed(1) + " KB)");
+      if (f.size > MAX) tooBig.push(f.name);
+    }
+    if (list) list.textContent = names.join(" · ");
+    if (tooBig.length) {
+      if (errBox) {
+        errBox.style.display = "block";
+        errBox.textContent = "Too large (max 2 MB): " + tooBig.join(", ");
       }
-      list.textContent = names.join(" · ");
-    });
+      return false;
+    }
+    if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
+    return true;
   }
+  if (fileInput) fileInput.addEventListener("change", checkFiles);
+  if (form) form.addEventListener("submit", function(e){
+    if (!checkFiles()) { e.preventDefault(); }
+  });
 })();
 </script>
 {% endblock %}

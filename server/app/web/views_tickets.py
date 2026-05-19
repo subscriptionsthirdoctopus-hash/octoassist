@@ -171,6 +171,7 @@ def new_ticket_submit(
 def ticket_detail(
     ticket_id: int,
     request: Request,
+    attach_error: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -217,6 +218,7 @@ def ticket_detail(
                      staff=staff,
                      attachments=att_rows,
                      kb_hints=kb_hints,
+                     attach_error=attach_error,
                      statuses=[s.value for s in TicketStatus],
                      priorities=[p.value for p in TicketPriority],
                      portal=False),
@@ -240,8 +242,12 @@ async def post_comment(
         ticketing.add_comment(db, ticket=t, author=user, body=body, is_internal=is_internal)
     # Reuse the portal's attachment pipeline so both surfaces store identically
     from .views_portal import _attach_uploaded_files
-    await _attach_uploaded_files(db, request=request, ticket=t, user=user, field_name="attachments")
-    return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=303)
+    _, rejected = await _attach_uploaded_files(db, request=request, ticket=t, user=user, field_name="attachments")
+    url = f"/tickets/{ticket_id}"
+    if rejected:
+        from urllib.parse import quote
+        url += f"?attach_error={quote('Too large (max 2 MB): ' + ', '.join(rejected))}"
+    return RedirectResponse(url=url, status_code=303)
 
 
 @router.post("/tickets/{ticket_id}/status")

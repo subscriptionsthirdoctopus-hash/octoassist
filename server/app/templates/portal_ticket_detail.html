@@ -107,16 +107,42 @@
   <p class="meta">No replies yet.</p>
   {% endfor %}
 
-  <form method="post" action="/portal/ticket/{{ ticket.id }}/comment" class="card form" enctype="multipart/form-data">
+  {% if attach_error %}
+  <div class="card" style="background:#fee2e2;border-left:4px solid #dc2626;margin-bottom:10px;">
+    <p style="margin:0;font-size:13px;color:#7f1d1d;">⚠ {{ attach_error }}</p>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/portal/ticket/{{ ticket.id }}/comment" class="card form" enctype="multipart/form-data" id="commentForm">
     <label>Add a comment
       <textarea name="body" rows="4" placeholder="Reply, add detail, ask a question…"></textarea>
     </label>
-    <label>Attach files <span class="meta" style="font-weight:normal;">(optional)</span>
-      <input type="file" name="attachments" multiple>
+    <label>Attach files <span class="meta" style="font-weight:normal;">(optional · <strong>max 2 MB per file</strong>)</span>
+      <input type="file" name="attachments" multiple data-max-bytes="2097152" id="commentFiles">
+      <div id="commentAttachErr" style="color:#dc2626;font-size:12px;margin-top:6px;display:none;"></div>
     </label>
     <div class="form-actions">
       <button type="submit" class="primary">Post reply</button>
     </div>
   </form>
+  <script>
+  (function(){
+    var input = document.getElementById("commentFiles");
+    var err = document.getElementById("commentAttachErr");
+    var form = document.getElementById("commentForm");
+    if (!input || !form) return;
+    var MAX = parseInt(input.dataset.maxBytes || "2097152", 10);
+    function check(){
+      var bad = [];
+      for (var i=0; i<input.files.length; i++) {
+        if (input.files[i].size > MAX) bad.push(input.files[i].name);
+      }
+      if (bad.length) { err.style.display="block"; err.textContent="Too large (max 2 MB): " + bad.join(", "); return false; }
+      err.style.display="none"; err.textContent=""; return true;
+    }
+    input.addEventListener("change", check);
+    form.addEventListener("submit", function(e){ if (!check()) e.preventDefault(); });
+  })();
+  </script>
 </section>
 {% endblock %}
