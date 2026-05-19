@@ -165,10 +165,17 @@ def my_tickets(
             pass
     rows = query.order_by(Ticket.created_at.desc()).limit(100).all()
     open_count = sum(1 for t in rows if t.status.value not in ("resolved", "closed", "cancelled"))
+    # Phase H: surface 5 most-recently-published KB articles when the user has
+    # no open tickets — a soft nudge toward self-service before they file one.
+    from ..services.kb import search as kb_search
+    kb_suggestions = []
+    if open_count == 0:
+        kb_suggestions = kb_search(db, tenant_id=user.tenant_id, portal_only=True, limit=5)
     return templates.TemplateResponse(
         request=request, name="portal_dashboard.html",
         context=_ctx(user, db, rows=rows, q=needle, filter_status=status,
                      open_count=open_count,
+                     kb_suggestions=kb_suggestions,
                      statuses=[s.value for s in __import__('app.models', fromlist=['TicketStatus']).TicketStatus]),
     )
 
@@ -189,11 +196,24 @@ def new_ticket_form(
                       Category.kind == ticket_kind,
                       Category.is_active == True)  # noqa: E712
               .order_by(Category.name).all())
+    # Phase H: per-category KB hints. Pre-fetch top 3 portal-visible articles
+    # whose title/summary mention the category name. Keep it cheap — search
+    # already filters by tenant + portal_only + published.
+    from ..services.kb import search as kb_search
+    kb_hints = {}
+    for c in cats:
+        arts = kb_search(db, tenant_id=user.tenant_id, q=c.name,
+                         portal_only=True, limit=3)
+        if arts:
+            kb_hints[c.id] = [
+                {"slug": a.slug, "title": a.title, "summary": (a.summary or "")[:120]}
+                for a in arts
+            ]
     return templates.TemplateResponse(
         request=request, name="portal_ticket_new.html",
         context=_ctx(user, db,
                      ticket_kind=ticket_kind.value,
-                     categories=cats),
+                     categories=cats, kb_hints=kb_hints),
     )
 
 

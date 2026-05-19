@@ -118,6 +118,83 @@
     <div class="road-meta">high power</div>
   </div>
 
+  <div class="road-row done">
+    <div class="road-num">9</div>
+    <div>
+      <p class="road-title">Entra-only Windows asset discovery</p>
+      <p class="road-sub">App-permissions to Graph (Device.Read.All). Windows endpoints flow in from your Entra tenant — no dummy data, no manual CSV. Includes the manual-add escape hatch for non-domain laptops.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">tenant-bound</div>
+  </div>
+
+  <div class="road-row done">
+    <div class="road-num">C</div>
+    <div>
+      <p class="road-title">Location-aware ticket routing</p>
+      <p class="road-sub">Derive a ticket's office location from the reporter's primary asset (Entra deviceLocation or manual mapping). <a href="/settings/locations">/settings/locations</a> rules auto-assign Mumbai tickets to a Mumbai technician on creation.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row done">
+    <div class="road-num">D</div>
+    <div>
+      <p class="road-title">Users + Assets — search, filter, bulk delete, manual add</p>
+      <p class="road-sub">Both lists got the same toolkit: typeahead search, role/status filters, bulk select with checkbox + delete bar, manual add for non-Entra endpoints. Sticky top nav added across all pages.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">no risk</div>
+  </div>
+
+  <div class="road-row done">
+    <div class="road-num">E</div>
+    <div>
+      <p class="road-title">Bulk patch deploy</p>
+      <p class="road-sub">Hand-pick endpoints × hand-pick packages from a single page. Bypass hostname_pattern when you need ad-hoc rollout. Builds on the existing PatchWindow / PatchWindowTarget pipeline so observation + audit still apply.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row done">
+    <div class="road-num">F</div>
+    <div>
+      <p class="road-title">Per-category ticket auto-assignment</p>
+      <p class="road-sub">Fallback chain when no location rule matches: <a href="/settings/categories-routing">/settings/categories-routing</a> sends Network tickets to one tech, Endpoint tickets to another, regardless of reporter location.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row done">
+    <div class="road-num">G</div>
+    <div>
+      <p class="road-title">End-user portal polish</p>
+      <p class="road-sub">/portal got search + status filter, open-ticket count, category icons, multipart attachments on new-ticket + comment, visual status timeline (open → in_progress → resolved → closed). Reuses the UploadedFile storage volume.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">medium</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
+  <div class="road-row done">
+    <div class="road-num">H</div>
+    <div>
+      <p class="road-title">Knowledge Base in the portal</p>
+      <p class="road-sub">Self-service before ticket: <a href="/portal/kb">/portal/kb</a> link in the dashboard header, KB suggestions when /portal has zero open tickets, per-category hints on the new-ticket form that swap as the user picks a category. Deflects volume from the 300-staff base.</p>
+    </div>
+    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div class="road-meta">small</div>
+    <div class="road-meta">low risk</div>
+  </div>
+
 </div>
 
 <div class="card" style="margin-top:18px;background:#f8fafc;">

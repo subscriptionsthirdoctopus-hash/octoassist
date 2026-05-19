@@ -10,9 +10,22 @@
     <div class="actions">
       <a class="button primary" href="/portal/new?kind=incident">+ Report an Issue</a>
       <a class="button" href="/portal/new?kind=service_request">+ Request Service</a>
+      <a class="button" href="/portal/kb">📚 Help Articles</a>
     </div>
   </div>
 </section>
+
+{% if kb_suggestions %}
+<section class="card" style="background:#f0f9ff;border-left:4px solid #0284c7;margin-bottom:14px;">
+  <h3 style="margin:0 0 8px;font-size:14px;color:#075985;">💡 Before you log a ticket — try these articles</h3>
+  <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7;">
+    {% for a in kb_suggestions %}
+    <li><a href="/portal/kb/{{ a.slug }}" style="color:#0369a1;">{{ a.title }}</a>{% if a.summary %} <span class="meta">— {{ a.summary[:90] }}{% if a.summary|length > 90 %}…{% endif %}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <p class="meta" style="margin:8px 0 0;font-size:11.5px;"><a href="/portal/kb" style="color:#0369a1;">Browse all help articles →</a></p>
+</section>
+{% endif %}
 
 <style>
   .portal-filters { display:flex; gap:10px; align-items:end; margin: 8px 0 14px; flex-wrap:wrap; }

@@ -44,6 +44,14 @@
   <p class="meta" style="color:#dc2626;">No categories available. Ask an admin to add some under Settings → SLA.</p>
   {% endif %}
 
+  {% if kb_hints %}
+  <div id="kbHintBox" style="display:none;background:#f0f9ff;border-left:4px solid #0284c7;padding:12px 14px;border-radius:6px;margin-top:4px;">
+    <p style="margin:0 0 6px;font-size:12.5px;font-weight:700;color:#075985;">💡 Might solve your issue without a ticket</p>
+    <ul id="kbHintList" style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;"></ul>
+  </div>
+  <script id="kbHintData" type="application/json">{{ kb_hints | tojson }}</script>
+  {% endif %}
+
   <label>Details
     <textarea name="description" rows="6" placeholder="The more context you give us, the faster we can help."></textarea>
   </label>
@@ -64,15 +72,48 @@
 
 <script>
 (function(){
-  // Category card selection visual
+  // Category card selection visual + KB hints
   var grid = document.getElementById("catGrid");
+  var hintBox = document.getElementById("kbHintBox");
+  var hintList = document.getElementById("kbHintList");
+  var hintDataEl = document.getElementById("kbHintData");
+  var kbHints = {};
+  if (hintDataEl) {
+    try { kbHints = JSON.parse(hintDataEl.textContent || "{}"); } catch(e){}
+  }
+  function paintHints(catId){
+    if (!hintBox || !hintList) return;
+    var arts = kbHints[catId];
+    if (!arts || !arts.length) { hintBox.style.display = "none"; return; }
+    var html = "";
+    for (var i=0; i<arts.length; i++) {
+      var a = arts[i];
+      var safeTitle = (a.title||"").replace(/[&<>"]/g, function(c){
+        return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c];
+      });
+      var safeSummary = (a.summary||"").replace(/[&<>"]/g, function(c){
+        return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c];
+      });
+      html += '<li><a href="/portal/kb/' + encodeURIComponent(a.slug) +
+              '" target="_blank" style="color:#0369a1;">' + safeTitle + '</a>' +
+              (safeSummary ? ' <span style="color:#64748b;">— ' + safeSummary + '</span>' : '') + '</li>';
+    }
+    hintList.innerHTML = html;
+    hintBox.style.display = "block";
+  }
   if (grid) {
     function paint(){
+      var activeId = null;
       grid.querySelectorAll(".cat-card").forEach(function(card){
         var input = card.querySelector("input[type=radio]");
-        if (input && input.checked) card.classList.add("selected");
-        else card.classList.remove("selected");
+        if (input && input.checked) {
+          card.classList.add("selected");
+          activeId = input.value;
+        } else {
+          card.classList.remove("selected");
+        }
       });
+      if (activeId) paintHints(activeId);
     }
     grid.addEventListener("change", paint);
     paint();
