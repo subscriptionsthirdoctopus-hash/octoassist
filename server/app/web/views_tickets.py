@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..auth import current_user, require_staff
 from ..database import get_db
 from ..models import (
-    Category, ReplyTemplate, Tenant, Ticket, TicketAttachment, TicketEventKind,
+    Category, Tenant, Ticket, TicketAttachment, TicketEventKind,
     TicketKind, TicketPriority, TicketStatus, UploadedFile, User, UserRole,
 )
 from ..services import ticketing
@@ -210,18 +210,6 @@ def ticket_detail(
         kb_hints = kb_search(db, tenant_id=user.tenant_id, q=t.category.name,
                              portal_only=False, limit=3)
 
-    # Phase J: canned reply templates for this tenant, expanded per-ticket so
-    # {name}/{ticket}/{category} get swapped at populate time (in JS).
-    tpl_rows = (db.query(ReplyTemplate)
-                  .filter(ReplyTemplate.tenant_id == user.tenant_id)
-                  .order_by(ReplyTemplate.sort_order, ReplyTemplate.title).all())
-    reply_templates = [{"id": r.id, "title": r.title, "body": r.body} for r in tpl_rows]
-    template_ctx = {
-        "name": (t.reporter.full_name or t.reporter.email) if t.reporter else "",
-        "ticket": t.ticket_number,
-        "category": t.category.name if t.category else "",
-    }
-
     return templates.TemplateResponse(
         request=request,
         name="ticket_detail.html",
@@ -230,8 +218,6 @@ def ticket_detail(
                      staff=staff,
                      attachments=att_rows,
                      kb_hints=kb_hints,
-                     reply_templates=reply_templates,
-                     template_ctx=template_ctx,
                      attach_error=attach_error,
                      statuses=[s.value for s in TicketStatus],
                      priorities=[p.value for p in TicketPriority],
