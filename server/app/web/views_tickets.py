@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from ..auth import current_user, require_staff
 from ..database import get_db
 from ..models import (
-    Category, Tenant, Ticket, TicketKind, TicketPriority, TicketStatus, User, UserRole,
+    Category, Tenant, Ticket, TicketAttachment, TicketEventKind, TicketKind,
+    TicketPriority, TicketStatus, UploadedFile, User, UserRole,
 )
 from ..services import ticketing
 from ..services.sla import time_to_breach
@@ -24,7 +25,47 @@ router = APIRouter(tags=["tickets"])
 
 def _ctx(user: User, db: Session, **extra) -> dict:
     tenant = db.query(Tenant).first()
-    return {"current_user": user, "tenant": tenant, "time_to_breach": time_to_breach, **extra}
+    return {"current_user": user, "tenant": tenant, "time_to_breach": time_to_breach,
+            "format_event": _format_event, **extra}
+
+
+def _format_event(e) -> str:
+    """Render a TicketEvent's before/after JSON payload as a human sentence.
+    The raw dicts make sense to a developer but read like a bug to anyone else."""
+    k = e.kind
+    a = e.after_value or {}
+    b = e.before_value or {}
+    if k == TicketEventKind.created:
+        parts = [f"Created as <b>{a.get('kind','ticket').replace('_',' ')}</b>"]
+        if a.get("category"):
+            parts.append(f"in <b>{a['category']}</b>")
+        if a.get("priority"):
+            parts.append(f"priority <b>{a['priority']}</b>")
+        if a.get("auto_assigned_to"):
+            parts.append(f"· auto-assigned to <b>{a['auto_assigned_to']}</b>")
+        return ", ".join(parts[:-1]) + (" " + parts[-1] if len(parts) > 1 else parts[0])
+    if k == TicketEventKind.status_changed:
+        return f"Status: <b>{b.get('status','—').replace('_',' ')}</b> → <b>{a.get('status','—').replace('_',' ')}</b>"
+    if k == TicketEventKind.priority_changed:
+        return f"Priority: <b>{b.get('priority','—')}</b> → <b>{a.get('priority','—')}</b>"
+    if k == TicketEventKind.category_changed:
+        return f"Category: <b>{b.get('category','—')}</b> → <b>{a.get('category','—')}</b>"
+    if k == TicketEventKind.assigned:
+        who = a.get("assignee_email") or a.get("assignee_name") or "someone"
+        if b.get("assignee_id"):
+            return f"Reassigned to <b>{who}</b>"
+        return f"Assigned to <b>{who}</b>"
+    if k == TicketEventKind.unassigned:
+        return "Unassigned"
+    if k == TicketEventKind.comment_added:
+        if a.get("is_internal"):
+            return f"Posted an internal note: <i>{(a.get('body_preview','') or '').strip()[:80]}…</i>"
+        return f"Replied: <i>{(a.get('body_preview','') or '').strip()[:80]}…</i>"
+    if k == TicketEventKind.title_changed:
+        return f"Title: “{b.get('title','')[:40]}” → “{a.get('title','')[:40]}”"
+    if k == TicketEventKind.description_changed:
+        return "Edited description"
+    return k.value.replace("_", " ")
 
 
 @router.get("/tickets", response_class=HTMLResponse)
@@ -141,12 +182,41 @@ def ticket_detail(
                        User.is_active == True,  # noqa: E712
                        User.role.in_([UserRole.admin, UserRole.agent]))
                .order_by(User.full_name, User.email).all())
+
+    # Attachments — same model the portal uses, just rendered for staff
+    from ..api.uploads import _safe_ext
+    attachments = (db.query(TicketAttachment)
+                     .filter(TicketAttachment.ticket_id == t.id)
+                     .order_by(TicketAttachment.created_at).all())
+    att_rows = []
+    for a in attachments:
+        f = a.file
+        if f is None:
+            continue
+        att_rows.append({
+            "id": a.id,
+            "filename": f.original_filename,
+            "size_bytes": f.size_bytes,
+            "uploader": a.uploaded_by.display_name if a.uploaded_by else "—",
+            "created_at": a.created_at,
+            "url": f"/files/{f.id}{_safe_ext(f.original_filename)}",
+        })
+
+    # Phase H-style KB hints — top 3 portal-visible articles matching category name
+    from ..services.kb import search as kb_search
+    kb_hints = []
+    if t.category and t.category.name:
+        kb_hints = kb_search(db, tenant_id=user.tenant_id, q=t.category.name,
+                             portal_only=False, limit=3)
+
     return templates.TemplateResponse(
         request=request,
         name="ticket_detail.html",
         context=_ctx(user, db,
                      ticket=t,
                      staff=staff,
+                     attachments=att_rows,
+                     kb_hints=kb_hints,
                      statuses=[s.value for s in TicketStatus],
                      priorities=[p.value for p in TicketPriority],
                      portal=False),
@@ -154,18 +224,23 @@ def ticket_detail(
 
 
 @router.post("/tickets/{ticket_id}/comment")
-def post_comment(
+async def post_comment(
     ticket_id: int,
-    body: str = Form(...),
-    is_internal: int = Form(0),
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     t = db.get(Ticket, ticket_id)
     if t is None or t.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
-    if body.strip():
-        ticketing.add_comment(db, ticket=t, author=user, body=body, is_internal=bool(is_internal))
+    form = await request.form()
+    body = (form.get("body") or "").strip()
+    is_internal = bool(form.get("is_internal"))
+    if body:
+        ticketing.add_comment(db, ticket=t, author=user, body=body, is_internal=is_internal)
+    # Reuse the portal's attachment pipeline so both surfaces store identically
+    from .views_portal import _attach_uploaded_files
+    await _attach_uploaded_files(db, request=request, ticket=t, user=user, field_name="attachments")
     return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=303)
 
 

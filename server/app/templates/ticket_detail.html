@@ -1,137 +1,362 @@
 {% extends "base.html" %}
 {% block title %}{{ ticket.ticket_number }} — {{ ticket.title }}{% endblock %}
 {% block content %}
-<section class="page-head">
-  <div class="row-between">
-    <div>
-      <h1>{{ ticket.ticket_number }} <span class="meta-inline">·</span> {{ ticket.title }}</h1>
-      <p class="meta">
-        {{ ticket.kind.value.replace("_", " ") | capitalize }}
-        · {{ ticket.category.name }}
-        · created {{ ticket.created_at | ist }} by {{ ticket.reporter.display_name if ticket.reporter else "—" }}
-      </p>
-    </div>
-    <div class="ticket-meta">
-      <span class="prio prio-{{ ticket.priority.value }}">priority: {{ ticket.priority.value }}</span>
-      <span class="status status-{{ ticket.status.value }}">status: {{ ticket.status.value.replace("_", " ") }}</span>
-    </div>
+
+<style>
+  .tk-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+  .tk-head h1 { margin:0 0 4px; font-size:22px; }
+  .tk-num { color:var(--slate,#64748b); font-weight:600; font-size:14px; letter-spacing:0.5px; margin-right:6px; }
+  .tk-sub { color:var(--slate,#64748b); font-size:12.5px; margin:0; }
+
+  /* 2-col grid for the body */
+  .tk-grid { display:grid; grid-template-columns: 1fr 320px; gap:18px; align-items:start; }
+  @media (max-width: 1100px) { .tk-grid { grid-template-columns: 1fr; } }
+
+  /* Side panel cards */
+  .side .panel { background:white; border:1px solid var(--line,#e2e8f0); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
+  .side .panel h4 { margin:0 0 8px; font-size:11.5px; text-transform:uppercase; letter-spacing:0.7px; color:var(--slate,#64748b); font-weight:700; }
+  .side dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-size:13px; }
+  .side dt { color:var(--slate,#64748b); }
+  .side dd { margin:0; color:#0f172a; font-weight:500; }
+
+  /* Status quick-pick */
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .stat-btn  { padding:8px 6px; border-radius:6px; border:1px solid var(--line,#e2e8f0); background:#f8fafc;
+               text-align:center; font-size:12px; font-weight:600; color:#334155; cursor:pointer;
+               text-transform:capitalize; transition:all .12s; }
+  .stat-btn:hover { background:#e2e8f0; }
+  .stat-btn.active.s-open        { background:#dbeafe; color:#1e3a8a; border-color:#93c5fd; }
+  .stat-btn.active.s-in_progress { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
+  .stat-btn.active.s-on_hold     { background:#e2e8f0; color:#475569; border-color:#94a3b8; }
+  .stat-btn.active.s-resolved    { background:#dcfce7; color:#166534; border-color:#86efac; }
+  .stat-btn.active.s-closed      { background:#cbd5e1; color:#0f172a; border-color:#64748b; }
+  .stat-btn.active.s-cancelled   { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+  .stat-form { display:contents; }
+
+  /* Priority pill row */
+  .prio-row { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+  .prio-btn { padding:6px 4px; border-radius:6px; border:1px solid var(--line,#e2e8f0); background:#f8fafc;
+              font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; color:#475569; }
+  .prio-btn:hover { background:#e2e8f0; }
+  .prio-btn.active.p-low      { background:#dbeafe; color:#1e3a8a; border-color:#93c5fd; }
+  .prio-btn.active.p-medium   { background:#fef9c3; color:#854d0e; border-color:#fde047; }
+  .prio-btn.active.p-high     { background:#fed7aa; color:#9a3412; border-color:#fb923c; }
+  .prio-btn.active.p-critical { background:#fecaca; color:#7f1d1d; border-color:#ef4444; }
+
+  /* Assignee row */
+  .assign-row { display:flex; gap:6px; align-items:stretch; }
+  .assign-row select { flex:1; padding:6px 8px; font-size:13px; border:1px solid var(--line,#e2e8f0); border-radius:6px; background:white; }
+  .assign-row button { padding:6px 10px; font-size:12px; }
+  .take-btn { width:100%; margin-top:6px; padding:7px; border-radius:6px; border:1px solid #2563eb; background:white; color:#2563eb; font-weight:600; cursor:pointer; font-size:12.5px; }
+  .take-btn:hover { background:#eff6ff; }
+  .take-btn.mine { background:#2563eb; color:white; }
+
+  /* SLA */
+  .sla-row { display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; }
+  .sla-row .lbl { color:var(--slate,#64748b); }
+  .sla-row .val { font-weight:600; color:#0f172a; }
+  .sla-row .val.breach { color:#dc2626; }
+  .sla-row .val.ok { color:#16a34a; }
+
+  /* Conversation */
+  .convo { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+  .msg { padding:11px 14px; border-radius:8px; border:1px solid var(--line,#e2e8f0); background:white; }
+  .msg.internal { background:#fef9c3; border-color:#fde68a; }
+  .msg.reporter { background:#f0f9ff; border-color:#bae6fd; }
+  .msg-head { display:flex; gap:8px; align-items:baseline; font-size:12.5px; margin-bottom:6px; flex-wrap:wrap; }
+  .msg-head .who { font-weight:700; color:#0f172a; }
+  .msg-head .when { color:var(--slate,#64748b); }
+  .msg-head .tag { font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:0.4px; }
+  .msg-head .tag-int { background:#fde68a; color:#854d0e; }
+  .msg-head .tag-rep { background:#bae6fd; color:#0c4a6e; }
+  .msg-body { font-size:13.5px; line-height:1.55; color:#1e293b; white-space:pre-wrap; }
+
+  /* Reply box */
+  .reply-card { background:white; border:1px solid var(--line,#e2e8f0); border-radius:8px; padding:12px 14px; margin-top:14px; }
+  .reply-tabs { display:flex; gap:0; margin-bottom:10px; border-bottom:1px solid var(--line,#e2e8f0); }
+  .reply-tab { padding:6px 14px; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--slate,#64748b); border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .reply-tab.active { color:#2563eb; border-bottom-color:#2563eb; }
+  .reply-tab.internal.active { color:#92400e; border-bottom-color:#d97706; }
+  .reply-card textarea { width:100%; min-height:80px; padding:8px 10px; border:1px solid var(--line,#e2e8f0); border-radius:6px; font-size:13.5px; font-family:inherit; resize:vertical; }
+  .reply-card.internal-mode { background:#fffbeb; border-color:#fde68a; }
+  .reply-actions { display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:10px; }
+  .reply-actions input[type=file] { font-size:11.5px; }
+
+  /* Attachments */
+  .att-list { list-style:none; padding:0; margin:6px 0 0; display:flex; flex-direction:column; gap:5px; }
+  .att-list li { display:flex; align-items:center; gap:8px; padding:6px 9px; background:#f8fafc; border:1px solid var(--line,#e2e8f0); border-radius:5px; font-size:12px; }
+  .att-list .fname { flex:1; color:#0369a1; text-decoration:none; font-weight:600; }
+  .att-list .fname:hover { text-decoration:underline; }
+  .att-list .fmeta { color:var(--slate,#64748b); font-size:10.5px; }
+
+  /* Audit log */
+  .audit-feed { list-style:none; padding:0; margin:0; }
+  .audit-feed li { display:grid; grid-template-columns: 110px 1fr; gap:12px; padding:7px 0; border-bottom:1px dashed var(--line,#e2e8f0); font-size:12.5px; align-items:start; }
+  .audit-feed li:last-child { border-bottom:0; }
+  .audit-feed .when { color:var(--slate,#64748b); font-size:11.5px; }
+  .audit-feed .desc { color:#334155; }
+  .audit-feed .desc b { color:#0f172a; }
+  .audit-feed .actor { color:var(--slate,#64748b); font-size:11px; margin-left:6px; }
+
+  /* KB hints */
+  .kb-list { list-style:none; padding:0; margin:0; font-size:12.5px; line-height:1.5; }
+  .kb-list li { padding:5px 0; border-bottom:1px dashed var(--line,#e2e8f0); }
+  .kb-list li:last-child { border-bottom:0; }
+  .kb-list a { color:#0369a1; font-weight:600; text-decoration:none; }
+  .kb-list a:hover { text-decoration:underline; }
+
+  /* Status timeline ribbon */
+  .stat-ribbon { display:flex; align-items:center; gap:6px; margin:8px 0 16px; font-size:12px; flex-wrap:wrap; }
+  .stat-ribbon .pip { padding:3px 9px; border-radius:11px; background:#e2e8f0; color:#475569; font-weight:600; text-transform:capitalize; }
+  .stat-ribbon .pip.done { background:#dcfce7; color:#166534; }
+  .stat-ribbon .pip.now  { background:#2563eb; color:white; }
+  .stat-ribbon .arrow { color:#cbd5e1; }
+
+  .desc-card { background:white; border:1px solid var(--line,#e2e8f0); border-radius:8px; padding:14px 16px; }
+  .desc-card .desc-meta { color:var(--slate,#64748b); font-size:11.5px; margin-bottom:8px; }
+  .desc-card .desc-body { font-size:13.5px; line-height:1.6; white-space:pre-wrap; color:#1e293b; }
+
+  h3.section { font-size:14px; margin:18px 0 4px; color:#0f172a; }
+</style>
+
+<section class="tk-head">
+  <div>
+    <h1><span class="tk-num">{{ ticket.ticket_number }}</span>{{ ticket.title }}</h1>
+    <p class="tk-sub">
+      {{ ticket.kind.value.replace("_"," ") | capitalize }}
+      · <a href="/tickets?status=&kind=" style="color:inherit;">{{ ticket.category.name if ticket.category else "—" }}</a>
+      · opened {{ ticket.created_at | ist }}
+      by <strong>{{ ticket.reporter.display_name if ticket.reporter else "—" }}</strong>
+      {% if ticket.location %} · 📍 {{ ticket.location }}{% endif %}
+    </p>
+  </div>
+  <div>
+    <a href="/tickets" class="link-button">← Tickets</a>
   </div>
 </section>
 
-<section class="cards">
-  <div class="card">
-    <h3>SLA</h3>
-    {% set resp = time_to_breach(ticket.due_response_at) %}
-    {% set resol = time_to_breach(ticket.due_resolution_at) %}
-    <dl>
-      <dt>Response by</dt><dd>{% if ticket.due_response_at %}{{ ticket.due_response_at | ist }}{% else %}—{% endif %}</dd>
-      <dt>First response</dt><dd>{% if ticket.first_response_at %}{{ ticket.first_response_at | ist }}{% else %}<span class="{% if resp[1] %}breach{% endif %}">{{ resp[0] }}</span>{% endif %}</dd>
-      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at | ist }}{% else %}—{% endif %}</dd>
-      <dt>Resolved</dt><dd>{% if ticket.resolved_at %}{{ ticket.resolved_at | ist }}{% else %}<span class="{% if resol[1] %}breach{% endif %}">{{ resol[0] }}</span>{% endif %}</dd>
-    </dl>
-  </div>
-
-  {% if not portal %}
-  <div class="card">
-    <h3>Assignment</h3>
-    <form method="post" action="/tickets/{{ ticket.id }}/assign" class="inline-form-stack">
-      <select name="assignee_id">
-        <option value="">— Unassigned —</option>
-        {% for s in staff %}
-        <option value="{{ s.id }}" {% if ticket.assignee_id == s.id %}selected{% endif %}>{{ s.display_name }} ({{ s.role.value }})</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Assign</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h3>Status</h3>
-    <form method="post" action="/tickets/{{ ticket.id }}/status" class="inline-form-stack">
-      <select name="new_status">
-        {% for s in statuses %}
-        <option value="{{ s }}" {% if ticket.status.value == s %}selected{% endif %}>{{ s.replace("_", " ") }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Set status</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h3>Priority</h3>
-    <form method="post" action="/tickets/{{ ticket.id }}/priority" class="inline-form-stack">
-      <select name="new_priority">
-        {% for p in priorities %}
-        <option value="{{ p }}" {% if ticket.priority.value == p %}selected{% endif %}>{{ p }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Set priority</button>
-    </form>
-  </div>
-  {% endif %}
-</section>
-
-<section>
-  <h2>Description</h2>
-  <div class="card prose">{{ ticket.description or "(no description)" }}</div>
-</section>
-
-<section>
-  <h2>Conversation</h2>
-  {% for c in ticket.comments %}
-  <div class="comment {% if c.is_internal %}internal{% endif %}">
-    <div class="comment-head">
-      <strong>{{ c.author.display_name if c.author else "—" }}</strong>
-      <span class="meta-inline">·</span>
-      <span>{{ c.created_at | ist }}</span>
-      {% if c.is_internal %}<span class="tag-internal">internal note</span>{% endif %}
-    </div>
-    <div class="comment-body prose">{{ c.body }}</div>
-  </div>
+{# Status ribbon — visual progress across the lifecycle #}
+{% set order = ["open","in_progress","resolved","closed"] %}
+{% set cur = ticket.status.value %}
+<div class="stat-ribbon">
+  {% if cur == "cancelled" %}
+    <span class="pip" style="background:#fee2e2;color:#991b1b;">Cancelled</span>
   {% else %}
-  <p class="meta">No comments yet.</p>
-  {% endfor %}
+    {% set timeline = order if cur != "on_hold" else ["open","in_progress","on_hold","resolved","closed"] %}
+    {% set ci = timeline.index(cur) if cur in timeline else 0 %}
+    {% for s in timeline %}
+      {% set i = loop.index0 %}
+      <span class="pip {% if i < ci %}done{% elif i == ci %}now{% endif %}">{{ s.replace("_"," ") }}</span>
+      {% if not loop.last %}<span class="arrow">›</span>{% endif %}
+    {% endfor %}
+  {% endif %}
+</div>
 
-  <form method="post" action="{% if portal %}/portal/ticket/{{ ticket.id }}/comment{% else %}/tickets/{{ ticket.id }}/comment{% endif %}" class="card form">
-    <label>Add a comment
-      <textarea name="body" rows="4" required placeholder="Reply, status update, or note"></textarea>
-    </label>
-    {% if not portal %}
-    <label class="checkbox">
-      <input type="checkbox" name="is_internal" value="1">
-      Internal note (not shown in the end-user portal)
-    </label>
-    {% endif %}
-    <div class="form-actions">
-      <button type="submit" class="primary">Post comment</button>
+<div class="tk-grid">
+  {# ============================== MAIN ============================== #}
+  <div class="main">
+
+    <div class="desc-card">
+      <div class="desc-meta">Description from {{ ticket.reporter.display_name if ticket.reporter else "—" }}</div>
+      <div class="desc-body">{{ ticket.description or "(no description provided)" }}</div>
     </div>
-  </form>
-</section>
 
-{% if not portal %}
-<section>
-  <h2>Audit log</h2>
-  {% if ticket.events %}
-  <table class="data audit">
-    <thead><tr><th>When</th><th>Who</th><th>Event</th><th>Detail</th></tr></thead>
-    <tbody>
-      {% for e in ticket.events %}
-      <tr>
-        <td>{{ e.created_at | ist }}</td>
-        <td>{{ e.actor.display_name if e.actor else "system" }}</td>
-        <td>{{ e.kind.value.replace("_", " ") }}</td>
-        <td>
-          {% if e.before_value %}<code>before: {{ e.before_value }}</code>{% endif %}
-          {% if e.after_value %}<code>after: {{ e.after_value }}</code>{% endif %}
-          {% if e.note %}<em>{{ e.note }}</em>{% endif %}
-        </td>
-      </tr>
+    {% if attachments %}
+    <h3 class="section">📎 Attachments <span style="color:var(--slate,#64748b);font-weight:400;">({{ attachments|length }})</span></h3>
+    <ul class="att-list">
+      {% for a in attachments %}
+      <li>
+        <span>📎</span>
+        <a class="fname" href="{{ a.url }}" target="_blank" rel="noopener">{{ a.filename }}</a>
+        <span class="fmeta">{{ (a.size_bytes / 1024) | round(1) }} KB · {{ a.uploader }} · {{ a.created_at | ist }}</span>
+      </li>
       {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="meta">No events yet.</p>
-  {% endif %}
-</section>
-{% endif %}
+    </ul>
+    {% endif %}
+
+    <h3 class="section">💬 Conversation</h3>
+    <div class="convo">
+      {% for c in ticket.comments %}
+      <div class="msg {% if c.is_internal %}internal{% elif c.author_id == ticket.reporter_id %}reporter{% endif %}">
+        <div class="msg-head">
+          <span class="who">{{ c.author.display_name if c.author else "—" }}</span>
+          <span class="when">· {{ c.created_at | ist }}</span>
+          {% if c.is_internal %}<span class="tag tag-int">Internal</span>
+          {% elif c.author_id == ticket.reporter_id %}<span class="tag tag-rep">Requester</span>
+          {% endif %}
+        </div>
+        <div class="msg-body">{{ c.body }}</div>
+      </div>
+      {% else %}
+      <p class="meta" style="margin:0;">No messages yet — be the first to reply.</p>
+      {% endfor %}
+    </div>
+
+    {# Reply form — public vs internal tabs #}
+    <form method="post" action="/tickets/{{ ticket.id }}/comment" class="reply-card" enctype="multipart/form-data" id="replyForm">
+      <div class="reply-tabs">
+        <span class="reply-tab active" data-mode="public" id="tabPublic">Reply to requester</span>
+        <span class="reply-tab internal" data-mode="internal" id="tabInternal">Internal note</span>
+      </div>
+      <input type="hidden" name="is_internal" id="isInternalInput" value="">
+      <textarea name="body" rows="3" placeholder="Type your reply…" required></textarea>
+      <div class="reply-actions">
+        <label style="font-size:11.5px;color:var(--slate,#64748b);">
+          Attach: <input type="file" name="attachments" multiple>
+        </label>
+        <button type="submit" class="primary" id="replyBtn">Post reply</button>
+      </div>
+    </form>
+
+    <h3 class="section">📜 Audit log</h3>
+    {% if ticket.events %}
+    <ul class="audit-feed">
+      {% for e in ticket.events | reverse %}
+      <li>
+        <span class="when">{{ e.created_at | ist }}</span>
+        <span class="desc">{{ format_event(e) | safe }}
+          <span class="actor">by {{ e.actor.display_name if e.actor else "system" }}</span>
+          {% if e.note %}<br><em style="color:var(--slate,#64748b);font-size:11.5px;">{{ e.note }}</em>{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">No audit events yet.</p>
+    {% endif %}
+
+  </div>
+
+  {# ============================== SIDE ============================== #}
+  <aside class="side">
+
+    {# STATUS quick-pick — each button is a tiny form #}
+    <div class="panel">
+      <h4>Status</h4>
+      <div class="stat-grid">
+        {% for s in statuses %}
+        <form method="post" action="/tickets/{{ ticket.id }}/status" class="stat-form">
+          <input type="hidden" name="new_status" value="{{ s }}">
+          <button type="submit" class="stat-btn s-{{ s }} {% if ticket.status.value == s %}active{% endif %}">
+            {{ s.replace("_"," ") }}
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# PRIORITY #}
+    <div class="panel">
+      <h4>Priority</h4>
+      <div class="prio-row">
+        {% for p in priorities %}
+        <form method="post" action="/tickets/{{ ticket.id }}/priority" class="stat-form">
+          <input type="hidden" name="new_priority" value="{{ p }}">
+          <button type="submit" class="prio-btn p-{{ p }} {% if ticket.priority.value == p %}active{% endif %}">{{ p }}</button>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ASSIGNEE #}
+    <div class="panel">
+      <h4>Assignee</h4>
+      <form method="post" action="/tickets/{{ ticket.id }}/assign" class="assign-row">
+        <select name="assignee_id">
+          <option value="">— Unassigned —</option>
+          {% for s in staff %}
+          <option value="{{ s.id }}" {% if ticket.assignee_id == s.id %}selected{% endif %}>{{ s.display_name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Set</button>
+      </form>
+      <form method="post" action="/tickets/{{ ticket.id }}/assign">
+        <input type="hidden" name="assignee_id" value="{{ current_user.id }}">
+        <button type="submit" class="take-btn {% if ticket.assignee_id == current_user.id %}mine{% endif %}">
+          {% if ticket.assignee_id == current_user.id %}✓ Assigned to me{% else %}Take it →{% endif %}
+        </button>
+      </form>
+    </div>
+
+    {# REPORTER #}
+    <div class="panel">
+      <h4>Reporter</h4>
+      {% if ticket.reporter %}
+      <dl>
+        <dt>Name</dt><dd>{{ ticket.reporter.display_name }}</dd>
+        <dt>Email</dt><dd><a href="mailto:{{ ticket.reporter.email }}" style="color:#2563eb;text-decoration:none;">{{ ticket.reporter.email }}</a></dd>
+        {% if ticket.reporter.department %}<dt>Dept</dt><dd>{{ ticket.reporter.department }}</dd>{% endif %}
+        {% if ticket.reporter.location %}<dt>Office</dt><dd>{{ ticket.reporter.location }}</dd>{% endif %}
+      </dl>
+      {% else %}
+      <p class="meta" style="margin:0;font-size:12.5px;">Reporter deleted</p>
+      {% endif %}
+    </div>
+
+    {# SLA #}
+    <div class="panel">
+      <h4>SLA</h4>
+      {% set resp = time_to_breach(ticket.due_response_at) %}
+      {% set resol = time_to_breach(ticket.due_resolution_at) %}
+      <div class="sla-row">
+        <span class="lbl">Response</span>
+        <span class="val {% if ticket.first_response_at %}ok{% elif resp[1] %}breach{% endif %}">
+          {% if ticket.first_response_at %}✓ {{ ticket.first_response_at | ist }}{% else %}{{ resp[0] }}{% endif %}
+        </span>
+      </div>
+      <div class="sla-row">
+        <span class="lbl">Resolve by</span>
+        <span class="val">{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at | ist }}{% else %}—{% endif %}</span>
+      </div>
+      <div class="sla-row">
+        <span class="lbl">Remaining</span>
+        <span class="val {% if ticket.resolved_at %}ok{% elif resol[1] %}breach{% endif %}">
+          {% if ticket.resolved_at %}✓ resolved{% else %}{{ resol[0] }}{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {# KB suggestions #}
+    {% if kb_hints %}
+    <div class="panel" style="background:#f0f9ff;border-color:#bae6fd;">
+      <h4 style="color:#075985;">💡 Related KB</h4>
+      <ul class="kb-list">
+        {% for a in kb_hints %}
+        <li><a href="/kb/{{ a.id }}">{{ a.title }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </aside>
+</div>
+
+<script>
+(function(){
+  // Reply tab switching (public vs internal note)
+  var tabPub = document.getElementById("tabPublic");
+  var tabInt = document.getElementById("tabInternal");
+  var input  = document.getElementById("isInternalInput");
+  var form   = document.getElementById("replyForm");
+  var btn    = document.getElementById("replyBtn");
+  if (!tabPub || !tabInt || !form) return;
+  function setMode(mode) {
+    if (mode === "internal") {
+      tabInt.classList.add("active");
+      tabPub.classList.remove("active");
+      input.value = "1";
+      form.classList.add("internal-mode");
+      btn.textContent = "Save internal note";
+    } else {
+      tabPub.classList.add("active");
+      tabInt.classList.remove("active");
+      input.value = "";
+      form.classList.remove("internal-mode");
+      btn.textContent = "Post reply";
+    }
+  }
+  tabPub.addEventListener("click", function(){ setMode("public"); });
+  tabInt.addEventListener("click", function(){ setMode("internal"); });
+})();
+</script>
 {% endblock %}
