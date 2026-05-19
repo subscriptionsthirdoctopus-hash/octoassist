@@ -371,6 +371,10 @@ class User(Base):
     job_title:  Mapped[str | None] = mapped_column(String(200), nullable=True)
     synced_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Phase J: CAB (Change Advisory Board) membership. Members get CC'd on every
+    # change submission and every new incident. Toggle from /settings/cab.
+    is_cab_member: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
     tenant: Mapped[Tenant] = relationship(back_populates="users")
     reported_tickets: Mapped[list["Ticket"]] = relationship(
         back_populates="reporter",
@@ -971,4 +975,28 @@ class IdentityProvider(Base):
 
     __table_args__ = (
         Index("ix_identity_providers_tenant_enabled", "tenant_id", "is_enabled"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase J — canned reply templates for the staff ticket page
+# ---------------------------------------------------------------------------
+class ReplyTemplate(Base):
+    """Reusable text that a technician can drop into the reply box on a
+    ticket. Keeps language consistent across the team and saves typing on
+    the common cases ('acknowledged, investigating', 'need more info', etc.).
+    Managed under /settings/reply-templates."""
+    __tablename__ = "reply_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_reply_templates_tenant_sort", "tenant_id", "sort_order"),
     )

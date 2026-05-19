@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}CAB Members — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>👥 CAB Members</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ cab_count }} member{{ "" if cab_count == 1 else "s" }} on the Change Advisory Board</p>
+  </div>
+</section>
+
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+
+<section class="card" style="max-width:none;margin-bottom:14px;">
+  <h3 style="margin-top:0;">How this works</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">
+    CAB (Change Advisory Board) members are the people who review and approve production changes.
+    Once a user is in the CAB:
+  </p>
+  <ul class="meta" style="margin:6px 0 0;line-height:1.6;font-size:13px;color:#475569;">
+    <li>They get emailed on every new <strong>change</strong> submitted (review + approve at <code>/changes</code>).</li>
+    <li>They get FYI emails on every new <strong>incident / service request</strong> created — so leadership sees what's hitting the helpdesk.</li>
+  </ul>
+  <p class="meta" style="margin:8px 0 0;font-size:12.5px;color:#64748b;">Users in this list come from your Entra ID directory sync (or were created locally). Toggle the checkbox to add or remove.</p>
+</section>
+
+<form method="get" action="/settings/cab" style="margin-bottom:12px;">
+  <input type="search" name="q" value="{{ q or '' }}" placeholder="Search by name, email, department"
+         style="padding:8px 10px;border:1px solid var(--line,#e2e8f0);border-radius:6px;font-size:13px;min-width:340px;">
+  <button type="submit" class="primary">Search</button>
+  {% if q %}<a href="/settings/cab" class="link-button">clear</a>{% endif %}
+</form>
+
+{% if users %}
+<table class="data">
+  <thead><tr><th style="width:80px;">CAB</th><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Office</th></tr></thead>
+  <tbody>
+    {% for u in users %}
+    <tr style="{% if u.is_cab_member %}background:#f0f9ff;{% endif %}">
+      <td>
+        <form method="post" action="/settings/cab/toggle/{{ u.id }}" style="margin:0;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" {% if u.is_cab_member %}checked{% endif %}
+                   onchange="this.form.submit()" style="cursor:pointer;width:16px;height:16px;">
+            {% if u.is_cab_member %}<span style="font-size:11px;color:#0369a1;font-weight:700;">CAB</span>{% endif %}
+          </label>
+        </form>
+      </td>
+      <td><strong>{{ u.display_name }}</strong></td>
+      <td><a href="mailto:{{ u.email }}" style="color:#2563eb;text-decoration:none;">{{ u.email }}</a></td>
+      <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
+      <td>{{ u.department or "—" }}</td>
+      <td>{{ u.location or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty"><h2>No users found</h2><p>Adjust your search or <a href="/users">add users</a>.</p></div>
+{% endif %}
+{% endblock %}

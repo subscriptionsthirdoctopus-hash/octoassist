@@ -205,7 +205,21 @@
         <span class="reply-tab internal" data-mode="internal" id="tabInternal">Internal note</span>
       </div>
       <input type="hidden" name="is_internal" id="isInternalInput" value="">
-      <textarea name="body" rows="3" placeholder="Type your reply…" required></textarea>
+      {% if reply_templates %}
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+        <label style="font-size:11.5px;color:var(--slate,#64748b);font-weight:600;">Quick reply:</label>
+        <select id="tplPicker" style="flex:1;min-width:180px;padding:6px 8px;font-size:12.5px;border:1px solid var(--line,#e2e8f0);border-radius:6px;background:white;">
+          <option value="">— pick a template —</option>
+          {% for t in reply_templates %}
+          <option value="{{ t.id }}">{{ t.title }}</option>
+          {% endfor %}
+        </select>
+        <a href="/settings/reply-templates" style="font-size:11px;color:#64748b;text-decoration:none;">manage →</a>
+      </div>
+      <script id="tplData" type="application/json">{{ reply_templates | tojson }}</script>
+      <script id="tplCtx" type="application/json">{{ template_ctx | tojson }}</script>
+      {% endif %}
+      <textarea name="body" id="replyBody" rows="4" placeholder="Type your reply… or pick a template above to start" required></textarea>
       <div class="reply-actions">
         <label style="font-size:11.5px;color:var(--slate,#64748b);">
           Attach (<strong>max 2 MB/file</strong>):
@@ -341,6 +355,37 @@
 
 <script>
 (function(){
+  // Reply-template picker — drop selected body into textarea, swap placeholders
+  var picker = document.getElementById("tplPicker");
+  var body   = document.getElementById("replyBody");
+  var tplDataEl = document.getElementById("tplData");
+  var tplCtxEl  = document.getElementById("tplCtx");
+  if (picker && body && tplDataEl && tplCtxEl) {
+    var templates = [];
+    var ctx = {};
+    try { templates = JSON.parse(tplDataEl.textContent || "[]"); } catch(e){}
+    try { ctx = JSON.parse(tplCtxEl.textContent || "{}"); } catch(e){}
+    function fill(id){
+      if (!id) return;
+      var hit = null;
+      for (var i=0; i<templates.length; i++) {
+        if (String(templates[i].id) === String(id)) { hit = templates[i]; break; }
+      }
+      if (!hit) return;
+      var out = hit.body || "";
+      out = out.replace(/\{name\}/g, ctx.name || "")
+               .replace(/\{ticket\}/g, ctx.ticket || "")
+               .replace(/\{category\}/g, ctx.category || "");
+      if (body.value.trim() && !confirm("Replace what you've typed with this template?")) {
+        picker.value = "";
+        return;
+      }
+      body.value = out;
+      body.focus();
+    }
+    picker.addEventListener("change", function(){ fill(picker.value); });
+  }
+
   // 2 MB per-file pre-flight on the reply attachment input
   var files = document.getElementById("replyFiles");
   var ferr  = document.getElementById("replyAttachErr");

@@ -89,6 +89,20 @@
     <p class="tile-meta">{{ location_rules_count }} routing rule{{ "" if location_rules_count == 1 else "s" }}</p>
   </a>
 
+  <a href="/settings/cab" class="settings-tile">
+    <span class="icon">👥</span>
+    <p class="tile-title">CAB Members</p>
+    <p class="tile-sub">Change Advisory Board — pick users from your Entra ID directory. CAB members get emailed on every change and every new incident.</p>
+    <p class="tile-meta">{{ cab_count }} member{{ "" if cab_count == 1 else "s" }} on the board</p>
+  </a>
+
+  <a href="/settings/reply-templates" class="settings-tile">
+    <span class="icon">💬</span>
+    <p class="tile-title">Reply templates</p>
+    <p class="tile-sub">Canned text the team can drop into ticket replies — acknowledge, ask for info, resolved-please-verify. Cuts repetitive typing.</p>
+    <p class="tile-meta">{{ reply_templates_count }} template{{ "" if reply_templates_count == 1 else "s" }}</p>
+  </a>
+
   <a href="/actions" class="settings-tile">
     <span class="icon">⚡</span>
     <p class="tile-title">Remote Actions</p>

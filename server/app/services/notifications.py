@@ -53,6 +53,24 @@ def _fire(tenant: Tenant, to: str, subject: str, body: str) -> None:
     threading.Thread(target=_go, daemon=True).start()
 
 
+def _cab_emails(db: Session, tenant_id: int, exclude: set[str] | None = None) -> list[str]:
+    """Return active CAB-member emails for the tenant. The exclude set prevents
+    sending duplicate copies to people already on the primary recipient list."""
+    rows = (db.query(User.email)
+              .filter(User.tenant_id == tenant_id,
+                      User.is_cab_member.is_(True),
+                      User.is_active.is_(True),
+                      User.email.is_not(None))
+              .all())
+    skip = exclude or set()
+    out = []
+    for (e,) in rows:
+        if e and e not in skip:
+            out.append(e)
+            skip.add(e)
+    return out
+
+
 # ---------- Tickets ----------
 
 def ticket_created(db: Session, ticket: Ticket) -> None:
@@ -68,14 +86,22 @@ def ticket_created(db: Session, ticket: Ticket) -> None:
         f"Reporter: {ticket.reporter.display_name if ticket.reporter else '—'}\n"
         f"\n{ticket.description or '(no description)'}\n"
     )
+    sent: set[str] = set()
     if ticket.reporter and ticket.reporter.email:
         _fire(tenant, ticket.reporter.email,
               f"[OctoAssist] {ticket.ticket_number} — created",
               body + f"\n— You are the reporter on this ticket.\n")
+        sent.add(ticket.reporter.email)
     if ticket.assignee and ticket.assignee.email and ticket.assignee_id != ticket.reporter_id:
         _fire(tenant, ticket.assignee.email,
               f"[OctoAssist] {ticket.ticket_number} — assigned to you",
               body + f"\n— You have been assigned this ticket.\n")
+        sent.add(ticket.assignee.email)
+    # Phase J: CAB members get FYI on every new ticket
+    for cab_email in _cab_emails(db, ticket.tenant_id, exclude=sent):
+        _fire(tenant, cab_email,
+              f"[OctoAssist · CAB] {ticket.ticket_number} — new {ticket.kind.value.replace('_',' ')}",
+              body + f"\n— You receive this as a CAB member.\n")
 
 
 def ticket_status_changed(db: Session, ticket: Ticket, old_status: str) -> None:
@@ -165,14 +191,23 @@ def patch_window_completed(db: Session, window: PatchWindow) -> None:
 
 def change_submitted(db: Session, change: Change) -> None:
     tenant = change.tenant if hasattr(change, "tenant") else db.get(Tenant, change.tenant_id)
-    if tenant is None or not _mail_configured(tenant) or not tenant.notification_email:
+    if tenant is None or not _mail_configured(tenant):
         return
     body = (
         f"Change submitted for CAB review: {change.change_number}\n"
         f"Title: {change.title}\n"
         f"Type: {change.change_type.value}, Risk: {change.risk.value}\n"
         f"Requester: {change.requester.display_name if change.requester else '—'}\n"
+        f"\n{change.description or ''}\n"
     )
-    _fire(tenant, tenant.notification_email,
-          f"[OctoAssist] {change.change_number} — under CAB review",
-          body)
+    sent: set[str] = set()
+    if tenant.notification_email:
+        _fire(tenant, tenant.notification_email,
+              f"[OctoAssist] {change.change_number} — under CAB review",
+              body)
+        sent.add(tenant.notification_email)
+    # Phase J: every CAB member gets the change for review
+    for cab_email in _cab_emails(db, change.tenant_id, exclude=sent):
+        _fire(tenant, cab_email,
+              f"[OctoAssist · CAB] {change.change_number} — needs your review",
+              body + f"\n— You receive this as a CAB member. Approve or reject at /changes/{change.id}.\n")

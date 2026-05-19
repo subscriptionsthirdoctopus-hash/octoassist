@@ -13,8 +13,8 @@ import secrets
 from ..auth import require_admin
 from ..database import get_db
 from ..models import (
-    Agent, Category, CategoryRule, IdentityProvider, IdentityProviderKind, LocationRule, Tenant,
-    TicketKind, TicketPriority, User, UserRole,
+    Agent, Category, CategoryRule, IdentityProvider, IdentityProviderKind, LocationRule,
+    ReplyTemplate, Tenant, TicketKind, TicketPriority, User, UserRole,
 )
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
 
@@ -53,6 +53,12 @@ def settings_home(
                               .filter(LocationRule.tenant_id == user.tenant_id).scalar()) or 0
     category_rules_count = (db.query(_f.count(CategoryRule.id))
                               .filter(CategoryRule.tenant_id == user.tenant_id).scalar()) or 0
+    cab_count = (db.query(_f.count(User.id))
+                   .filter(User.tenant_id == user.tenant_id,
+                           User.is_cab_member.is_(True),
+                           User.is_active.is_(True)).scalar()) or 0
+    reply_templates_count = (db.query(_f.count(ReplyTemplate.id))
+                               .filter(ReplyTemplate.tenant_id == user.tenant_id).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -62,6 +68,8 @@ def settings_home(
             "categories_count": int(categories_count),
             "location_rules_count": int(location_rules_count),
             "category_rules_count": int(category_rules_count),
+            "cab_count": int(cab_count),
+            "reply_templates_count": int(reply_templates_count),
             "flash": flash,
         },
     )
@@ -709,5 +717,142 @@ def delete_category_rule(
     db.delete(r); db.commit()
     return RedirectResponse(
         url=f"/settings/categories-routing?flash={quote(f'Rule for {cat_name} deleted')}",
+        status_code=303,
+    )
+
+
+# ---------------------------- Phase J: CAB membership ----------------------------
+
+@router.get("/settings/cab", response_class=HTMLResponse)
+def settings_cab(
+    request: Request,
+    q: str | None = None,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
+    qy = (db.query(User)
+            .filter(User.tenant_id == user.tenant_id,
+                    User.is_active == True))  # noqa: E712
+    if q:
+        from sqlalchemy import func as _f, or_
+        like = f"%{q.strip().lower()}%"
+        qy = qy.filter(or_(
+            _f.lower(User.email).like(like),
+            _f.lower(User.full_name).like(like),
+            _f.lower(User.department).like(like),
+        ))
+    users = qy.order_by(User.is_cab_member.desc(), User.full_name, User.email).limit(500).all()
+    cab_count = sum(1 for u in users if u.is_cab_member)
+    return templates.TemplateResponse(
+        request=request, name="settings_cab.html",
+        context={"current_user": user, "tenant": db.query(Tenant).first(),
+                 "users": users, "q": q or "", "cab_count": cab_count,
+                 "flash": flash},
+    )
+
+
+@router.post("/settings/cab/toggle/{user_id}")
+def settings_cab_toggle(
+    user_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    target = db.get(User, user_id)
+    if target is None or target.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    target.is_cab_member = not bool(target.is_cab_member)
+    db.commit()
+    verb = "added to" if target.is_cab_member else "removed from"
+    return RedirectResponse(
+        url=f"/settings/cab?flash={quote(f'{target.display_name} {verb} CAB')}",
+        status_code=303,
+    )
+
+
+# ---------------------------- Phase J: Reply templates ----------------------------
+
+@router.get("/settings/reply-templates", response_class=HTMLResponse)
+def settings_reply_templates(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    rows = (db.query(ReplyTemplate)
+              .filter(ReplyTemplate.tenant_id == user.tenant_id)
+              .order_by(ReplyTemplate.sort_order, ReplyTemplate.title).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_reply_templates.html",
+        context={"current_user": user, "tenant": db.query(Tenant).first(),
+                 "rows": rows, "flash": flash, "error": error},
+    )
+
+
+@router.post("/settings/reply-templates/new")
+def settings_reply_template_new(
+    title: str = Form(...),
+    body: str = Form(""),
+    sort_order: int = Form(0),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    title = title.strip()[:120]
+    if not title:
+        return RedirectResponse(
+            url=f"/settings/reply-templates?error={quote('Title is required')}",
+            status_code=303,
+        )
+    db.add(ReplyTemplate(
+        tenant_id=user.tenant_id, title=title, body=body.strip(),
+        sort_order=sort_order or 0, created_by_id=user.id,
+    ))
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/reply-templates?flash={quote(f'Template added: {title}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/reply-templates/{template_id}/edit")
+def settings_reply_template_edit(
+    template_id: int,
+    title: str = Form(...),
+    body: str = Form(""),
+    sort_order: int = Form(0),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    t = db.get(ReplyTemplate, template_id)
+    if t is None or t.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    t.title = title.strip()[:120] or t.title
+    t.body = body.strip()
+    t.sort_order = sort_order or 0
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/reply-templates?flash={quote(f'Template updated: {t.title}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/reply-templates/{template_id}/delete")
+def settings_reply_template_delete(
+    template_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    t = db.get(ReplyTemplate, template_id)
+    if t is None or t.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    title = t.title
+    db.delete(t); db.commit()
+    return RedirectResponse(
+        url=f"/settings/reply-templates?flash={quote(f'Template deleted: {title}')}",
         status_code=303,
     )
