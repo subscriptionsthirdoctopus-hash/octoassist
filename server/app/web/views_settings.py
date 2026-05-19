@@ -13,7 +13,7 @@ import secrets
 from ..auth import require_admin
 from ..database import get_db
 from ..models import (
-    Agent, Category, IdentityProvider, IdentityProviderKind, LocationRule, Tenant,
+    Agent, Category, CategoryRule, IdentityProvider, IdentityProviderKind, LocationRule, Tenant,
     TicketKind, TicketPriority, User, UserRole,
 )
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
@@ -51,6 +51,8 @@ def settings_home(
                                   Category.is_active == True).scalar()) or 0  # noqa: E712
     location_rules_count = (db.query(_f.count(LocationRule.id))
                               .filter(LocationRule.tenant_id == user.tenant_id).scalar()) or 0
+    category_rules_count = (db.query(_f.count(CategoryRule.id))
+                              .filter(CategoryRule.tenant_id == user.tenant_id).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -59,6 +61,7 @@ def settings_home(
             "idps_count": int(idps_count),
             "categories_count": int(categories_count),
             "location_rules_count": int(location_rules_count),
+            "category_rules_count": int(category_rules_count),
             "flash": flash,
         },
     )
@@ -618,5 +621,93 @@ def set_notification_email(
     db.commit()
     return RedirectResponse(
         url=f"/settings?flash=Notification+email+set+to+{tenant.notification_email}",
+        status_code=303,
+    )
+
+
+# ---------------------------- Phase F: Category routing rules ----------------------------
+
+@router.get("/settings/categories-routing", response_class=HTMLResponse)
+def settings_category_rules(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    tenant = db.query(Tenant).first()
+    rules = (db.query(CategoryRule)
+               .filter(CategoryRule.tenant_id == user.tenant_id)
+               .all())
+    # Categories without a rule yet — admin picks from this dropdown.
+    used_cat_ids = {r.category_id for r in rules}
+    available_cats = (db.query(Category)
+                        .filter(Category.tenant_id == user.tenant_id,
+                                Category.is_active == True,  # noqa: E712
+                                ~Category.id.in_(used_cat_ids) if used_cat_ids else True)
+                        .order_by(Category.kind, Category.name).all())
+    staff = (db.query(User)
+               .filter(User.tenant_id == user.tenant_id,
+                       User.is_active == True,  # noqa: E712
+                       User.role.in_([UserRole.admin, UserRole.agent]))
+               .order_by(User.full_name, User.email).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_category_rules.html",
+        context={"current_user": user, "tenant": tenant,
+                 "rules": rules, "available_cats": available_cats,
+                 "staff": staff, "flash": flash, "error": error},
+    )
+
+
+@router.post("/settings/categories-routing/new")
+def create_category_rule(
+    category_id: int = Form(...),
+    default_assignee_id: int = Form(...),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    cat = db.get(Category, category_id)
+    if cat is None or cat.tenant_id != user.tenant_id:
+        return RedirectResponse(url="/settings/categories-routing?error=Invalid+category", status_code=303)
+    assignee = db.get(User, default_assignee_id)
+    if assignee is None or assignee.tenant_id != user.tenant_id or not assignee.is_active:
+        return RedirectResponse(url="/settings/categories-routing?error=Invalid+assignee", status_code=303)
+    if assignee.role not in (UserRole.admin, UserRole.agent):
+        return RedirectResponse(
+            url=f"/settings/categories-routing?error={quote('Assignee must be admin or agent')}",
+            status_code=303,
+        )
+    existing = (db.query(CategoryRule)
+                  .filter(CategoryRule.tenant_id == user.tenant_id,
+                          CategoryRule.category_id == category_id).first())
+    if existing:
+        return RedirectResponse(
+            url=f"/settings/categories-routing?error={quote('A rule for this category already exists')}",
+            status_code=303,
+        )
+    db.add(CategoryRule(tenant_id=user.tenant_id, category_id=category_id,
+                        default_assignee_id=assignee.id))
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/categories-routing?flash={quote(f'Rule added: {cat.name} -> {assignee.display_name}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/categories-routing/{rule_id}/delete")
+def delete_category_rule(
+    rule_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    r = db.get(CategoryRule, rule_id)
+    if r is None or r.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    cat_name = r.category.name if r.category else f"#{r.category_id}"
+    db.delete(r); db.commit()
+    return RedirectResponse(
+        url=f"/settings/categories-routing?flash={quote(f'Rule for {cat_name} deleted')}",
         status_code=303,
     )

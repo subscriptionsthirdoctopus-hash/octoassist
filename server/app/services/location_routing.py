@@ -20,7 +20,7 @@ import logging
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models import Agent, LocationRule, User
+from ..models import Agent, CategoryRule, LocationRule, User
 
 log = logging.getLogger("octoassist.location_routing")
 
@@ -64,6 +64,25 @@ def auto_assignee_for(
     if rule is None:
         return None
     # Sanity: only auto-assign to active staff (admin/agent).
+    assignee = rule.default_assignee
+    if assignee is None or not assignee.is_active:
+        return None
+    return assignee
+
+
+def category_assignee_for(
+    *, category_id: int | None, tenant_id: int, db: Session,
+) -> User | None:
+    """Phase F: look up a CategoryRule for this category, return assignee.
+    Called as a fallback by services.ticketing.create_ticket when location
+    routing didn't match."""
+    if category_id is None:
+        return None
+    rule = (db.query(CategoryRule)
+              .filter(CategoryRule.tenant_id == tenant_id,
+                      CategoryRule.category_id == category_id).first())
+    if rule is None:
+        return None
     assignee = rule.default_assignee
     if assignee is None or not assignee.is_active:
         return None

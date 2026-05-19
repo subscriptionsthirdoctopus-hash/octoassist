@@ -491,6 +491,28 @@ class Ticket(Base):
         return (now or _now()) > self.due_resolution_at
 
 
+class CategoryRule(Base):
+    """Phase F per-category routing. When a ticket is created in a category
+    that matches, auto-assign to default_assignee. Falls back AFTER location-
+    based routing — so location wins if both rules match."""
+    __tablename__ = "category_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
+    default_assignee_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    category: Mapped["Category"] = relationship(foreign_keys=[category_id])
+    default_assignee: Mapped[User] = relationship(foreign_keys=[default_assignee_id])
+
+    __table_args__ = (
+        Index("ix_category_rules_tenant_cat", "tenant_id", "category_id", unique=True),
+    )
+
+
 class LocationRule(Base):
     """Per-office routing rule. When a ticket is created with a location that
     matches one of these rules (case-insensitive), the ticket is auto-assigned

@@ -10,7 +10,7 @@ from ..models import (
 from .audit import record
 from .sla import compute_sla
 from . import notifications
-from .location_routing import auto_assignee_for, derive_location_for
+from .location_routing import auto_assignee_for, category_assignee_for, derive_location_for
 
 
 def next_ticket_number(db: Session, tenant_id: int, kind: TicketKind) -> str:
@@ -42,6 +42,11 @@ def create_ticket(
     # assign. Both are best-effort — failures leave fields NULL/None.
     location = derive_location_for(user=reporter, db=db)
     auto_assignee = auto_assignee_for(location=location, tenant_id=tenant_id, db=db)
+    if auto_assignee is None:
+        # Phase F fallback: per-category default assignee
+        auto_assignee = category_assignee_for(
+            category_id=category.id, tenant_id=tenant_id, db=db
+        )
 
     ticket = Ticket(
         tenant_id=tenant_id,

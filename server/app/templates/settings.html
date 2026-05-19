@@ -75,6 +75,13 @@
     <p class="tile-meta">Created {{ tenant.created_at | istdate }}</p>
   </a>
 
+  <a href="/settings/categories-routing" class="settings-tile">
+    <span class="icon">🎯</span>
+    <p class="tile-title">Category routing</p>
+    <p class="tile-sub">Per-category default ticket assignee — Network → one tech, Endpoints → another. Falls back when no location rule matches.</p>
+    <p class="tile-meta">{{ category_rules_count }} rule{{ "" if category_rules_count == 1 else "s" }}</p>
+  </a>
+
   <a href="/settings/locations" class="settings-tile">
     <span class="icon">📍</span>
     <p class="tile-title">Locations &amp; Routing</p>
