@@ -104,6 +104,13 @@
     <p class="tile-meta">25+ reports, all CSV-exportable</p>
   </a>
 
+  <a href="/settings/software-catalog" class="settings-tile">
+    <span class="icon">📦</span>
+    <p class="tile-title">Software catalog</p>
+    <p class="tile-sub">Curate the installers your team pushes — Chrome, Acrobat, VPN client, LOB apps — with silent-install args and uninstall commands. Picked from a dropdown on the Deploy software page.</p>
+    <p class="tile-meta">{{ catalog_count }} package{{ "" if catalog_count == 1 else "s" }} in catalog</p>
+  </a>
+
   <a href="/actions" class="settings-tile">
     <span class="icon">⚡</span>
     <p class="tile-title">Remote Actions</p>

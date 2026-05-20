@@ -1,115 +1,222 @@
 {% extends "base.html" %}
 {% block title %}Deploy Software — OctoAssist{% endblock %}
 {% block content %}
+
+<style>
+  .sd-grid { display:grid; grid-template-columns: 1fr 320px; gap:16px; }
+  @media (max-width:1100px) { .sd-grid { grid-template-columns:1fr; } }
+
+  .src-pick { background:linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); border:1px solid var(--accent-border); border-left:4px solid var(--accent); padding:12px 14px; border-radius:var(--r-md); }
+  .src-pick label { font-weight:600; color:#1e3a8a; }
+  .src-pick .meta { color:#1e3a8a; opacity:0.8; }
+
+  .target-tabs { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:10px; }
+  .target-tab { padding:9px 10px; border-radius:var(--r-sm); border:1px solid var(--line); background:#f8fafc; cursor:pointer; font-size:12.5px; font-weight:600; text-align:center; color:var(--text-2); transition:all .12s; }
+  .target-tab:hover { background:var(--hover); }
+  .target-tab.active { background:var(--accent-soft); color:var(--accent-hover); border-color:var(--accent-border); }
+
+  .endpoint-grid { max-height:340px; overflow-y:auto; border:1px solid var(--line); border-radius:var(--r-md); background:white; padding:6px; }
+  .ep-row { display:flex; align-items:center; gap:10px; padding:7px 9px; border-radius:var(--r-sm); cursor:pointer; transition:background .08s; }
+  .ep-row:hover { background:var(--hover); }
+  .ep-row input { margin:0; }
+  .ep-row .host { flex:1; font-weight:500; color:var(--text-1); font-size:13.5px; }
+  .ep-row .meta { color:var(--text-3); font-size:11.5px; }
+  .ep-row.dim .host { color:var(--text-4); }
+
+  .ep-controls { display:flex; gap:10px; align-items:center; margin-bottom:8px; font-size:12px; }
+  .ep-controls input[type=search] { flex:1; max-width:280px; }
+  .ep-controls .selected-count { font-weight:600; color:var(--accent); }
+  .ep-controls .ep-actions { display:flex; gap:6px; }
+  .ep-controls .ep-actions a { font-size:11.5px; color:var(--text-3); cursor:pointer; text-decoration:none; padding:4px 8px; border-radius:4px; }
+  .ep-controls .ep-actions a:hover { background:var(--hover); color:var(--text-1); }
+
+  .pkg-card { background:#eff6ff; border:1px solid var(--accent-border); border-radius:var(--r-md); padding:10px 12px; margin-top:8px; display:none; font-size:12.5px; }
+  .pkg-card.show { display:block; }
+  .pkg-card .pkg-title { font-weight:700; color:#1e3a8a; margin-bottom:4px; }
+  .pkg-card .pkg-meta { color:#1e3a8a; opacity:0.85; }
+
+  .sd-nav { display:flex; gap:6px; margin-bottom:18px; padding:6px; background:#f8fafc; border-radius:var(--r-md); border:1px solid var(--line); }
+  .sd-nav a { font-size:13px; padding:7px 14px; min-height:0; }
+</style>
+
 <section class="page-head">
   <div class="row-between">
     <div>
-      <h1>Software</h1>
-      <p class="meta">Push installers (.exe / .msi / .msu) to Windows endpoints. Runs as SYSTEM, no user prompt.</p>
+      <h1>📥 Deploy software</h1>
+      <p class="meta">Push installers to Windows endpoints. Runs as SYSTEM — no user prompt.</p>
     </div>
   </div>
 </section>
 
-<nav class="card" style="display:flex;gap:6px;margin-bottom:18px;padding:6px;background:#f8fafc;">
-  <a href="/software"        class="button"         style="flex:0;">📊 Inventory</a>
-  <a href="/software/deploy" class="button primary" style="flex:0;">📥 Deploy software</a>
-</nav>
+<div class="sd-nav">
+  <a href="/software"        class="button">📊 Inventory</a>
+  <a href="/software/deploy" class="button primary">📥 Deploy software</a>
+  <a href="/settings/software-catalog" class="button">⚙️ Manage catalog</a>
+</div>
 
 {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
 
-<div class="cards" style="grid-template-columns:1fr 1fr;gap:18px;">
-  <div class="card">
-    <h3 style="margin:0 0 10px;">Push installer to endpoint(s)</h3>
-    <p class="meta" style="margin:0 0 14px;font-size:12.5px;">
-      Paste a public URL to the installer (Azure storage / SharePoint / corporate file server / vendor download link).
-      The agent downloads it on the endpoint, runs it as SYSTEM with your silent-install args, then reports back.
-    </p>
+<form method="post" action="/software/deploy" enctype="multipart/form-data" id="deployForm">
+<div class="sd-grid">
 
-    <form method="post" action="/software/deploy" enctype="multipart/form-data" style="display:grid;gap:10px;">
-      <label>Installer label <span class="meta" style="font-weight:normal;">(for tracking — e.g. "Chrome 130 fleet rollout")</span>
-        <input type="text" name="label" required maxlength="120"
-               placeholder="e.g. Acrobat Reader 24.005 — Engineering OU"
-               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-      </label>
+  {# ===== MAIN ===== #}
+  <div>
 
-      <div style="border:1px dashed var(--line);border-radius:6px;padding:14px;background:#f8fafc;">
-        <strong style="font-size:13px;display:block;margin-bottom:8px;">📤 Source (pick one)</strong>
-        <label style="display:block;margin-bottom:8px;">Upload installer file <span class="meta" style="font-weight:normal;">(.exe / .msi / .msu, up to 1 GB)</span>
-          <input type="file" name="installer_file"
-                 accept=".exe,.msi,.msu,.bat,.cmd"
-                 style="display:block;margin-top:4px;font-size:13px;">
-        </label>
-        <p class="meta" style="margin:6px 0;font-size:11.5px;text-align:center;color:var(--slate);">— or —</p>
-        <label>Paste installer URL <span class="meta" style="font-weight:normal;">(must be HTTPS-reachable from endpoints)</span>
-          <input type="url" name="url"
-                 placeholder="https://example.com/installers/setup.exe"
-                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-        </label>
-      </div>
+    {# 1. Pick a package #}
+    <div class="card" style="max-width:none; margin-bottom:14px;">
+      <h3 style="margin:0 0 10px;">1. Pick a package</h3>
 
-      <label>Silent-install args <span class="meta" style="font-weight:normal;">(leave blank for safe defaults: <code>/quiet /norestart</code> for MSI, <code>/S</code> for NSIS, <code>/silent</code> common otherwise)</span>
-        <input type="text" name="args"
-               placeholder="/quiet /norestart"
-               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-      </label>
-
-      <label>Target
-        <select name="target_mode" id="target-mode" onchange="onTargetModeChange()"
-                style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-          <option value="agent">One specific endpoint</option>
-          <option value="pattern">Hostname pattern (% wildcard)</option>
-          <option value="all">All endpoints</option>
+      {% if catalog %}
+      <div class="src-pick" style="margin-bottom:12px;">
+        <label style="display:block; margin-bottom:6px;">📦 From catalog <span class="meta" style="font-weight:normal;">— pre-curated, silent-install args ready</span></label>
+        <select id="pkgPicker" style="width:100%;">
+          <option value="">— pick from catalog —</option>
+          {% for p in catalog %}
+          <option value="{{ p.id }}"
+                  data-url="{{ p.installer_url }}"
+                  data-args="{{ p.install_args }}"
+                  data-name="{{ p.name }}"
+                  data-version="{{ p.version }}"
+                  data-vendor="{{ p.vendor }}"
+                  data-notes="{{ p.notes }}">
+            {{ p.name }}{% if p.version %} {{ p.version }}{% endif %}{% if p.vendor %} · {{ p.vendor }}{% endif %}
+          </option>
+          {% endfor %}
         </select>
-      </label>
+        <div class="pkg-card" id="pkgCard">
+          <div class="pkg-title" id="pkgTitle"></div>
+          <div class="pkg-meta" id="pkgMeta"></div>
+        </div>
+      </div>
+      {% else %}
+      <div style="background:var(--bg); border:1px dashed var(--line); padding:12px; border-radius:var(--r-sm); font-size:12.5px; color:var(--text-3); margin-bottom:12px;">
+        💡 No packages in your catalog yet. <a href="/settings/software-catalog">Add one →</a> for one-click deploys next time.
+      </div>
+      {% endif %}
 
-      <div id="row-agent">
-        <label>Endpoint
-          <select name="agent_id" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-            {% for a in agents %}
-            <option value="{{ a.id }}">{{ a.hostname }}{% if a.last_seen_at %} — last seen {{ a.last_seen_at | ist }}{% endif %}</option>
-            {% endfor %}
-          </select>
-        </label>
+      <details {% if not catalog %}open{% endif %}>
+        <summary style="cursor:pointer; font-size:12.5px; color:var(--text-3); font-weight:600;">— or use an ad-hoc installer —</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <label>Installer label <span class="meta">(tracking name)</span>
+            <input type="text" name="label" id="fLabel" maxlength="120" placeholder="e.g. Acrobat Reader 24.005 — Engineering OU">
+          </label>
+          <label>Upload installer file <span class="meta">(.exe / .msi / .msu, up to 1 GB)</span>
+            <input type="file" name="installer_file" accept=".exe,.msi,.msu,.bat,.cmd">
+          </label>
+          <p class="meta" style="margin:2px 0; font-size:11px; text-align:center;">— or —</p>
+          <label>Installer URL <span class="meta">(HTTPS-reachable from endpoints)</span>
+            <input type="url" name="url" id="fUrl" placeholder="https://example.com/installers/setup.exe">
+          </label>
+          <label>Silent-install args <span class="meta">(default safe: /quiet /norestart MSI · /S NSIS)</span>
+            <input type="text" name="args" id="fArgs" placeholder="/quiet /norestart">
+          </label>
+        </div>
+      </details>
+    </div>
+
+    {# 2. Pick targets #}
+    <div class="card" style="max-width:none; margin-bottom:14px;">
+      <h3 style="margin:0 0 10px;">2. Pick targets</h3>
+
+      <div class="target-tabs">
+        <div class="target-tab active" data-mode="select">✓ Pick endpoints</div>
+        <div class="target-tab" data-mode="pattern">⌥ Hostname pattern</div>
+        <div class="target-tab" data-mode="all">🌐 All endpoints</div>
+      </div>
+      <input type="hidden" name="target_mode" id="targetMode" value="select">
+
+      {# Multi-select endpoint grid #}
+      <div id="block-select">
+        <div class="ep-controls">
+          <input type="search" id="epFilter" placeholder="🔍 Filter by hostname…">
+          <div class="ep-actions">
+            <a id="epSelectAll">Select all visible</a>
+            <a id="epClear">Clear</a>
+          </div>
+          <div style="margin-left:auto;">
+            <span class="selected-count" id="selCount">0</span> selected of {{ agents|length }}
+          </div>
+        </div>
+        <div class="endpoint-grid" id="epGrid">
+          {% for a in agents %}
+          <label class="ep-row" data-host="{{ a.hostname | lower }}">
+            <input type="checkbox" name="agent_ids" value="{{ a.id }}">
+            <span class="host">{{ a.hostname }}</span>
+            <span class="meta">{% if a.last_seen_at %}last seen {{ a.last_seen_at | ist }}{% else %}never{% endif %}</span>
+          </label>
+          {% else %}
+          <p class="meta" style="margin:14px;">No endpoints registered yet.</p>
+          {% endfor %}
+        </div>
       </div>
 
-      <div id="row-pattern" style="display:none;">
-        <label>Hostname pattern (SQL LIKE — <code>%</code> = wildcard)
-          <input type="text" name="hostname_pattern" value="%"
-                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;">
-          <p class="meta" style="margin:4px 0 0;font-size:11.5px;">
-            Examples: <code>%</code> all endpoints · <code>HO-TIPL-LAP-%</code> all HO laptops · <code>Sweety</code> exact match
-          </p>
+      {# Hostname pattern #}
+      <div id="block-pattern" style="display:none;">
+        <label>Hostname pattern <span class="meta">(SQL LIKE — <code>%</code> = wildcard)</span>
+          <input type="text" name="hostname_pattern" value="%" id="fPattern">
         </label>
+        <p class="meta" style="margin-top:6px; font-size:11.5px;">
+          Examples: <code>%</code> all endpoints · <code>HO-TIPL-LAP-%</code> all HO laptops · <code>ENG-WS-%</code> engineering WS
+        </p>
       </div>
 
-      <div class="form-actions" style="margin-top:6px;">
-        <button type="submit" class="primary"
-                onclick="return confirm('Queue this deploy?\n\nAgents pick it up on next 30-second poll and install as SYSTEM — no user prompt on the endpoint.');">
-          Queue deploy →
+      {# All — confirmation block #}
+      <div id="block-all" style="display:none;">
+        <div style="padding:14px; background:#fef9c3; border:1px solid #fde68a; border-radius:var(--r-sm); font-size:13px;">
+          ⚠ This will queue the installer on <strong>every</strong> registered endpoint ({{ agents|length }} total).
+        </div>
+      </div>
+
+      {# Carry-along for single-agent legacy mode (kept hidden, unused unless target_mode=agent) #}
+      <input type="hidden" name="agent_id" value="">
+    </div>
+
+    {# 3. Deploy #}
+    <div class="card" style="max-width:none; background:#f0fdf4; border-color:#bbf7d0;">
+      <h3 style="margin:0 0 10px;">3. Deploy</h3>
+      <p class="meta" style="margin:0 0 10px; font-size:12.5px;">
+        Agents pick up within 30 seconds and install as SYSTEM — no user prompt on the endpoint.
+        Status updates appear in the recent-deploys table below.
+      </p>
+      <div class="form-actions">
+        <button type="submit" class="primary" id="submitBtn"
+                onclick="return confirmDeploy();" style="background:#16a34a; border-color:#16a34a;">
+          ✓ Queue deploy →
         </button>
       </div>
-    </form>
+    </div>
+
   </div>
 
-  <div class="card">
-    <h3 style="margin:0 0 8px;">Quick tips</h3>
-    <ul style="font-size:13px;line-height:1.55;padding-left:20px;margin:0;">
-      <li><strong>.msi files</strong> run via <code>msiexec /i</code>. Default args: <code>/quiet /norestart</code>.</li>
-      <li><strong>.exe installers</strong> use whatever the vendor documents:
-        <ul style="margin:4px 0 0;padding-left:18px;">
-          <li>NSIS (most apps): <code>/S</code></li>
-          <li>InnoSetup: <code>/VERYSILENT /SUPPRESSMSGBOXES /NORESTART</code></li>
-          <li>InstallShield: <code>/s /v"/qn /norestart"</code></li>
-          <li>Adobe / Microsoft custom: see vendor docs</li>
-        </ul>
-      </li>
-      <li><strong>Endpoint must reach the URL</strong> over HTTPS (or HTTP) for the download to succeed.</li>
-      <li>Agent runs as <strong>SYSTEM</strong> — no UAC prompt, no user-side dialog.</li>
-      <li>Status updates within <strong>30 seconds</strong>; result is in the table below.</li>
-    </ul>
-  </div>
+  {# ===== SIDE ===== #}
+  <aside>
+    <div class="card" style="max-width:none; margin-bottom:12px;">
+      <h3 style="margin:0 0 10px; font-size:13px;">💡 Tips</h3>
+      <ul style="font-size:12.5px; line-height:1.55; padding-left:18px; margin:0;">
+        <li><strong>.msi files</strong> default args: <code>/quiet /norestart</code></li>
+        <li><strong>.exe installers:</strong>
+          <ul style="margin:3px 0; padding-left:16px; font-size:12px;">
+            <li>NSIS: <code>/S</code></li>
+            <li>InnoSetup: <code>/VERYSILENT /SUPPRESSMSGBOXES</code></li>
+            <li>InstallShield: <code>/s /v"/qn"</code></li>
+          </ul>
+        </li>
+        <li>Endpoint must reach the URL over HTTPS.</li>
+        <li>Agent runs as <strong>SYSTEM</strong> — no UAC prompt.</li>
+        <li>Status updates within 30 seconds.</li>
+      </ul>
+    </div>
+    <div class="card" style="max-width:none; background:#eff6ff; border-color:#bfdbfe;">
+      <h3 style="margin:0 0 6px; font-size:13px; color:#1e3a8a;">📦 Build your catalog</h3>
+      <p style="margin:0; font-size:12px; color:#1e40af; line-height:1.5;">
+        One-time effort: <a href="/settings/software-catalog" style="font-weight:600;">curate your common installers</a>
+        with their silent args. Future deploys become a 3-click flow.
+      </p>
+    </div>
+  </aside>
 </div>
+</form>
 
 <section style="margin-top:24px;">
   <h2 style="margin:0 0 10px;">Recent deploys</h2>
@@ -134,7 +241,7 @@
         <td><a href="/asset/{{ a.agent_id }}">{{ a.agent.hostname if a.agent else "—" }}</a></td>
         <td>
           <strong>{{ a.params.get('label', '—') }}</strong>
-          <div class="meta" style="font-size:11.5px;word-break:break-all;">{{ a.params.get('url', '')[:80] }}{% if a.params.get('url','')|length > 80 %}…{% endif %}</div>
+          <div class="meta" style="font-size:11.5px; word-break:break-all;">{{ a.params.get('url', '')[:80] }}{% if a.params.get('url','')|length > 80 %}…{% endif %}</div>
         </td>
         <td><code style="font-size:11.5px;">{{ a.params.get('args') or '—' }}</code></td>
         <td>
@@ -160,10 +267,105 @@
 </section>
 
 <script>
-function onTargetModeChange() {
-  var mode = document.getElementById('target-mode').value;
-  document.getElementById('row-agent').style.display   = (mode === 'agent') ? '' : 'none';
-  document.getElementById('row-pattern').style.display = (mode === 'pattern') ? '' : 'none';
-}
+(function(){
+  // ---------- Catalog picker → auto-fill label / url / args ----------
+  var pkgPicker = document.getElementById('pkgPicker');
+  var pkgCard   = document.getElementById('pkgCard');
+  var pkgTitle  = document.getElementById('pkgTitle');
+  var pkgMeta   = document.getElementById('pkgMeta');
+  var fLabel = document.getElementById('fLabel');
+  var fUrl   = document.getElementById('fUrl');
+  var fArgs  = document.getElementById('fArgs');
+  if (pkgPicker) {
+    pkgPicker.addEventListener('change', function(){
+      var opt = pkgPicker.options[pkgPicker.selectedIndex];
+      if (!opt || !opt.value) {
+        pkgCard.classList.remove('show');
+        return;
+      }
+      var name = opt.dataset.name || '';
+      var version = opt.dataset.version || '';
+      var vendor = opt.dataset.vendor || '';
+      var notes = opt.dataset.notes || '';
+      // Auto-fill the ad-hoc fields too — server only reads from those.
+      if (fLabel) fLabel.value = (name + (version ? ' ' + version : '') + (vendor ? ' (' + vendor + ')' : '')).trim();
+      if (fUrl)   fUrl.value   = opt.dataset.url  || '';
+      if (fArgs)  fArgs.value  = opt.dataset.args || '';
+      // Show the green preview card
+      pkgTitle.textContent = name + (version ? ' ' + version : '') + (vendor ? ' · ' + vendor : '');
+      pkgMeta.textContent = (opt.dataset.args ? 'Args: ' + opt.dataset.args + '  ·  ' : '') +
+                            (notes ? notes : 'No notes');
+      pkgCard.classList.add('show');
+    });
+  }
+
+  // ---------- Target-mode tabs ----------
+  var tabs = document.querySelectorAll('.target-tab');
+  var modeInput = document.getElementById('targetMode');
+  function showMode(mode) {
+    modeInput.value = mode;
+    tabs.forEach(function(t){
+      if (t.dataset.mode === mode) t.classList.add('active'); else t.classList.remove('active');
+    });
+    document.getElementById('block-select').style.display  = (mode === 'select')  ? '' : 'none';
+    document.getElementById('block-pattern').style.display = (mode === 'pattern') ? '' : 'none';
+    document.getElementById('block-all').style.display     = (mode === 'all')     ? '' : 'none';
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ showMode(t.dataset.mode); }); });
+
+  // ---------- Multi-select grid: filter + counts + select-all/clear ----------
+  var grid = document.getElementById('epGrid');
+  var filter = document.getElementById('epFilter');
+  var selCount = document.getElementById('selCount');
+  function updateCount() {
+    var n = grid.querySelectorAll('input[name=agent_ids]:checked').length;
+    selCount.textContent = n;
+  }
+  if (grid) grid.addEventListener('change', updateCount);
+  if (filter && grid) filter.addEventListener('input', function(){
+    var q = filter.value.toLowerCase().trim();
+    grid.querySelectorAll('.ep-row').forEach(function(row){
+      var host = row.dataset.host || '';
+      var match = !q || host.indexOf(q) !== -1;
+      row.style.display = match ? '' : 'none';
+      if (!match) row.classList.add('dim'); else row.classList.remove('dim');
+    });
+  });
+  var selAll = document.getElementById('epSelectAll');
+  if (selAll) selAll.addEventListener('click', function(){
+    grid.querySelectorAll('.ep-row').forEach(function(row){
+      if (row.style.display !== 'none') {
+        var cb = row.querySelector('input[type=checkbox]');
+        if (cb) cb.checked = true;
+      }
+    });
+    updateCount();
+  });
+  var clr = document.getElementById('epClear');
+  if (clr) clr.addEventListener('click', function(){
+    grid.querySelectorAll('input[name=agent_ids]:checked').forEach(function(cb){ cb.checked = false; });
+    updateCount();
+  });
+
+  // ---------- Submit guard ----------
+  window.confirmDeploy = function() {
+    var mode = modeInput.value;
+    var url = fUrl.value.trim();
+    var file = document.querySelector('input[type=file][name=installer_file]').files.length;
+    if (!url && !file) {
+      alert('Pick a catalog package OR fill in the ad-hoc URL / file.');
+      return false;
+    }
+    if (mode === 'select') {
+      var n = grid.querySelectorAll('input[name=agent_ids]:checked').length;
+      if (n === 0) { alert('Tick at least one endpoint.'); return false; }
+      return confirm('Queue this deploy on ' + n + ' endpoint' + (n===1?'':'s') + '?\n\nAgents pick it up on next 30-second poll and install as SYSTEM.');
+    }
+    if (mode === 'all') {
+      return confirm('Queue on ALL endpoints (~{{ agents|length }})?\n\nDouble-check the installer first — this hits the entire fleet.');
+    }
+    return confirm('Queue this deploy?\n\nAgents pick it up on next 30-second poll.');
+  };
+})();
 </script>
 {% endblock %}

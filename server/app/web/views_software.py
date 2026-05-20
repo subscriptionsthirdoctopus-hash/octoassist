@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_staff
 from ..database import get_db
-from ..models import Agent, RemoteAction, RemoteActionKind, Tenant, User
+from ..models import Agent, RemoteAction, RemoteActionKind, SoftwarePackage, Tenant, User
 from ..services import charts, remote_actions as ra_svc, sam
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -121,9 +121,13 @@ def software_deploy_form(
                 .order_by(Agent.hostname).all())
     actions = ra_svc.recent(db, tenant_id=user.tenant_id,
                             kind=RemoteActionKind.run_executable, limit=50)
+    catalog = (db.query(SoftwarePackage)
+                 .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                         SoftwarePackage.is_active.is_(True))
+                 .order_by(SoftwarePackage.sort_order, SoftwarePackage.name).all())
     return templates.TemplateResponse(
         request=request, name="software_deploy.html",
-        context=_ctx(user, db, agents=agents, actions=actions,
+        context=_ctx(user, db, agents=agents, actions=actions, catalog=catalog,
                      flash=flash, error=error),
     )
 
@@ -216,6 +220,30 @@ async def software_deploy_submit(
             queued = 1
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+    elif target_mode == "select":
+        # Multi-select: form sends multiple `agent_ids` checkbox values
+        raw_ids = form.getlist("agent_ids") if hasattr(form, "getlist") else []
+        ids: list[int] = []
+        for s in raw_ids:
+            try:
+                ids.append(int(s))
+            except (TypeError, ValueError):
+                pass
+        if not ids:
+            raise HTTPException(status_code=400, detail="Pick at least one endpoint")
+        # Verify tenant ownership in one go, then queue per agent
+        owned = {a.id for a in db.query(Agent.id)
+                                  .filter(Agent.tenant_id == user.tenant_id,
+                                          Agent.id.in_(ids)).all()}
+        for aid in ids:
+            if aid in owned:
+                try:
+                    ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                                 agent_id=aid, kind=RemoteActionKind.run_executable,
+                                 params=params)
+                    queued += 1
+                except ValueError:
+                    continue
     else:
         # 'pattern' or 'all' — both go through queue_for_fleet
         pattern = "%" if target_mode == "all" else (hostname_pattern or "%")

@@ -14,7 +14,7 @@ from ..auth import require_admin
 from ..database import get_db
 from ..models import (
     Agent, Category, CategoryRule, IdentityProvider, IdentityProviderKind, LocationRule,
-    Tenant, TicketKind, TicketPriority, User, UserRole,
+    SoftwarePackage, Tenant, TicketKind, TicketPriority, User, UserRole,
 )
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
 
@@ -57,6 +57,9 @@ def settings_home(
                    .filter(User.tenant_id == user.tenant_id,
                            User.is_cab_member.is_(True),
                            User.is_active.is_(True)).scalar()) or 0
+    catalog_count = (db.query(_f.count(SoftwarePackage.id))
+                       .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                               SoftwarePackage.is_active.is_(True)).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -67,6 +70,7 @@ def settings_home(
             "location_rules_count": int(location_rules_count),
             "category_rules_count": int(category_rules_count),
             "cab_count": int(cab_count),
+            "catalog_count": int(catalog_count),
             "flash": flash,
         },
     )
@@ -764,6 +768,116 @@ def settings_cab_toggle(
     verb = "added to" if target.is_cab_member else "removed from"
     return RedirectResponse(
         url=f"/settings/cab?flash={quote(f'{target.display_name} {verb} CAB')}",
+        status_code=303,
+    )
+
+
+# ---------------------------- Phase L: Software catalog ----------------------------
+
+@router.get("/settings/software-catalog", response_class=HTMLResponse)
+def settings_software_catalog(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    rows = (db.query(SoftwarePackage)
+              .filter(SoftwarePackage.tenant_id == user.tenant_id)
+              .order_by(SoftwarePackage.is_active.desc(),
+                        SoftwarePackage.sort_order, SoftwarePackage.name).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_software_catalog.html",
+        context={"current_user": user, "tenant": db.query(Tenant).first(),
+                 "rows": rows, "flash": flash, "error": error},
+    )
+
+
+@router.post("/settings/software-catalog/new")
+def settings_catalog_new(
+    name: str = Form(...),
+    vendor: str = Form(""),
+    version: str = Form(""),
+    installer_url: str = Form(...),
+    install_args: str = Form(""),
+    uninstall_command: str = Form(""),
+    notes: str = Form(""),
+    sort_order: int = Form(0),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    name = name.strip()[:120]
+    installer_url = installer_url.strip()
+    if not name or not installer_url:
+        return RedirectResponse(
+            url=f"/settings/software-catalog?error={quote('Name and installer URL are required')}",
+            status_code=303,
+        )
+    db.add(SoftwarePackage(
+        tenant_id=user.tenant_id,
+        name=name, vendor=vendor.strip()[:120], version=version.strip()[:60],
+        installer_url=installer_url, install_args=install_args.strip(),
+        uninstall_command=uninstall_command.strip(),
+        notes=notes.strip(), sort_order=sort_order or 0,
+        created_by_id=user.id,
+    ))
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/software-catalog?flash={quote(f'Added: {name}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/software-catalog/{pkg_id}/edit")
+def settings_catalog_edit(
+    pkg_id: int,
+    name: str = Form(...),
+    vendor: str = Form(""),
+    version: str = Form(""),
+    installer_url: str = Form(...),
+    install_args: str = Form(""),
+    uninstall_command: str = Form(""),
+    notes: str = Form(""),
+    sort_order: int = Form(0),
+    is_active: int = Form(0),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    p = db.get(SoftwarePackage, pkg_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    p.name = name.strip()[:120] or p.name
+    p.vendor = vendor.strip()[:120]
+    p.version = version.strip()[:60]
+    p.installer_url = installer_url.strip() or p.installer_url
+    p.install_args = install_args.strip()
+    p.uninstall_command = uninstall_command.strip()
+    p.notes = notes.strip()
+    p.sort_order = sort_order or 0
+    p.is_active = bool(is_active)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/software-catalog?flash={quote(f'Updated: {p.name}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/software-catalog/{pkg_id}/delete")
+def settings_catalog_delete(
+    pkg_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    p = db.get(SoftwarePackage, pkg_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    name = p.name
+    db.delete(p); db.commit()
+    return RedirectResponse(
+        url=f"/settings/software-catalog?flash={quote(f'Deleted: {name}')}",
         status_code=303,
     )
 

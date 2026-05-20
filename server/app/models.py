@@ -1000,3 +1000,47 @@ class ReplyTemplate(Base):
     __table_args__ = (
         Index("ix_reply_templates_tenant_sort", "tenant_id", "sort_order"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Software catalog — pre-curated installers admins push to endpoints.
+# ---------------------------------------------------------------------------
+class SoftwarePackage(Base):
+    """A pre-approved installer the helpdesk can deploy from /software/deploy.
+
+    The point: instead of pasting URL + silent args every time, the team
+    curates a tenant catalog once ('Chrome 130 stable', 'Acrobat Reader DC
+    24.x', 'Cisco AnyConnect 4.10') with vendor / version / install args /
+    optional uninstall string — then deployment is just 'pick a package +
+    pick endpoints + Queue deploy'.
+
+    Managed under /settings/software-catalog.
+    """
+    __tablename__ = "software_packages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    vendor: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    version: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    installer_url: Mapped[str] = mapped_column(Text, nullable=False)
+    install_args: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    uninstall_command: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_software_packages_tenant_active", "tenant_id", "is_active", "sort_order"),
+    )
+
+    @property
+    def display_name(self) -> str:
+        bits = [self.name]
+        if self.version:
+            bits.append(self.version)
+        return " ".join(bits)
