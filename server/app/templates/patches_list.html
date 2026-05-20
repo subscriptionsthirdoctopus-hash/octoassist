@@ -215,7 +215,13 @@
             <span class="status status-in_progress">{{ r.pending_count }} pending</span>
           {% endif %}
           {% if not r.psw_installed and not r.needs_refresh %}
-            <br><span class="meta" style="font-size:11px;">PSWindowsUpdate missing</span>
+            <div style="margin-top:4px; display:flex; flex-direction:column; gap:3px;">
+              <span class="meta" style="font-size:11px;">PSWindowsUpdate missing</span>
+              <form method="post" action="/asset/{{ r.agent_id }}/fix-pswindowsupdate" style="margin:0;"
+                    onsubmit="return confirm('Queue PSWindowsUpdate self-repair on {{ r.hostname|e }}?\n\nRuns as SYSTEM. Re-scans on next slow cycle (5–10 min).');">
+                <button type="submit" class="link-button" style="font-size:11px; color:var(--accent); padding:0;">🔧 Install module</button>
+              </form>
+            </div>
           {% endif %}
         </td>
       </tr>

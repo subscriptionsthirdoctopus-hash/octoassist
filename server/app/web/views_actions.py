@@ -177,6 +177,56 @@ async def asset_action_queue(
     )
 
 
+# ---------- Canned PSWindowsUpdate self-repair ----------
+# Reusable PowerShell that re-bootstraps the PSGallery → NuGet → PSWindowsUpdate
+# chain on endpoints where the original install.ps1 didn't manage to lay it
+# down (TLS 1.2 not set, PSGallery untrusted, AV blocking, etc.). Idempotent.
+_PSW_INSTALL_SCRIPT = r"""
+$ErrorActionPreference = 'Continue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+try { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null } catch { Write-Host "NuGet bootstrap: $($_.Exception.Message)" }
+try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop } catch { Write-Host "PSGallery trust: $($_.Exception.Message)" }
+if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {
+    try { Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop } catch { Write-Host "Install-Module: $($_.Exception.Message)" }
+}
+$mod = Get-Module -ListAvailable PSWindowsUpdate | Select-Object -First 1
+if ($mod) {
+    Write-Host "OK: PSWindowsUpdate $($mod.Version) installed"
+    exit 0
+} else {
+    Write-Error "PSWindowsUpdate still missing after self-repair attempt"
+    exit 2
+}
+""".strip()
+
+
+@router.post("/asset/{agent_id}/fix-pswindowsupdate")
+def asset_fix_psw(
+    agent_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """One-click remediation: queue the PSWindowsUpdate install script as a
+    custom_powershell remote action. Surfaces in the same audit/action log
+    as any other admin-initiated action."""
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    try:
+        action = ra_svc.queue(
+            db, tenant_id=user.tenant_id, creator=user,
+            agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
+            params={"script": _PSW_INSTALL_SCRIPT,
+                    "label": "Self-repair: install PSWindowsUpdate"},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return RedirectResponse(
+        url=f"/asset/{agent_id}/actions?flash=Queued+PSWindowsUpdate+self-repair+(action+%23{action.id})+%E2%80%94+agent+picks+up+within+30+seconds",
+        status_code=303,
+    )
+
+
 # ---------- Per-asset history ----------
 
 @router.get("/asset/{agent_id}/actions", response_class=HTMLResponse)
