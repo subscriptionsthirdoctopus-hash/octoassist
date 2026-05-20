@@ -44,8 +44,10 @@ def _to_ist(value: Any) -> datetime | None:
 
 
 def ist(value: Any) -> str:
+    # India-only deployment — IST is the implicit default everywhere user-
+    # visible. No suffix on the rendered string (was 'YYYY-MM-DD HH:MM IST').
     dt = _to_ist(value)
-    return dt.strftime("%Y-%m-%d %H:%M IST") if dt else "—"
+    return dt.strftime("%Y-%m-%d %H:%M") if dt else "—"
 
 
 def istdate(value: Any) -> str:

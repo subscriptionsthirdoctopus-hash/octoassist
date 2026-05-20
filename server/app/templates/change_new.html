@@ -82,7 +82,7 @@
 
   <label>Impact <span class="meta">(who or what is affected; expected disruption window)</span>
     <textarea name="impact" id="fImpact" rows="3"
-              placeholder="Affected users: 12 design engineers in Bldg-A.&#10;Downtime: ~10 min per workstation while installer runs.&#10;Window: 22:00–23:00 IST, Saturday (off-shift, no SAP transactions expected)."></textarea>
+              placeholder="Affected users: 12 design engineers in Bldg-A.&#10;Downtime: ~10 min per workstation while installer runs.&#10;Window: 22:00–23:00, Saturday (off-shift, no SAP transactions expected)."></textarea>
   </label>
 
   <label>Rollback plan <span class="meta">(THIS is what makes the change CAB-approvable — be specific)</span>
@@ -91,10 +91,10 @@
   </label>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-    <label>Planned start <span class="meta">(IST)</span>
+    <label>Planned start <span class="meta"></span>
       <input type="datetime-local" name="planned_start">
     </label>
-    <label>Planned end <span class="meta">(IST)</span>
+    <label>Planned end <span class="meta"></span>
       <input type="datetime-local" name="planned_end">
     </label>
   </div>
@@ -125,7 +125,7 @@
       type:"standard", risk:"medium",
       title:"Monthly OS patch rollout — [Wave 1 servers]",
       desc:"What:  Apply [YYYY-MM] cumulative OS security patches to [N] Windows servers.\nWhere: [Hostnames or AD group].\nWhy:   Stay current with Microsoft security baseline; close advisories [CVE-...].",
-      impact:"Affected: [N] servers, [services] consumers.\nDowntime: ~5–15 min reboot per host, rolling.\nWindow: [Sat 22:00–02:00 IST].\nUser-visible: brief application slowdown during reboot of [service tier].",
+      impact:"Affected: [N] servers, [services] consumers.\nDowntime: ~5–15 min reboot per host, rolling.\nWindow: [Sat 22:00–02:00].\nUser-visible: brief application slowdown during reboot of [service tier].",
       rollback:"Per-host:\n1. If post-patch boot fails > 10 min, force reboot to last-known-good via iDRAC/iLO.\n2. Roll back patches via 'wusa /uninstall /kb:[KB#]' or 'DISM /Remove-Package'.\n3. Confirm core services start (IIS, SQL, etc.).\n4. If > 2 hosts fail to boot, pause wave and engage vendor support."
     },
     firewall: {
@@ -139,7 +139,7 @@
       type:"normal", risk:"medium",
       title:"Upgrade SAP GUI from [7.70] to [8.00] on [N] workstations",
       desc:"What:  Push SAP GUI [8.00 patch N] silent installer to engineering workstations.\nWhere: [Hostnames or AD OU].\nWhy:   [TLS 1.2 enforcement / vendor end-of-support / new feature].",
-      impact:"Affected: [N] design engineers.\nDowntime: ~10 min per workstation, no reboot.\nWindow: 22:00–23:00 IST, Saturday (off-shift).",
+      impact:"Affected: [N] design engineers.\nDowntime: ~10 min per workstation, no reboot.\nWindow: 22:00–23:00, Saturday (off-shift).",
       rollback:"Per-workstation:\n1. Uninstall SAP GUI 8.00 via Programs & Features.\n2. Re-install 7.70 from \\\\fileserver\\install$\\sap-gui-7.70\\setup.exe.\n3. Confirm login to [SAP-DEV] on port [3200].\n4. If > 3 workstations fail, abort wave and reschedule."
     },
     entra_app: {

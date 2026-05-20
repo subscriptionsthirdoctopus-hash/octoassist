@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ title }} — ISO 27001 reports{% endblock %}
+{% block title %}{{ title }} — Reports{% endblock %}
 {% block content %}
 
 <style>
@@ -21,7 +21,7 @@
 </style>
 
 <section class="rpt-head">
-  <p style="margin:0 0 4px;"><a href="/reports/iso27001" style="color:#1e3a8a; font-size:12px;">← ISO 27001 reports</a></p>
+  <p style="margin:0 0 4px;"><a href="/reports/library" style="color:#1e3a8a; font-size:12px;">← Reports</a></p>
   <p class="ctrl">{{ controls }}</p>
   <h1>{{ title }}</h1>
   <p class="sub">Filter, preview the top 500 rows, then export the full result as CSV for the audit file.</p>
@@ -29,10 +29,10 @@
 
 <form method="get" class="filters">
   {% if date_from is defined and date_from is not none %}
-  <label>From <span class="meta" style="font-weight:400;text-transform:none;letter-spacing:0;">(IST, YYYY-MM-DD)</span>
+  <label>From <span class="meta" style="font-weight:400;text-transform:none;letter-spacing:0;">(YYYY-MM-DD)</span>
     <input type="date" name="date_from" value="{{ date_from }}">
   </label>
-  <label>To <span class="meta" style="font-weight:400;text-transform:none;letter-spacing:0;">(IST, YYYY-MM-DD)</span>
+  <label>To <span class="meta" style="font-weight:400;text-transform:none;letter-spacing:0;">(YYYY-MM-DD)</span>
     <input type="date" name="date_to" value="{{ date_to }}">
   </label>
   {% endif %}
@@ -66,7 +66,7 @@
       <th>Ticket</th><th>Title</th><th>Category</th>
       <th>Priority</th><th>Status</th>
       <th>Reporter</th><th>Assignee</th>
-      <th>Created (IST)</th><th>Resolved (IST)</th>
+      <th>Created</th><th>Resolved</th>
       <th>SLA</th>
     </tr>
   </thead>
@@ -99,7 +99,7 @@
   </tbody>
 
   {% elif row_type == "problem" %}
-  <thead><tr><th>Problem</th><th>Title</th><th>Priority</th><th>Status</th><th>Linked tickets</th><th>Root cause?</th><th>Created (IST)</th></tr></thead>
+  <thead><tr><th>Problem</th><th>Title</th><th>Priority</th><th>Status</th><th>Linked tickets</th><th>Root cause?</th><th>Created</th></tr></thead>
   <tbody>
     {% for p in rows %}
     <tr>
@@ -115,7 +115,7 @@
   </tbody>
 
   {% elif row_type == "change" %}
-  <thead><tr><th>Change</th><th>Title</th><th>Type</th><th>Risk</th><th>Status</th><th>Requester</th><th>CAB approver</th><th>Decision (IST)</th></tr></thead>
+  <thead><tr><th>Change</th><th>Title</th><th>Type</th><th>Risk</th><th>Status</th><th>Requester</th><th>CAB approver</th><th>Decision</th></tr></thead>
   <tbody>
     {% for c in rows %}
     <tr>
@@ -132,7 +132,7 @@
   </tbody>
 
   {% elif row_type == "user" %}
-  <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>CAB</th><th>Dept</th><th>Office</th><th>Created (IST)</th><th>Last login (IST)</th></tr></thead>
+  <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>CAB</th><th>Dept</th><th>Office</th><th>Created</th><th>Last login</th></tr></thead>
   <tbody>
     {% for u in rows %}
     <tr style="{% if not u.is_active %}background:#fef2f2;{% endif %}">
@@ -150,7 +150,7 @@
   </tbody>
 
   {% elif row_type == "agent" %}
-  <thead><tr><th>Hostname</th><th>Machine ID</th><th>Last seen (IST)</th><th>Registered (IST)</th></tr></thead>
+  <thead><tr><th>Hostname</th><th>Machine ID</th><th>Last seen</th><th>Registered</th></tr></thead>
   <tbody>
     {% for a in rows %}
     <tr>
@@ -163,7 +163,7 @@
   </tbody>
 
   {% elif row_type == "kb" %}
-  <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Audience</th><th>Author</th><th>Views</th><th>Updated (IST)</th></tr></thead>
+  <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Audience</th><th>Author</th><th>Views</th><th>Updated</th></tr></thead>
   <tbody>
     {% for a in rows %}
     <tr>
@@ -179,7 +179,7 @@
   </tbody>
 
   {% elif row_type == "patch" %}
-  <thead><tr><th>Hostname</th><th>Package</th><th>Severity</th><th>Source</th><th>Days outstanding</th><th>First seen (IST)</th><th>Resolved (IST)</th></tr></thead>
+  <thead><tr><th>Hostname</th><th>Package</th><th>Severity</th><th>Source</th><th>Days outstanding</th><th>First seen</th><th>Resolved</th></tr></thead>
   <tbody>
     {% for p in rows %}
     <tr>
@@ -195,7 +195,7 @@
   </tbody>
 
   {% elif row_type == "event" %}
-  <thead><tr><th>When (IST)</th><th>Source</th><th>Record</th><th>Event</th><th>Actor</th><th>Note</th></tr></thead>
+  <thead><tr><th>When</th><th>Source</th><th>Record</th><th>Event</th><th>Actor</th><th>Note</th></tr></thead>
   <tbody>
     {% for src, e in rows %}
     <tr>
@@ -240,7 +240,7 @@
   </tbody>
 
   {% elif row_type == "remote_action" %}
-  <thead><tr><th>When (IST)</th><th>Action</th><th>Status</th><th>Endpoint</th><th>By</th><th>Exit</th><th>Finished (IST)</th></tr></thead>
+  <thead><tr><th>When</th><th>Action</th><th>Status</th><th>Endpoint</th><th>By</th><th>Exit</th><th>Finished</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>

@@ -157,7 +157,7 @@
       <tr>
         <th>Hostname</th>
         <th>OS</th>
-        <th>Last scan (IST)</th>
+        <th>Last scan</th>
         <th>Pending</th>
         <th>Critical</th>
         <th>Important</th>
@@ -297,7 +297,7 @@ function confirmQuickDeploy(form, count, title) {
   var when = document.getElementById('qd-scheduled-for').value;
   form.querySelector('input.qd-when').value = when || '';
   if (when) {
-    return confirm('Schedule ' + count + ' ' + title + ' for ' + when.replace('T', ' ') + ' IST?\n\nThe window stays in scheduled state until that time, then auto-promotes to in_progress and agents install on the next 5-min poll.');
+    return confirm('Schedule ' + count + ' ' + title + ' for ' + when.replace('T', ' ') + '?\n\nThe window stays in scheduled state until that time, then auto-promotes to in_progress and agents install on the next 5-min poll.');
   }
   return confirm('Deploy ' + count + ' ' + title + ' now?\n\nThe window goes to in_progress immediately; agents install on the next 5-min poll.');
 }

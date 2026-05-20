@@ -12,6 +12,11 @@ Two surfaces:
 
 Both share the same data services (services/reporting.py + services/charts.py
 + services/patches.py); the difference is framing, filtering, and download.
+
+All timestamps everywhere are rendered in IST (Asia/Kolkata) — no UTC is ever
+shown to the user. Internally datetimes are still stored in UTC; conversion
+happens at the boundary (Jinja `| ist` filter for HTML, `.astimezone(IST)`
+for CSV rows + filename stamps).
 """
 import csv
 import io
@@ -21,7 +26,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from ..jinja_filters import install_on
+from ..jinja_filters import IST, install_on
 from sqlalchemy.orm import Session
 
 from ..auth import require_staff
@@ -229,9 +234,9 @@ def export_tickets_csv(user: User = Depends(require_staff), db: Session = Depend
                 t.status.value,
                 (t.reporter.email if t.reporter else ""),
                 (t.assignee.email if t.assignee else ""),
-                t.created_at.astimezone(timezone.utc).isoformat() if t.created_at else "",
-                t.resolved_at.astimezone(timezone.utc).isoformat() if t.resolved_at else "",
-                t.due_resolution_at.astimezone(timezone.utc).isoformat() if t.due_resolution_at else "",
+                t.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.created_at else "",
+                t.resolved_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.resolved_at else "",
+                t.due_resolution_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.due_resolution_at else "",
             ]
     return _stream_csv(
         gen(),
@@ -264,8 +269,8 @@ def export_assets_csv(user: User = Depends(require_staff), db: Session = Depends
             yield [
                 a.hostname, a.machine_id, os_caption, cpu, ram,
                 disk_total, disk_free, user_logged, sw_count,
-                a.last_seen_at.astimezone(timezone.utc).isoformat() if a.last_seen_at else "",
-                a.registered_at.astimezone(timezone.utc).isoformat() if a.registered_at else "",
+                a.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.last_seen_at else "",
+                a.registered_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.registered_at else "",
             ]
     return _stream_csv(
         gen(),
@@ -289,11 +294,11 @@ def export_changes_csv(user: User = Depends(require_staff), db: Session = Depend
                 (c.requester.email if c.requester else ""),
                 (c.implementer.email if c.implementer else ""),
                 (c.cab_approver.email if c.cab_approver else ""),
-                c.planned_start.astimezone(timezone.utc).isoformat() if c.planned_start else "",
-                c.planned_end.astimezone(timezone.utc).isoformat() if c.planned_end else "",
-                c.actual_start.astimezone(timezone.utc).isoformat() if c.actual_start else "",
-                c.actual_end.astimezone(timezone.utc).isoformat() if c.actual_end else "",
-                c.created_at.astimezone(timezone.utc).isoformat() if c.created_at else "",
+                c.planned_start.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.planned_start else "",
+                c.planned_end.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.planned_end else "",
+                c.actual_start.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.actual_start else "",
+                c.actual_end.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.actual_end else "",
+                c.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
             ]
     return _stream_csv(
         gen(),
@@ -307,9 +312,9 @@ def export_changes_csv(user: User = Depends(require_staff), db: Session = Depend
 # ===========================================================================
 # Reports library — every downloadable ITSM report, grouped by domain.
 #
-# Each entry exposes an HTML preview page + a CSV download. CSVs use UTC
-# ISO-8601 timestamps and are filename-stamped so they drop straight into
-# an audit folder. ISO 27001:2022 Annex A control refs are kept as small
+# Each entry exposes an HTML preview page + a CSV download. All timestamps
+# everywhere — preview, CSV rows, filenames — are in IST. No UTC anywhere
+# user-visible. ISO 27001:2022 Annex A control refs are kept as small
 # secondary metadata where they apply — they explain WHY auditors care,
 # but the report title stays plain-English.
 # ===========================================================================
@@ -537,8 +542,8 @@ def iso_incidents_csv(
     rows = _incidents_query(db, user.tenant_id, df, dt, status).all()
     def gen():
         for t in rows:
-            resolved = t.resolved_at.astimezone(timezone.utc).isoformat() if t.resolved_at else ""
-            due = t.due_resolution_at.astimezone(timezone.utc).isoformat() if t.due_resolution_at else ""
+            resolved = t.resolved_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.resolved_at else ""
+            due = t.due_resolution_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.due_resolution_at else ""
             sla_state = ""
             if t.resolved_at and t.due_resolution_at:
                 sla_state = "within" if t.resolved_at <= t.due_resolution_at else "breached"
@@ -552,16 +557,16 @@ def iso_incidents_csv(
                 (t.reporter.email if t.reporter else ""),
                 (t.assignee.email if t.assignee else ""),
                 (t.location or ""),
-                t.created_at.astimezone(timezone.utc).isoformat() if t.created_at else "",
-                t.first_response_at.astimezone(timezone.utc).isoformat() if t.first_response_at else "",
+                t.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.created_at else "",
+                t.first_response_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.first_response_at else "",
                 resolved, due, sla_state,
             ]
     return _stream_csv(
         gen(),
         ["ticket_number","category","title","priority","status",
          "reporter","assignee","location",
-         "created_at_utc","first_response_at_utc","resolved_at_utc","due_resolution_at_utc","sla_state"],
-        filename=f"iso27001-A.5.24-incidents-{datetime.utcnow():%Y%m%d}.csv",
+         "created_at","first_response_at","resolved_at","due_resolution_at","sla_state"],
+        filename=f"iso27001-A.5.24-incidents-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -626,14 +631,14 @@ def iso_problems_csv(
                 len(p.linked_tickets),
                 (p.workaround or "")[:1000].replace("\n", " ↵ "),
                 (p.root_cause or "")[:2000].replace("\n", " ↵ "),
-                p.created_at.astimezone(timezone.utc).isoformat() if p.created_at else "",
-                p.updated_at.astimezone(timezone.utc).isoformat() if p.updated_at else "",
+                p.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
+                p.updated_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.updated_at else "",
             ]
     return _stream_csv(
         gen(),
         ["problem_number","title","priority","status","reporter","assignee",
-         "linked_ticket_count","workaround","root_cause","created_at_utc","updated_at_utc"],
-        filename=f"iso27001-A.5.27-problems-{datetime.utcnow():%Y%m%d}.csv",
+         "linked_ticket_count","workaround","root_cause","created_at","updated_at"],
+        filename=f"iso27001-A.5.27-problems-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -695,7 +700,7 @@ def iso_audit_trail_csv(
         for source, e in events:
             ref = e.ticket.ticket_number if source == "ticket" else e.change.change_number
             yield [
-                e.created_at.astimezone(timezone.utc).isoformat() if e.created_at else "",
+                e.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
                 source, ref, e.kind.value,
                 (e.actor.email if e.actor else "system"),
                 (e.note or ""),
@@ -704,8 +709,8 @@ def iso_audit_trail_csv(
             ]
     return _stream_csv(
         gen(),
-        ["when_utc","source","record","event","actor","note","before_json","after_json"],
-        filename=f"iso27001-A.5.28-audit-trail-{datetime.utcnow():%Y%m%d}.csv",
+        ["when","source","record","event","actor","note","before_json","after_json"],
+        filename=f"iso27001-A.5.28-audit-trail-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -750,15 +755,15 @@ def iso_access_csv(
                 "yes" if u.is_cab_member else "no",
                 (u.department or ""), (u.location or ""),
                 (u.entra_oid or ""),  # presence = federated, absence = local-only
-                u.created_at.astimezone(timezone.utc).isoformat() if u.created_at else "",
-                u.last_login_at.astimezone(timezone.utc).isoformat() if u.last_login_at else "",
-                u.synced_at.astimezone(timezone.utc).isoformat() if u.synced_at else "",
+                u.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.created_at else "",
+                u.last_login_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.last_login_at else "",
+                u.synced_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.synced_at else "",
             ]
     return _stream_csv(
         gen(),
         ["email","name","role","status","is_cab","department","location",
-         "entra_oid","created_at_utc","last_login_utc","synced_from_entra_utc"],
-        filename=f"iso27001-A.5.16-access-register-{datetime.utcnow():%Y%m%d}.csv",
+         "entra_oid","created_at","last_login","synced_from_entra"],
+        filename=f"iso27001-A.5.16-access-register-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -812,14 +817,14 @@ def iso_assets_csv(
             yield [
                 a.hostname, a.machine_id, os_caption, cpu, ram,
                 disk_total, user_logged, sw_count,
-                a.last_seen_at.astimezone(timezone.utc).isoformat() if a.last_seen_at else "",
-                a.registered_at.astimezone(timezone.utc).isoformat() if a.registered_at else "",
+                a.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.last_seen_at else "",
+                a.registered_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.registered_at else "",
             ]
     return _stream_csv(
         gen(),
         ["hostname","machine_id","os","cpu","ram_gb","disk_total_gb",
-         "logged_in_user","software_count","last_seen_utc","registered_at_utc"],
-        filename=f"iso27001-A.5.9-asset-inventory-{datetime.utcnow():%Y%m%d}.csv",
+         "logged_in_user","software_count","last_seen","registered_at"],
+        filename=f"iso27001-A.5.9-asset-inventory-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -863,15 +868,15 @@ def iso_kb_csv(
                 (a.category.name if a.category else ""),
                 a.status.value, a.visibility.value,
                 (a.author.email if a.author else ""), a.view_count,
-                a.created_at.astimezone(timezone.utc).isoformat() if a.created_at else "",
-                a.updated_at.astimezone(timezone.utc).isoformat() if a.updated_at else "",
-                a.published_at.astimezone(timezone.utc).isoformat() if a.published_at else "",
+                a.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.created_at else "",
+                a.updated_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.updated_at else "",
+                a.published_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.published_at else "",
             ]
     return _stream_csv(
         gen(),
         ["slug","title","category","status","audience","author","view_count",
-         "created_at_utc","updated_at_utc","published_at_utc"],
-        filename=f"iso27001-A.5.37-kb-procedures-{datetime.utcnow():%Y%m%d}.csv",
+         "created_at","updated_at","published_at"],
+        filename=f"iso27001-A.5.37-kb-procedures-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -936,22 +941,22 @@ def iso_changes_csv(
                 (c.requester.email if c.requester else ""),
                 (c.implementer.email if c.implementer else ""),
                 (c.cab_approver.email if c.cab_approver else ""),
-                c.cab_decision_at.astimezone(timezone.utc).isoformat() if c.cab_decision_at else "",
+                c.cab_decision_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.cab_decision_at else "",
                 (c.cab_decision_note or "")[:500].replace("\n", " ↵ "),
-                c.planned_start.astimezone(timezone.utc).isoformat() if c.planned_start else "",
-                c.planned_end.astimezone(timezone.utc).isoformat() if c.planned_end else "",
-                c.actual_start.astimezone(timezone.utc).isoformat() if c.actual_start else "",
-                c.actual_end.astimezone(timezone.utc).isoformat() if c.actual_end else "",
+                c.planned_start.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.planned_start else "",
+                c.planned_end.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.planned_end else "",
+                c.actual_start.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.actual_start else "",
+                c.actual_end.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.actual_end else "",
                 (c.rollback_plan or "")[:1000].replace("\n", " ↵ "),
-                c.created_at.astimezone(timezone.utc).isoformat() if c.created_at else "",
+                c.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
             ]
     return _stream_csv(
         gen(),
         ["change_number","title","type","risk","status","requester","implementer",
-         "cab_approver","cab_decision_at_utc","cab_decision_note",
-         "planned_start_utc","planned_end_utc","actual_start_utc","actual_end_utc",
-         "rollback_plan","created_at_utc"],
-        filename=f"iso27001-A.8.32-changes-{datetime.utcnow():%Y%m%d}.csv",
+         "cab_approver","cab_decision_at","cab_decision_note",
+         "planned_start","planned_end","actual_start","actual_end",
+         "rollback_plan","created_at"],
+        filename=f"iso27001-A.8.32-changes-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1016,15 +1021,15 @@ def iso_patches_csv(
                 p.package_name, p.current_version or "", p.available_version or "",
                 p.severity.value, p.source, (p.title or "")[:200],
                 age_days,
-                p.first_seen_at.astimezone(timezone.utc).isoformat() if p.first_seen_at else "",
-                p.last_seen_at.astimezone(timezone.utc).isoformat() if p.last_seen_at else "",
-                p.resolved_at.astimezone(timezone.utc).isoformat() if p.resolved_at else "",
+                p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.first_seen_at else "",
+                p.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.last_seen_at else "",
+                p.resolved_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.resolved_at else "",
             ]
     return _stream_csv(
         gen(),
         ["hostname","package","current_version","available_version","severity",
-         "source","title","days_outstanding","first_seen_utc","last_seen_utc","resolved_at_utc"],
-        filename=f"iso27001-A.8.8-patch-compliance-{datetime.utcnow():%Y%m%d}.csv",
+         "source","title","days_outstanding","first_seen","last_seen","resolved_at"],
+        filename=f"iso27001-A.8.8-patch-compliance-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1046,10 +1051,10 @@ def _ticket_row(t):
         (t.reporter.email if t.reporter else ""),
         (t.assignee.email if t.assignee else ""),
         (t.location or ""),
-        t.created_at.astimezone(timezone.utc).isoformat() if t.created_at else "",
-        t.first_response_at.astimezone(timezone.utc).isoformat() if t.first_response_at else "",
-        t.resolved_at.astimezone(timezone.utc).isoformat() if t.resolved_at else "",
-        t.due_resolution_at.astimezone(timezone.utc).isoformat() if t.due_resolution_at else "",
+        t.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.created_at else "",
+        t.first_response_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.first_response_at else "",
+        t.resolved_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.resolved_at else "",
+        t.due_resolution_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if t.due_resolution_at else "",
         sla_state,
     ]
 
@@ -1057,7 +1062,7 @@ def _ticket_row(t):
 _TICKET_HEADERS = [
     "ticket_number","kind","category","title","priority","status",
     "reporter","assignee","location",
-    "created_at_utc","first_response_at_utc","resolved_at_utc","due_resolution_at_utc","sla_state",
+    "created_at","first_response_at","resolved_at","due_resolution_at","sla_state",
 ]
 
 
@@ -1114,7 +1119,7 @@ def lib_tickets_csv(
     return _stream_csv(
         (_ticket_row(t) for t in rows),
         _TICKET_HEADERS,
-        filename=f"tickets-all-{datetime.utcnow():%Y%m%d}.csv",
+        filename=f"tickets-all-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1173,7 +1178,7 @@ def lib_service_requests_csv(
     return _stream_csv(
         (_ticket_row(t) for t in rows),
         _TICKET_HEADERS,
-        filename=f"service-requests-{datetime.utcnow():%Y%m%d}.csv",
+        filename=f"service-requests-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1234,7 +1239,7 @@ def lib_sla_breaches_csv(
     rows = _sla_breach_query(db, user.tenant_id, df, dt).all()
     return _stream_csv(
         (_ticket_row(t) for t in rows), _TICKET_HEADERS,
-        filename=f"sla-breaches-{datetime.utcnow():%Y%m%d}.csv",
+        filename=f"sla-breaches-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1285,7 +1290,7 @@ def lib_backlog_csv(
             yield row
     return _stream_csv(
         gen(), _TICKET_HEADERS + ["age_days","age_bucket"],
-        filename=f"backlog-aging-{datetime.utcnow():%Y%m%d}.csv",
+        filename=f"backlog-aging-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1360,7 +1365,7 @@ def lib_workload_csv(
     return _stream_csv(
         gen(),
         ["email","name","role","open_count","low","medium","high","critical"],
-        filename=f"workload-{datetime.utcnow():%Y%m%d}.csv",
+        filename=f"workload-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1420,7 +1425,7 @@ def lib_top_reporters_csv(
     return _stream_csv(
         gen(),
         ["email","name","department","location","ticket_count"],
-        filename=f"top-reporters-{datetime.utcnow():%Y%m%d}.csv",
+        filename=f"top-reporters-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1466,14 +1471,14 @@ def lib_known_errors_csv(
                 len(p.linked_tickets),
                 (p.workaround or "")[:1000].replace("\n", " ↵ "),
                 (p.root_cause or "")[:2000].replace("\n", " ↵ "),
-                p.created_at.astimezone(timezone.utc).isoformat() if p.created_at else "",
-                p.updated_at.astimezone(timezone.utc).isoformat() if p.updated_at else "",
+                p.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
+                p.updated_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.updated_at else "",
             ]
     return _stream_csv(
         gen(),
         ["problem_number","title","priority","status","linked_ticket_count",
-         "workaround","root_cause","created_at_utc","updated_at_utc"],
-        filename=f"kedb-{datetime.utcnow():%Y%m%d}.csv",
+         "workaround","root_cause","created_at","updated_at"],
+        filename=f"kedb-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1517,15 +1522,15 @@ def lib_failed_changes_csv(
                 (c.requester.email if c.requester else ""),
                 (c.implementer.email if c.implementer else ""),
                 (c.cab_approver.email if c.cab_approver else ""),
-                c.actual_start.astimezone(timezone.utc).isoformat() if c.actual_start else "",
-                c.actual_end.astimezone(timezone.utc).isoformat() if c.actual_end else "",
+                c.actual_start.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.actual_start else "",
+                c.actual_end.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.actual_end else "",
                 (c.rollback_plan or "")[:1000].replace("\n", " ↵ "),
             ]
     return _stream_csv(
         gen(),
         ["change_number","title","type","risk","requester","implementer",
-         "cab_approver","actual_start_utc","actual_end_utc","rollback_plan"],
-        filename=f"failed-changes-{datetime.utcnow():%Y%m%d}.csv",
+         "cab_approver","actual_start","actual_end","rollback_plan"],
+        filename=f"failed-changes-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1568,15 +1573,15 @@ def lib_emergency_changes_csv(
                 c.change_number, c.title, c.risk.value, c.status.value,
                 (c.requester.email if c.requester else ""),
                 (c.cab_approver.email if c.cab_approver else ""),
-                c.cab_decision_at.astimezone(timezone.utc).isoformat() if c.cab_decision_at else "",
+                c.cab_decision_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.cab_decision_at else "",
                 (c.cab_decision_note or "")[:500].replace("\n", " ↵ "),
-                c.created_at.astimezone(timezone.utc).isoformat() if c.created_at else "",
+                c.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
             ]
     return _stream_csv(
         gen(),
         ["change_number","title","risk","status","requester","cab_approver",
-         "cab_decision_at_utc","cab_decision_note","created_at_utc"],
-        filename=f"emergency-changes-{datetime.utcnow():%Y%m%d}.csv",
+         "cab_decision_at","cab_decision_note","created_at"],
+        filename=f"emergency-changes-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1624,14 +1629,14 @@ def lib_cab_decisions_csv(
                 decision,
                 (c.requester.email if c.requester else ""),
                 (c.cab_approver.email if c.cab_approver else ""),
-                c.cab_decision_at.astimezone(timezone.utc).isoformat() if c.cab_decision_at else "",
+                c.cab_decision_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if c.cab_decision_at else "",
                 (c.cab_decision_note or "")[:500].replace("\n", " ↵ "),
             ]
     return _stream_csv(
         gen(),
         ["change_number","title","type","risk","decision",
-         "requester","cab_approver","cab_decision_at_utc","cab_decision_note"],
-        filename=f"cab-decisions-{datetime.utcnow():%Y%m%d}.csv",
+         "requester","cab_approver","cab_decision_at","cab_decision_note"],
+        filename=f"cab-decisions-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1683,13 +1688,13 @@ def lib_stale_assets_csv(
                           if a.last_seen_at else "never-checked-in")
             yield [
                 a.hostname, a.machine_id, stale_days,
-                a.last_seen_at.astimezone(timezone.utc).isoformat() if a.last_seen_at else "",
-                a.registered_at.astimezone(timezone.utc).isoformat() if a.registered_at else "",
+                a.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.last_seen_at else "",
+                a.registered_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.registered_at else "",
             ]
     return _stream_csv(
         gen(),
-        ["hostname","machine_id","stale_days","last_seen_utc","registered_at_utc"],
-        filename=f"stale-assets-{datetime.utcnow():%Y%m%d}.csv",
+        ["hostname","machine_id","stale_days","last_seen","registered_at"],
+        filename=f"stale-assets-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1737,14 +1742,14 @@ def lib_critical_patches_csv(
                 p.agent.hostname if p.agent else "",
                 p.package_name, p.current_version or "", p.available_version or "",
                 p.severity.value, p.source, (p.title or "")[:200], age_days,
-                p.first_seen_at.astimezone(timezone.utc).isoformat() if p.first_seen_at else "",
-                p.last_seen_at.astimezone(timezone.utc).isoformat() if p.last_seen_at else "",
+                p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.first_seen_at else "",
+                p.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.last_seen_at else "",
             ]
     return _stream_csv(
         gen(),
         ["hostname","package","current_version","available_version","severity",
-         "source","title","days_outstanding","first_seen_utc","last_seen_utc"],
-        filename=f"critical-patches-{datetime.utcnow():%Y%m%d}.csv",
+         "source","title","days_outstanding","first_seen","last_seen"],
+        filename=f"critical-patches-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1796,13 +1801,13 @@ def lib_aged_patches_csv(
                 p.agent.hostname if p.agent else "",
                 p.package_name, p.severity.value,
                 age_days,
-                p.first_seen_at.astimezone(timezone.utc).isoformat() if p.first_seen_at else "",
-                p.last_seen_at.astimezone(timezone.utc).isoformat() if p.last_seen_at else "",
+                p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.first_seen_at else "",
+                p.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if p.last_seen_at else "",
             ]
     return _stream_csv(
         gen(),
-        ["hostname","package","severity","days_outstanding","first_seen_utc","last_seen_utc"],
-        filename=f"aged-patches-gt{days}d-{datetime.utcnow():%Y%m%d}.csv",
+        ["hostname","package","severity","days_outstanding","first_seen","last_seen"],
+        filename=f"aged-patches-gt{days}d-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1858,14 +1863,14 @@ def lib_inactive_users_csv(
                 u.email, (u.full_name or ""), u.role.value,
                 inactive_days,
                 (u.department or ""), (u.location or ""),
-                u.last_login_at.astimezone(timezone.utc).isoformat() if u.last_login_at else "",
-                u.created_at.astimezone(timezone.utc).isoformat() if u.created_at else "",
+                u.last_login_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.last_login_at else "",
+                u.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.created_at else "",
             ]
     return _stream_csv(
         gen(),
         ["email","name","role","inactive_days","department","location",
-         "last_login_utc","created_at_utc"],
-        filename=f"inactive-users-{days}d-{datetime.utcnow():%Y%m%d}.csv",
+         "last_login","created_at"],
+        filename=f"inactive-users-{days}d-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1909,14 +1914,14 @@ def lib_admin_roster_csv(
                 "active" if u.is_active else "deactivated",
                 "yes" if u.is_cab_member else "no",
                 (u.department or ""), (u.location or ""),
-                u.last_login_at.astimezone(timezone.utc).isoformat() if u.last_login_at else "",
-                u.created_at.astimezone(timezone.utc).isoformat() if u.created_at else "",
+                u.last_login_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.last_login_at else "",
+                u.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if u.created_at else "",
             ]
     return _stream_csv(
         gen(),
         ["email","name","role","status","is_cab","department","location",
-         "last_login_utc","created_at_utc"],
-        filename=f"admin-roster-{datetime.utcnow():%Y%m%d}.csv",
+         "last_login","created_at"],
+        filename=f"admin-roster-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -1959,14 +1964,14 @@ def lib_kb_usage_csv(
                 a.status.value, a.visibility.value,
                 a.view_count,
                 (a.author.email if a.author else ""),
-                a.updated_at.astimezone(timezone.utc).isoformat() if a.updated_at else "",
-                a.published_at.astimezone(timezone.utc).isoformat() if a.published_at else "",
+                a.updated_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.updated_at else "",
+                a.published_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if a.published_at else "",
             ]
     return _stream_csv(
         gen(),
         ["slug","title","category","status","audience","views","author",
-         "updated_at_utc","published_at_utc"],
-        filename=f"kb-usage-{datetime.utcnow():%Y%m%d}.csv",
+         "updated_at","published_at"],
+        filename=f"kb-usage-{datetime.now(IST):%Y%m%d}.csv",
     )
 
 
@@ -2023,17 +2028,17 @@ def lib_remote_actions_csv(
     def gen():
         for r in rows:
             yield [
-                r.created_at.astimezone(timezone.utc).isoformat() if r.created_at else "",
+                r.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
                 r.kind.value, r.status.value,
                 (r.agent.hostname if r.agent else ""),
                 (r.created_by.email if r.created_by else "system"),
                 r.exit_code if r.exit_code is not None else "",
-                r.started_at.astimezone(timezone.utc).isoformat() if r.started_at else "",
-                r.finished_at.astimezone(timezone.utc).isoformat() if r.finished_at else "",
+                r.started_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if r.started_at else "",
+                r.finished_at.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if r.finished_at else "",
             ]
     return _stream_csv(
         gen(),
-        ["created_at_utc","kind","status","hostname","actor","exit_code",
-         "started_at_utc","finished_at_utc"],
-        filename=f"remote-actions-{datetime.utcnow():%Y%m%d}.csv",
+        ["created_at","kind","status","hostname","actor","exit_code",
+         "started_at","finished_at"],
+        filename=f"remote-actions-{datetime.now(IST):%Y%m%d}.csv",
     )
