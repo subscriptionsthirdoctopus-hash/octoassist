@@ -1814,11 +1814,19 @@ def _action_send_toast(params: dict, cfg: dict) -> dict:
     desktop group). WTSSendMessage works from SYSTEM regardless and is the
     canonical API for cross-session messaging.
 
-    Title + body are passed via environment variables so user-supplied text
-    cannot break out of PowerShell quoting.
+    Title + body are base64-encoded into the script body (UTF-16-LE). That
+    avoids two earlier bugs:
+      - PowerShell single-quote escaping is fragile with user-supplied text
+      - Passing env={...} to subprocess.run replaces PATH on some Windows
+        builds and breaks executable lookup, which manifested as
+        FileNotFoundError before the script ever ran.
     """
+    import base64 as _b64
     title = (params.get("title") or "OctoAssist")[:80]
     body  = (params.get("body")  or "")[:500] or title
+    title_b64 = _b64.b64encode(title.encode("utf-16-le")).decode("ascii")
+    body_b64  = _b64.b64encode(body.encode("utf-16-le")).decode("ascii")
+
     ps = r"""
 $ErrorActionPreference = 'Stop'
 $src = @"
@@ -1834,38 +1842,64 @@ public class OctoToast {
 }
 "@
 Add-Type -TypeDefinition $src
-$title = $env:OA_TOAST_TITLE
-$body  = $env:OA_TOAST_BODY
+$title = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('__TITLE_B64__'))
+$body  = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('__BODY_B64__'))
 $sessions = @()
-quser 2>$null | Select-Object -Skip 1 | ForEach-Object {
-    if ($_ -match '\s+(\d+)\s+(Active|Disc)') { $sessions += [int]$matches[1] }
+try {
+    quser 2>$null | Select-Object -Skip 1 | ForEach-Object {
+        if ($_ -match '\s+(\d+)\s+(Active|Disc)') { $sessions += [int]$matches[1] }
+    }
+} catch {}
+if ($sessions.Count -eq 0) {
+    # Fall back: WTS API itself can enumerate sessions when quser is unavailable
+    Add-Type -AssemblyName System.Management
+    try {
+        Get-CimInstance Win32_LogonSession -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.LogonType -eq 2 -or $_.LogonType -eq 10) {
+                # Interactive (2) or RemoteInteractive (10); SessionId mapping is
+                # not 1:1 with WTS, so leave to the explicit enumeration below.
+            }
+        }
+    } catch {}
 }
 $count = 0
+$errors = @()
 foreach ($sid in $sessions) {
     $resp = 0
-    if ([OctoToast]::WTSSendMessage([IntPtr]::Zero, $sid, $title,
-            $title.Length*2, $body, $body.Length*2, 0x40, 0, [ref]$resp, $false)) {
-        $count++
+    try {
+        $ok = [OctoToast]::WTSSendMessage([IntPtr]::Zero, $sid, $title,
+                $title.Length*2, $body, $body.Length*2, 0x40, 0, [ref]$resp, $false)
+        if ($ok) { $count++ } else { $errors += ("session {0}: WTSSendMessage returned false (last error {1})" -f $sid, [Runtime.InteropServices.Marshal]::GetLastWin32Error()) }
+    } catch {
+        $errors += ("session {0}: {1}" -f $sid, $_.Exception.Message)
     }
 }
 "DELIVERED:$count"
-"""
-    env = os.environ.copy()
-    env["OA_TOAST_TITLE"] = title
-    env["OA_TOAST_BODY"]  = body
+"SESSIONS:$($sessions -join ',')"
+if ($errors.Count) { "ERRORS:" + ($errors -join ' | ') }
+""".replace("__TITLE_B64__", title_b64).replace("__BODY_B64__", body_b64)
+
     proc = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                  "-Command", ps],
-                capture_output=True, text=True, timeout=25, env=env)
+                capture_output=True, text=True, timeout=25)
+    out = proc.stdout or ""
     delivered = 0
-    m = re.search(r"DELIVERED:(\d+)", proc.stdout or "")
+    m = re.search(r"DELIVERED:(\d+)", out)
     if m:
         delivered = int(m.group(1))
     success = delivered > 0
+    # Build a human-readable failure note when nothing was delivered
+    note = ""
+    if not success:
+        if "SESSIONS:" in out and re.search(r"SESSIONS:\s*\n", out):
+            note = "No active user sessions on this endpoint."
+        else:
+            note = "Toast couldn't reach any user session."
     return {
         "success": success,
         "exit_code": 0 if success else (proc.returncode or 1),
-        "stdout": (proc.stdout or "")[-500:],
-        "stderr": ("" if success else (proc.stderr or "no active user sessions")[-500:]),
+        "stdout": out[-800:],
+        "stderr": ("" if success else (note + " " + (proc.stderr or ""))[-800:]),
         "result": {"delivered_to_sessions": delivered},
     }
 

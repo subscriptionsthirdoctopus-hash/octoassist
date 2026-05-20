@@ -604,6 +604,88 @@ async def sla_save(
     )
 
 
+@router.post("/settings/sla/new")
+def sla_new_category(
+    name: str = Form(...),
+    kind: str = Form("incident"),
+    default_priority: str = Form("medium"),
+    sla_response_minutes: int = Form(240),
+    sla_resolution_minutes: int = Form(1440),
+    requires_approval: int = Form(0),
+    description: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin creates a new ticket category. Surfaces immediately in the
+    portal new-ticket form + the SLA matrix."""
+    from urllib.parse import quote
+    name = name.strip()[:120]
+    if not name:
+        return RedirectResponse(
+            url=f"/settings/sla?flash={quote('Name is required')}",
+            status_code=303,
+        )
+    try:
+        k = TicketKind(kind)
+    except ValueError:
+        k = TicketKind.incident
+    try:
+        p = TicketPriority(default_priority)
+    except ValueError:
+        p = TicketPriority.medium
+    # Block duplicate (same name + kind in same tenant)
+    dup = (db.query(Category)
+             .filter(Category.tenant_id == user.tenant_id,
+                     Category.kind == k,
+                     Category.name.ilike(name))
+             .first())
+    if dup is not None:
+        return RedirectResponse(
+            url=f"/settings/sla?flash={quote(f'Category already exists: {name} ({k.value})')}",
+            status_code=303,
+        )
+    db.add(Category(
+        tenant_id=user.tenant_id, name=name, kind=k,
+        description=description.strip(),
+        default_priority=p,
+        sla_response_minutes=max(1, int(sla_response_minutes or 240)),
+        sla_resolution_minutes=max(1, int(sla_resolution_minutes or 1440)),
+        requires_approval=bool(requires_approval),
+        is_active=True,
+    ))
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/sla?flash={quote(f'Added category: {name} ({k.value})')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/sla/{cat_id}/delete")
+def sla_delete_category(
+    cat_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a category. Refuses if any tickets reference it — recommends
+    deactivating instead (toggle the Active checkbox on the SLA matrix)."""
+    from urllib.parse import quote
+    c = db.get(Category, cat_id)
+    if c is None or c.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    name = c.name
+    # Refuse if tickets exist — deactivation is the right move here
+    if c.tickets:
+        return RedirectResponse(
+            url=f"/settings/sla?flash={quote(f'{name} has {len(c.tickets)} ticket(s); deactivate it instead (untick Active and Save)')}",
+            status_code=303,
+        )
+    db.delete(c); db.commit()
+    return RedirectResponse(
+        url=f"/settings/sla?flash={quote(f'Deleted category: {name}')}",
+        status_code=303,
+    )
+
+
 @router.post("/settings/tenant/notification-email")
 def set_notification_email(
     notification_email: str = Form(""),
