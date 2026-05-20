@@ -25,6 +25,50 @@
 {% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
 {% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
 
+<style>
+  .conn-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+  .conn-tile { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:12px 14px; box-shadow:var(--shadow-1); display:flex; flex-direction:column; gap:2px; text-decoration:none; color:inherit; transition:border-color .12s, box-shadow .12s; }
+  .conn-tile:hover { border-color:var(--line-strong); box-shadow:var(--shadow-2); text-decoration:none; }
+  .conn-tile .kpi-label { font-size:11px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.6px; }
+  .conn-tile .kpi-val { font-size:22px; font-weight:700; color:var(--text-1); line-height:1.1; letter-spacing:-0.01em; }
+  .conn-tile.online   { border-left:3px solid #16a34a; }
+  .conn-tile.lagging  { border-left:3px solid #d97706; }
+  .conn-tile.offline  { border-left:3px solid #dc2626; }
+  .conn-tile.offline.alert { background:linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%); }
+
+  .online-dot { display:inline-block; width:8px; height:8px; border-radius:50%; vertical-align:middle; margin-right:6px; }
+  .online-dot.online  { background:#16a34a; box-shadow:0 0 0 2px rgba(22,163,74,0.18); }
+  .online-dot.lagging { background:#d97706; }
+  .online-dot.offline { background:#dc2626; }
+  tr.row-offline > td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
+</style>
+
+<div class="conn-strip">
+  <a class="conn-tile online" href="/assets?online=online">
+    <span class="kpi-label">🟢 Online</span>
+    <span class="kpi-val">{{ online_count }}</span>
+  </a>
+  <a class="conn-tile lagging" href="/assets?online=lagging">
+    <span class="kpi-label">🟡 Lagging ({{ lagging_threshold_hours }}h+)</span>
+    <span class="kpi-val">{{ lagging_count }}</span>
+  </a>
+  <a class="conn-tile offline {% if offline_count > 0 %}alert{% endif %}" href="/assets?online=offline">
+    <span class="kpi-label">🔴 Offline ({{ offline_threshold_hours }}h+)</span>
+    <span class="kpi-val">{{ offline_count }}</span>
+  </a>
+  <a class="conn-tile" href="/assets" style="border-left:3px solid var(--text-3);">
+    <span class="kpi-label">All managed</span>
+    <span class="kpi-val">{{ online_count + lagging_count + offline_count }}</span>
+  </a>
+</div>
+
+{% if filter_online %}
+<div class="alert info" style="margin-bottom:12px;">
+  Filtering by <strong>{{ filter_online }}</strong> endpoints only. <a href="/assets" style="font-weight:600;">Clear filter</a>
+</div>
+{% endif %}
+
+
 <form method="get" action="/assets" class="card" style="max-width:none;margin-bottom:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
   <label style="flex:1;min-width:240px;">Search
     <input type="search" name="q" value="{{ q or '' }}" placeholder="hostname, assignee, OS, make/model…"
@@ -108,9 +152,12 @@
     </thead>
     <tbody>
       {% for r in rows %}
-      <tr>
+      <tr class="{% if r.online_state == 'offline' %}row-offline{% endif %}">
         <td><input type="checkbox" name="agent_ids" value="{{ r.id }}"></td>
-        <td><a href="/asset/{{ r.id }}">{{ r.hostname }}</a></td>
+        <td>
+          <span class="online-dot {{ r.online_state }}" title="{{ r.online_state }}"></span>
+          <a href="/asset/{{ r.id }}">{{ r.hostname }}</a>
+        </td>
         <td>{% if r.assigned_name %}<strong>{{ r.assigned_name }}</strong>{% else %}<span style="color:var(--slate);">{{ r.logged_in_user }}</span>{% endif %}</td>
         <td>{{ r.department or "—" }}</td>
         <td>{{ r.location or "—" }}</td>
@@ -118,7 +165,10 @@
         <td>{{ r.cpu }}</td>
         <td>{% if r.ram_gb %}{{ "%.1f"|format(r.ram_gb) }} GB{% else %}—{% endif %}</td>
         <td>{{ r.software_count }}</td>
-        <td>{% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}never{% endif %}</td>
+        <td>
+          {% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}<span style="color:var(--red);">never</span>{% endif %}
+          {% if r.online_state == 'offline' %}<br><span style="font-size:11px;color:var(--red);font-weight:600;">⚠ Offline</span>{% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

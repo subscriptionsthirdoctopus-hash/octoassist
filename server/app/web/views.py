@@ -1,7 +1,7 @@
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
@@ -46,9 +46,26 @@ def assets_index(
     department: str = "",
     location: str = "",
     compliant: str = "",
+    online: str = "",
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    from datetime import datetime, timedelta, timezone as _tz
+    OFFLINE_THRESHOLD_HOURS = 24
+    LAGGING_THRESHOLD_HOURS = 2
+    now_utc = datetime.now(_tz.utc)
+    offline_cutoff = now_utc - timedelta(hours=OFFLINE_THRESHOLD_HOURS)
+    lagging_cutoff = now_utc - timedelta(hours=LAGGING_THRESHOLD_HOURS)
+
+    def _online_state(last_seen):
+        if not last_seen:
+            return "offline"
+        if last_seen < offline_cutoff:
+            return "offline"
+        if last_seen < lagging_cutoff:
+            return "lagging"
+        return "online"
+
     needle = (q or "").strip().lower()
     agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id).order_by(Agent.hostname).all()
     managed_hostnames = {a.hostname.strip().lower() for a in agents if a.hostname}
@@ -60,6 +77,15 @@ def assets_index(
         hay = " | ".join((f or "").lower() for f in fields)
         return needle in hay
 
+    # Online-state KPI counts — derived from ALL managed agents in the tenant,
+    # not filtered, so the strip is a stable rollup of the fleet.
+    online_count = lagging_count = offline_count = 0
+    for a in agents:
+        st = _online_state(a.last_seen_at)
+        if st == "online": online_count += 1
+        elif st == "lagging": lagging_count += 1
+        else: offline_count += 1
+
     rows = []
     for a in agents:
         snap = _latest_snapshot(db, a.id)
@@ -67,6 +93,7 @@ def assets_index(
         pu = a.primary_user
         loc = a.location or (pu.location if pu else None)
         dept = pu.department if pu else None
+        state = _online_state(a.last_seen_at)
         row = {
             "id": a.id,
             "hostname": a.hostname,
@@ -79,10 +106,12 @@ def assets_index(
             "department":     dept,
             "location":       loc,
             "last_seen_at":   a.last_seen_at,
+            "online_state":   state,
             "software_count": len(payload.get("software", [])),
         }
         if department and (dept or "").lower() != department.lower(): continue
         if location   and (loc  or "").lower() != location.lower():   continue
+        if online     and state != online:                            continue
         if not _matches(a.hostname, row["assigned_name"], dept, loc, row["os"]):
             continue
         rows.append(row)
@@ -152,7 +181,11 @@ def assets_index(
                      departments=departments, locations=locations,
                      q=needle,
                      filter_department=department, filter_location=location,
-                     filter_compliant=compliant,
+                     filter_compliant=compliant, filter_online=online,
+                     online_count=online_count, lagging_count=lagging_count,
+                     offline_count=offline_count,
+                     offline_threshold_hours=OFFLINE_THRESHOLD_HOURS,
+                     lagging_threshold_hours=LAGGING_THRESHOLD_HOURS,
                      flash=flash, error=error),
     )
 

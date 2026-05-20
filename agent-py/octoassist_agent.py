@@ -996,12 +996,141 @@ def _patch_scan_metadata() -> dict:
     }
 
 
+def _ensure_watchdog_task() -> bool:
+    """Idempotently install/refresh a SECOND scheduled task that watches the
+    main agent task and resurrects it if it ever stops checking in.
+
+    The architecture is two-task defence-in-depth:
+
+      Task 1 — OctoAssistAgent     (the actual agent, installed by install.ps1)
+      Task 2 — OctoAssist-Watchdog (this one, installed by every check-in)
+
+    The watchdog runs every 5 min as SYSTEM. Its only job:
+      1. If the OctoAssistAgent task is missing or disabled →
+         re-run https://<server>/agent/install.ps1 to put it back.
+      2. If the task exists but hasn't logged in 30 min →
+         Start-ScheduledTask -TaskName 'OctoAssistAgent' to kick it.
+
+    Crucially: once an endpoint installs the watchdog (i.e. checks in even
+    ONCE with this version of the agent), the agent can never go silent
+    again — the watchdog will keep resurrecting it. The only way to lose
+    the agent now is for an admin to explicitly remove both tasks.
+
+    Returns True if the watchdog task is present after this call.
+    """
+    if platform.system() != "Windows":
+        return False
+    try:
+        # Resolve the server URL from the agent's own config — the watchdog
+        # needs to know where to re-fetch install.ps1 from.
+        cfg = load_config()
+        server_url = (cfg.get("server_url") or "").rstrip("/")
+    except Exception:
+        server_url = ""
+    if not server_url:
+        return False
+
+    # The watchdog script — runs every 5 min, idempotent, silent.
+    # Heredoc into a temp .ps1 because Register-ScheduledTask -Action
+    # is finicky about quoting multi-line PowerShell on the command line.
+    watchdog_ps = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$AgentTask = 'OctoAssistAgent'
+$DataDir   = 'C:\ProgramData\OctoAssist'
+$LogPath   = Join-Path $DataDir 'watchdog.log'
+$AgentLog  = Join-Path $DataDir 'logs\agent.log'
+$ServerUrl = '__SERVER_URL__'
+
+function Log($msg) {
+    $line = ('{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg)
+    try { Add-Content -Path $LogPath -Value $line } catch {}
+}
+
+# 1. Is the agent task registered + enabled?
+$task = Get-ScheduledTask -TaskName $AgentTask -ErrorAction SilentlyContinue
+if (-not $task) {
+    Log "Agent task missing — re-running install.ps1 from $ServerUrl"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $env:OCTOASSIST_SKIP_PROMPT = '1'
+        iex (iwr -useb "$ServerUrl/agent/install.ps1").Content
+        Log "install.ps1 re-run completed"
+    } catch {
+        Log ("install.ps1 re-run failed: {0}" -f $_.Exception.Message)
+    }
+    return
+}
+if ($task.State -eq 'Disabled') {
+    Log "Agent task is Disabled — enabling"
+    try { Enable-ScheduledTask -TaskName $AgentTask | Out-Null } catch { Log $_.Exception.Message }
+}
+
+# 2. Has the agent posted to its log file recently? Stale log = stuck.
+$stale = $true
+if (Test-Path $AgentLog) {
+    $age = (Get-Date) - (Get-Item $AgentLog).LastWriteTime
+    $stale = ($age.TotalMinutes -gt 30)
+}
+if ($stale) {
+    Log "Agent log stale (>30 min) — kicking the task"
+    # Kill any wedged python.exe running the agent script so the new instance starts clean
+    Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object {
+        try { $_.CommandLine -like '*octoassist_agent.py*' } catch { $false }
+    } | ForEach-Object {
+        try { Stop-Process -Id $_.Id -Force } catch {}
+    }
+    try { Start-ScheduledTask -TaskName $AgentTask | Out-Null } catch { Log $_.Exception.Message }
+}
+""".replace("__SERVER_URL__", server_url).strip()
+
+    try:
+        # Write watchdog.ps1 to disk so the scheduled task can run it
+        wd_dir  = Path(r"C:\ProgramData\OctoAssist")
+        wd_dir.mkdir(parents=True, exist_ok=True)
+        wd_path = wd_dir / "watchdog.ps1"
+        wd_path.write_text(watchdog_ps, encoding="utf-8")
+
+        # Register / refresh the scheduled task — idempotent
+        register_ps = r"""
+$ErrorActionPreference = 'Stop'
+$TaskName = 'OctoAssist-Watchdog'
+Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+$action      = New-ScheduledTaskAction  -Execute 'powershell.exe' -Argument '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\ProgramData\OctoAssist\watchdog.ps1"'
+$bootTrig    = New-ScheduledTaskTrigger -AtStartup
+$repeatTrig  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
+                                        -RepetitionInterval (New-TimeSpan -Minutes 5) `
+                                        -RepetitionDuration ([System.TimeSpan]::FromDays(365 * 10))
+$principal   = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+$settings    = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+Register-ScheduledTask -TaskName $TaskName -Action $action `
+    -Trigger @($bootTrig, $repeatTrig) -Principal $principal -Settings $settings `
+    -Description 'OctoAssist watchdog — resurrects the agent task if it ever stops checking in. Runs every 5 min as SYSTEM.' | Out-Null
+'INSTALLED'
+""".strip()
+        r = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", register_ps],
+                 capture_output=True, text=True, timeout=30)
+        if "INSTALLED" in (r.stdout or ""):
+            return True
+        log.warning("Watchdog task registration didn't return INSTALLED; stderr: %s",
+                    (r.stderr or "")[-300:])
+    except Exception as e:  # noqa: BLE001
+        log.warning("Watchdog task install failed: %s", e)
+    return False
+
+
 def collect_snapshot() -> dict:
     # Self-heal: install PSWindowsUpdate if missing. Endpoints that ended up
     # with the module missing (transient PSGallery issue at install time,
     # NuGet bootstrap failure, AV interference) get fixed automatically on
     # the next check-in. No admin action required.
     _ensure_pswindowsupdate()
+    # Self-heal: install / refresh the watchdog scheduled task. Once an
+    # endpoint phones home even once with this version of the agent, the
+    # watchdog is in place and the agent can never go silent again.
+    _ensure_watchdog_task()
     # Apply the WindowsUpdate lock-down policy on every check-in (idempotent).
     # If a user disables it via gpedit, the next check-in re-applies it.
     update_policy = _windows_enforce_managed_update_policy()
