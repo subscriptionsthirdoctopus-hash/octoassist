@@ -4,9 +4,11 @@ Two surfaces:
 
   /reports             — operational KPI dashboard (live charts, throughput,
                          workload, SLA — for the helpdesk lead's day-to-day).
-  /reports/iso27001    — ISO 27001:2022 control-family reports (audit-ready
-                         downloads with date filters, cited Annex A controls,
-                         signed off as evidence for the next external audit).
+  /reports/library     — full ITSM report library (audit-ready downloads
+                         with date + status filters, every category — tickets,
+                         problems, changes, assets, patches, access, KB,
+                         audit). Each report shows the ISO 27001:2022 Annex A
+                         control reference where one applies.
 
 Both share the same data services (services/reporting.py + services/charts.py
 + services/patches.py); the difference is framing, filtering, and download.
@@ -25,8 +27,10 @@ from sqlalchemy.orm import Session
 from ..auth import require_staff
 from ..database import get_db
 from ..models import (
-    Agent, AssetSnapshot, Change, ChangeEvent, KbArticle, PatchObservation,
-    Problem, ProblemStatus, Tenant, Ticket, TicketEvent, TicketStatus, User,
+    Agent, AssetSnapshot, Change, ChangeEvent, ChangeStatus, ChangeType,
+    KbArticle, PatchObservation, PatchSeverity, Problem, ProblemStatus,
+    RemoteAction, RemoteActionKind, RemoteActionStatus,
+    Tenant, Ticket, TicketEvent, TicketKind, TicketStatus, User, UserRole,
 )
 from ..services import charts, patches as patches_svc, reporting
 
@@ -301,93 +305,135 @@ def export_changes_csv(user: User = Depends(require_staff), db: Session = Depend
 
 
 # ===========================================================================
-# ISO 27001:2022 — Annex A control-family reports
+# Reports library — every downloadable ITSM report, grouped by domain.
 #
-# Aligned with ISO/IEC 27001:2022 Annex A. Each report names the control(s)
-# it satisfies. Reports are runnable as HTML preview AND downloadable as CSV
-# with a date filter (and where relevant, status filter). The goal is that
-# an external auditor sees the control reference on the report title and
-# the CSV is the evidence pack.
+# Each entry exposes an HTML preview page + a CSV download. CSVs use UTC
+# ISO-8601 timestamps and are filename-stamped so they drop straight into
+# an audit folder. ISO 27001:2022 Annex A control refs are kept as small
+# secondary metadata where they apply — they explain WHY auditors care,
+# but the report title stays plain-English.
 # ===========================================================================
 
-# --- ISO control catalog used by the landing page ---
-# (key, title, control_ref, what_it_evidences, endpoint, csv_endpoint, group)
-ISO_REPORTS = [
-    # A.5 Organizational controls
-    {
-        "key": "incident-management",
-        "group": "A.5 Organizational controls",
-        "title": "Incident management",
-        "controls": "A.5.24 · A.5.25 · A.5.26",
-        "summary": "All incidents (tickets of kind = incident) — created, in flight, resolved, SLA breach status. Evidences planning, decision, and response to information security events.",
-        "preview": "/reports/iso27001/incidents",
-        "csv": "/reports/iso27001/incidents.csv",
-    },
-    {
-        "key": "problem-management",
-        "group": "A.5 Organizational controls",
-        "title": "Lessons learned (Problem records)",
-        "controls": "A.5.27",
-        "summary": "Problems opened with root-cause findings + Known-Error entries. Evidences how the organisation learns from incidents to reduce recurrence.",
-        "preview": "/reports/iso27001/problems",
-        "csv": "/reports/iso27001/problems.csv",
-    },
-    {
-        "key": "evidence-trail",
-        "group": "A.5 Organizational controls",
-        "title": "Audit evidence trail",
-        "controls": "A.5.28",
-        "summary": "Append-only event log from tickets + changes (status transitions, approvals, edits) within a date window. Evidences collection of evidence per A.5.28.",
-        "preview": "/reports/iso27001/audit-trail",
-        "csv": "/reports/iso27001/audit-trail.csv",
-    },
-    {
-        "key": "access-control",
-        "group": "A.5 Organizational controls",
-        "title": "Access control register",
-        "controls": "A.5.15 · A.5.16 · A.5.18",
-        "summary": "Current user roster — role, status, last sign-in, Entra OID. Evidences identity management and access provisioning/de-provisioning posture.",
-        "preview": "/reports/iso27001/access",
-        "csv": "/reports/iso27001/access.csv",
-    },
-    {
-        "key": "asset-inventory",
-        "group": "A.5 Organizational controls",
-        "title": "Asset inventory",
-        "controls": "A.5.9 · A.5.10",
-        "summary": "All registered endpoints with OS, hardware, last-seen, software count, logged-in user. Evidences the asset inventory required by A.5.9.",
-        "preview": "/reports/iso27001/assets",
-        "csv": "/reports/iso27001/assets.csv",
-    },
-    {
-        "key": "kb-procedures",
-        "group": "A.5 Organizational controls",
-        "title": "Documented procedures (Knowledge Base)",
-        "controls": "A.5.37",
-        "summary": "Published knowledge-base articles — title, audience, author, last update. Evidences that operating procedures are documented and accessible.",
-        "preview": "/reports/iso27001/kb",
-        "csv": "/reports/iso27001/kb.csv",
-    },
-    # A.8 Technological controls
-    {
-        "key": "change-management",
-        "group": "A.8 Technological controls",
-        "title": "Change management",
-        "controls": "A.8.32",
-        "summary": "All change records with type, risk, CAB approver, planned vs actual window, outcome. The audit's primary evidence pack for change control.",
-        "preview": "/reports/iso27001/changes",
-        "csv": "/reports/iso27001/changes.csv",
-    },
-    {
-        "key": "patch-compliance",
-        "group": "A.8 Technological controls",
-        "title": "Vulnerability & patch compliance",
-        "controls": "A.8.8",
-        "summary": "Patches reported missing on endpoints — severity, days outstanding, install status. Evidences management of technical vulnerabilities.",
-        "preview": "/reports/iso27001/patches",
-        "csv": "/reports/iso27001/patches.csv",
-    },
+REPORT_CATALOG = [
+    # ---------- Tickets & service desk ----------
+    {"group":"Tickets & service desk", "key":"tickets-all", "title":"All tickets",
+     "iso":"A.5.24-A.5.26",
+     "summary":"Every ticket in the tenant — incident + service request — with reporter, assignee, status, SLA.",
+     "preview":"/reports/library/tickets", "csv":"/reports/library/tickets.csv"},
+    {"group":"Tickets & service desk", "key":"incidents", "title":"Incidents only",
+     "iso":"A.5.24-A.5.26",
+     "summary":"Tickets of kind = incident. The auditor's sample-set for security-event response.",
+     "preview":"/reports/library/incidents", "csv":"/reports/library/incidents.csv"},
+    {"group":"Tickets & service desk", "key":"service-requests", "title":"Service requests only",
+     "iso":None,
+     "summary":"Tickets of kind = service_request. Volume + category breakdown for capacity planning.",
+     "preview":"/reports/library/service-requests", "csv":"/reports/library/service-requests.csv"},
+    {"group":"Tickets & service desk", "key":"sla-breaches", "title":"SLA breaches",
+     "iso":"A.5.26",
+     "summary":"Tickets that missed their resolution SLA — already breached (resolved late) plus open-past-due. Critical for the SLA dashboard.",
+     "preview":"/reports/library/sla-breaches", "csv":"/reports/library/sla-breaches.csv"},
+    {"group":"Tickets & service desk", "key":"backlog-aging", "title":"Backlog aging",
+     "iso":None,
+     "summary":"Open tickets bucketed by age (0–7d, 8–30d, 31–90d, &gt;90d). Shows where work is stuck.",
+     "preview":"/reports/library/backlog", "csv":"/reports/library/backlog.csv"},
+    {"group":"Tickets & service desk", "key":"workload", "title":"Workload by assignee",
+     "iso":None,
+     "summary":"Open ticket count + breakdown by priority for each active assignee. Used for load-balancing.",
+     "preview":"/reports/library/workload", "csv":"/reports/library/workload.csv"},
+    {"group":"Tickets & service desk", "key":"top-reporters", "title":"Top requesters",
+     "iso":None,
+     "summary":"Who's filing the most tickets in the period. Surfaces hot spots — chronic problem users or systemic issues.",
+     "preview":"/reports/library/top-reporters", "csv":"/reports/library/top-reporters.csv"},
+
+    # ---------- Problems ----------
+    {"group":"Problems & root cause", "key":"problems", "title":"Problem records",
+     "iso":"A.5.27",
+     "summary":"All problems opened — investigating / workaround / known-error / resolved. Linked-ticket counts and root-cause status.",
+     "preview":"/reports/library/problems", "csv":"/reports/library/problems.csv"},
+    {"group":"Problems & root cause", "key":"known-errors", "title":"Known-Error Database (KEDB)",
+     "iso":"A.5.27",
+     "summary":"Only problems that have a documented root_cause — the canonical KEDB entries used in incident replies.",
+     "preview":"/reports/library/known-errors", "csv":"/reports/library/known-errors.csv"},
+
+    # ---------- Change management ----------
+    {"group":"Change management", "key":"changes-all", "title":"All change records",
+     "iso":"A.8.32",
+     "summary":"Every change — draft / under review / approved / in progress / completed / failed / cancelled. With CAB approver + decision note.",
+     "preview":"/reports/library/changes", "csv":"/reports/library/changes.csv"},
+    {"group":"Change management", "key":"failed-changes", "title":"Failed changes (post-mortem)",
+     "iso":"A.8.32",
+     "summary":"Changes that ended in status = failed. Source-of-truth for post-implementation review and pattern analysis.",
+     "preview":"/reports/library/failed-changes", "csv":"/reports/library/failed-changes.csv"},
+    {"group":"Change management", "key":"emergency-changes", "title":"Emergency changes",
+     "iso":"A.8.32",
+     "summary":"Changes raised as type = emergency. Reviewed in the next CAB; trend tells you if you're hitting too many emergencies.",
+     "preview":"/reports/library/emergency-changes", "csv":"/reports/library/emergency-changes.csv"},
+    {"group":"Change management", "key":"cab-decisions", "title":"CAB decision log",
+     "iso":"A.8.32",
+     "summary":"Only changes with a recorded CAB decision (approved / rejected). The auditor's primary view of governance over change.",
+     "preview":"/reports/library/cab-decisions", "csv":"/reports/library/cab-decisions.csv"},
+
+    # ---------- Assets ----------
+    {"group":"Assets & inventory", "key":"assets", "title":"Asset inventory",
+     "iso":"A.5.9 · A.5.10",
+     "summary":"All registered endpoints with hostname, OS, CPU, RAM, software count, last-seen. The ISO A.5.9 inventory snapshot.",
+     "preview":"/reports/library/assets", "csv":"/reports/library/assets.csv"},
+    {"group":"Assets & inventory", "key":"stale-assets", "title":"Stale endpoints",
+     "iso":"A.5.9",
+     "summary":"Endpoints not seen in the last 14 days — either offline, decommissioned, or have lost the agent. Cleanup candidates.",
+     "preview":"/reports/library/stale-assets", "csv":"/reports/library/stale-assets.csv"},
+
+    # ---------- Patches ----------
+    {"group":"Patch & vulnerability", "key":"patches", "title":"Patch compliance",
+     "iso":"A.8.8",
+     "summary":"Missing patches across all endpoints — package, severity, days outstanding. Drilldown into the vulnerability backlog.",
+     "preview":"/reports/library/patches", "csv":"/reports/library/patches.csv"},
+    {"group":"Patch & vulnerability", "key":"critical-patches", "title":"Critical patches outstanding",
+     "iso":"A.8.8",
+     "summary":"Only critical-severity patches still unresolved — the patch tier auditors will ask about first.",
+     "preview":"/reports/library/critical-patches", "csv":"/reports/library/critical-patches.csv"},
+    {"group":"Patch & vulnerability", "key":"aged-patches", "title":"Patches aged &gt; 30 days",
+     "iso":"A.8.8",
+     "summary":"Patches seen on endpoints &gt; 30 days ago and still not installed. Indicates breakdowns in the patch cycle.",
+     "preview":"/reports/library/aged-patches", "csv":"/reports/library/aged-patches.csv"},
+
+    # ---------- Access & identity ----------
+    {"group":"Access & identity", "key":"access", "title":"Access control register",
+     "iso":"A.5.15 · A.5.16 · A.5.18",
+     "summary":"Every user — role, active/deactivated, CAB membership, Entra OID, last login. Joiner/mover/leaver evidence.",
+     "preview":"/reports/library/access", "csv":"/reports/library/access.csv"},
+    {"group":"Access & identity", "key":"inactive-users", "title":"Inactive users (90d+)",
+     "iso":"A.5.16 · A.5.18",
+     "summary":"Active accounts that haven't signed in for 90+ days. Candidates for the next access review.",
+     "preview":"/reports/library/inactive-users", "csv":"/reports/library/inactive-users.csv"},
+    {"group":"Access & identity", "key":"admin-roster", "title":"Admin &amp; agent roster",
+     "iso":"A.5.15",
+     "summary":"Only privileged accounts — admins and agents. Smallest, most-scrutinised population in any IT audit.",
+     "preview":"/reports/library/admin-roster", "csv":"/reports/library/admin-roster.csv"},
+
+    # ---------- Knowledge base ----------
+    {"group":"Knowledge base", "key":"kb", "title":"Documented procedures",
+     "iso":"A.5.37",
+     "summary":"Published KB articles with audience + author + last update. ISO A.5.37 wants operating procedures to be documented and accessible.",
+     "preview":"/reports/library/kb", "csv":"/reports/library/kb.csv"},
+    {"group":"Knowledge base", "key":"kb-usage", "title":"KB usage — top articles",
+     "iso":None,
+     "summary":"Articles ranked by view count. Tells you what users actually read — refine those, retire the dead ones.",
+     "preview":"/reports/library/kb-usage", "csv":"/reports/library/kb-usage.csv"},
+
+    # ---------- Audit & evidence ----------
+    {"group":"Audit & evidence", "key":"audit-trail", "title":"Audit evidence trail",
+     "iso":"A.5.28",
+     "summary":"Append-only event log from tickets + changes within a date window — status transitions, edits, approvals.",
+     "preview":"/reports/library/audit-trail", "csv":"/reports/library/audit-trail.csv"},
+    {"group":"Audit & evidence", "key":"remote-actions", "title":"Remote action history",
+     "iso":"A.5.28 · A.8.15",
+     "summary":"Every remote command executed on endpoints — reboot, lock, custom PowerShell, password reset. Who, when, what, exit code.",
+     "preview":"/reports/library/remote-actions", "csv":"/reports/library/remote-actions.csv"},
 ]
+
+# Backward-compatible: prior catalog name some templates may still reference
+ISO_REPORTS = REPORT_CATALOG
 
 
 def _parse_date(s: str | None, default_days_ago: int | None = None):
@@ -416,16 +462,23 @@ def _common_filter_ctx(date_from: str | None, date_to: str | None):
 
 # --------- Landing page ---------
 
-@router.get("/reports/iso27001", response_class=HTMLResponse)
-def iso27001_home(
+@router.get("/reports/library", response_class=HTMLResponse)
+def reports_library(
     request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001.html",
-        context=_ctx(user, db, iso_reports=ISO_REPORTS),
+        request=request, name="reports_library.html",
+        context=_ctx(user, db, reports=REPORT_CATALOG),
     )
+
+
+@router.get("/reports/iso27001")
+def reports_iso27001_redirect():
+    """Old URL — kept so previously-shared links still work."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/reports/library", status_code=301)
 
 
 # --------- A.5.24-A.5.26: Incidents ---------
@@ -444,7 +497,7 @@ def _incidents_query(db, tenant_id, df, dt, status):
     return qy.order_by(Ticket.created_at.desc())
 
 
-@router.get("/reports/iso27001/incidents", response_class=HTMLResponse)
+@router.get("/reports/library/incidents", response_class=HTMLResponse)
 def iso_incidents(
     request: Request,
     date_from: str | None = None,
@@ -457,7 +510,7 @@ def iso_incidents(
     dt = _parse_date(date_to)
     rows = _incidents_query(db, user.tenant_id, df, dt, status).limit(500).all()
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="incident-management",
             controls="A.5.24 · A.5.25 · A.5.26 — Information security incident management",
@@ -466,12 +519,12 @@ def iso_incidents(
             status_options=[s.value for s in TicketStatus],
             **_common_filter_ctx(date_from, date_to),
             status=status or "",
-            csv_url=f"/reports/iso27001/incidents.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
+            csv_url=f"/reports/library/incidents.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
         ),
     )
 
 
-@router.get("/reports/iso27001/incidents.csv")
+@router.get("/reports/library/incidents.csv")
 def iso_incidents_csv(
     date_from: str | None = None,
     date_to: str | None = None,
@@ -514,7 +567,7 @@ def iso_incidents_csv(
 
 # --------- A.5.27: Problems / Lessons learned ---------
 
-@router.get("/reports/iso27001/problems", response_class=HTMLResponse)
+@router.get("/reports/library/problems", response_class=HTMLResponse)
 def iso_problems(
     request: Request,
     date_from: str | None = None,
@@ -533,7 +586,7 @@ def iso_problems(
         except ValueError: pass
     rows = qy.order_by(Problem.created_at.desc()).limit(500).all()
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="problem-management",
             controls="A.5.27 — Learning from information security incidents",
@@ -542,12 +595,12 @@ def iso_problems(
             status_options=[s.value for s in ProblemStatus],
             **_common_filter_ctx(date_from, date_to),
             status=status or "",
-            csv_url=f"/reports/iso27001/problems.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
+            csv_url=f"/reports/library/problems.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
         ),
     )
 
 
-@router.get("/reports/iso27001/problems.csv")
+@router.get("/reports/library/problems.csv")
 def iso_problems_csv(
     date_from: str | None = None,
     date_to: str | None = None,
@@ -586,7 +639,7 @@ def iso_problems_csv(
 
 # --------- A.5.28: Audit evidence trail ---------
 
-@router.get("/reports/iso27001/audit-trail", response_class=HTMLResponse)
+@router.get("/reports/library/audit-trail", response_class=HTMLResponse)
 def iso_audit_trail(
     request: Request,
     date_from: str | None = None,
@@ -606,7 +659,7 @@ def iso_audit_trail(
     events = [("ticket", e) for e in ticket_events] + [("change", e) for e in change_events]
     events.sort(key=lambda x: x[1].created_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="evidence-trail",
             controls="A.5.28 — Collection of evidence",
@@ -615,12 +668,12 @@ def iso_audit_trail(
             status_options=[],
             **_common_filter_ctx(date_from, date_to),
             status="",
-            csv_url=f"/reports/iso27001/audit-trail.csv?date_from={date_from or ''}&date_to={date_to or ''}",
+            csv_url=f"/reports/library/audit-trail.csv?date_from={date_from or ''}&date_to={date_to or ''}",
         ),
     )
 
 
-@router.get("/reports/iso27001/audit-trail.csv")
+@router.get("/reports/library/audit-trail.csv")
 def iso_audit_trail_csv(
     date_from: str | None = None,
     date_to: str | None = None,
@@ -658,7 +711,7 @@ def iso_audit_trail_csv(
 
 # --------- A.5.15-A.5.18: Access control register ---------
 
-@router.get("/reports/iso27001/access", response_class=HTMLResponse)
+@router.get("/reports/library/access", response_class=HTMLResponse)
 def iso_access(
     request: Request,
     user: User = Depends(require_staff),
@@ -668,7 +721,7 @@ def iso_access(
               .filter(User.tenant_id == user.tenant_id)
               .order_by(User.is_active.desc(), User.role, User.email).all())
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="access-control",
             controls="A.5.15 · A.5.16 · A.5.18 — Access control, identity management, access rights",
@@ -676,12 +729,12 @@ def iso_access(
             rows=rows, row_type="user",
             status_options=[],
             date_from="", date_to="", status="",
-            csv_url="/reports/iso27001/access.csv",
+            csv_url="/reports/library/access.csv",
         ),
     )
 
 
-@router.get("/reports/iso27001/access.csv")
+@router.get("/reports/library/access.csv")
 def iso_access_csv(
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
@@ -711,7 +764,7 @@ def iso_access_csv(
 
 # --------- A.5.9-A.5.10: Asset inventory ---------
 
-@router.get("/reports/iso27001/assets", response_class=HTMLResponse)
+@router.get("/reports/library/assets", response_class=HTMLResponse)
 def iso_assets(
     request: Request,
     user: User = Depends(require_staff),
@@ -721,7 +774,7 @@ def iso_assets(
               .filter(Agent.tenant_id == user.tenant_id)
               .order_by(Agent.hostname).all())
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="asset-inventory",
             controls="A.5.9 · A.5.10 — Inventory of information and other associated assets · Acceptable use",
@@ -729,12 +782,12 @@ def iso_assets(
             rows=rows, row_type="agent",
             status_options=[],
             date_from="", date_to="", status="",
-            csv_url="/reports/iso27001/assets.csv",
+            csv_url="/reports/library/assets.csv",
         ),
     )
 
 
-@router.get("/reports/iso27001/assets.csv")
+@router.get("/reports/library/assets.csv")
 def iso_assets_csv(
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
@@ -772,7 +825,7 @@ def iso_assets_csv(
 
 # --------- A.5.37: Documented operating procedures (KB) ---------
 
-@router.get("/reports/iso27001/kb", response_class=HTMLResponse)
+@router.get("/reports/library/kb", response_class=HTMLResponse)
 def iso_kb(
     request: Request,
     user: User = Depends(require_staff),
@@ -782,7 +835,7 @@ def iso_kb(
               .filter(KbArticle.tenant_id == user.tenant_id)
               .order_by(KbArticle.updated_at.desc()).all())
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="kb-procedures",
             controls="A.5.37 — Documented operating procedures",
@@ -790,12 +843,12 @@ def iso_kb(
             rows=rows, row_type="kb",
             status_options=[],
             date_from="", date_to="", status="",
-            csv_url="/reports/iso27001/kb.csv",
+            csv_url="/reports/library/kb.csv",
         ),
     )
 
 
-@router.get("/reports/iso27001/kb.csv")
+@router.get("/reports/library/kb.csv")
 def iso_kb_csv(
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
@@ -824,7 +877,7 @@ def iso_kb_csv(
 
 # --------- A.8.32: Change management (filtered) ---------
 
-@router.get("/reports/iso27001/changes", response_class=HTMLResponse)
+@router.get("/reports/library/changes", response_class=HTMLResponse)
 def iso_changes(
     request: Request,
     date_from: str | None = None,
@@ -844,7 +897,7 @@ def iso_changes(
         except ValueError: pass
     rows = qy.order_by(Change.created_at.desc()).limit(500).all()
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="change-management",
             controls="A.8.32 — Change management",
@@ -853,12 +906,12 @@ def iso_changes(
             status_options=[s.value for s in ChangeStatus],
             **_common_filter_ctx(date_from, date_to),
             status=status or "",
-            csv_url=f"/reports/iso27001/changes.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
+            csv_url=f"/reports/library/changes.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
         ),
     )
 
 
-@router.get("/reports/iso27001/changes.csv")
+@router.get("/reports/library/changes.csv")
 def iso_changes_csv(
     date_from: str | None = None,
     date_to: str | None = None,
@@ -904,7 +957,7 @@ def iso_changes_csv(
 
 # --------- A.8.8: Vulnerability / patch compliance ---------
 
-@router.get("/reports/iso27001/patches", response_class=HTMLResponse)
+@router.get("/reports/library/patches", response_class=HTMLResponse)
 def iso_patches(
     request: Request,
     severity: str | None = None,
@@ -922,7 +975,7 @@ def iso_patches(
         except ValueError: pass
     rows = qy.order_by(PatchObservation.severity.desc(), PatchObservation.first_seen_at).limit(500).all()
     return templates.TemplateResponse(
-        request=request, name="reports_iso27001_run.html",
+        request=request, name="reports_run.html",
         context=_ctx(user, db,
             report_key="patch-compliance",
             controls="A.8.8 — Management of technical vulnerabilities",
@@ -933,12 +986,12 @@ def iso_patches(
             date_from="", date_to="",
             status=severity or "",
             only_open=only_open,
-            csv_url=f"/reports/iso27001/patches.csv?severity={severity or ''}&only_open={only_open}",
+            csv_url=f"/reports/library/patches.csv?severity={severity or ''}&only_open={only_open}",
         ),
     )
 
 
-@router.get("/reports/iso27001/patches.csv")
+@router.get("/reports/library/patches.csv")
 def iso_patches_csv(
     severity: str | None = None,
     only_open: int = 1,
@@ -972,4 +1025,1015 @@ def iso_patches_csv(
         ["hostname","package","current_version","available_version","severity",
          "source","title","days_outstanding","first_seen_utc","last_seen_utc","resolved_at_utc"],
         filename=f"iso27001-A.8.8-patch-compliance-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ===========================================================================
+# Additional ITSM reports — extend the catalog beyond the ISO-mapped ones.
+# ===========================================================================
+
+# --- Helper: full ticket CSV row + headers, reused by several reports ---
+def _ticket_row(t):
+    sla_state = ""
+    if t.resolved_at and t.due_resolution_at:
+        sla_state = "within" if t.resolved_at <= t.due_resolution_at else "breached"
+    elif t.due_resolution_at and not t.resolved_at:
+        sla_state = "open-past-due" if datetime.now(timezone.utc) > t.due_resolution_at else "open"
+    return [
+        t.ticket_number, t.kind.value,
+        (t.category.name if t.category else ""),
+        t.title, t.priority.value, t.status.value,
+        (t.reporter.email if t.reporter else ""),
+        (t.assignee.email if t.assignee else ""),
+        (t.location or ""),
+        t.created_at.astimezone(timezone.utc).isoformat() if t.created_at else "",
+        t.first_response_at.astimezone(timezone.utc).isoformat() if t.first_response_at else "",
+        t.resolved_at.astimezone(timezone.utc).isoformat() if t.resolved_at else "",
+        t.due_resolution_at.astimezone(timezone.utc).isoformat() if t.due_resolution_at else "",
+        sla_state,
+    ]
+
+
+_TICKET_HEADERS = [
+    "ticket_number","kind","category","title","priority","status",
+    "reporter","assignee","location",
+    "created_at_utc","first_response_at_utc","resolved_at_utc","due_resolution_at_utc","sla_state",
+]
+
+
+# ---------- "All tickets" (incidents + service requests, with filters) ----------
+
+@router.get("/reports/library/tickets", response_class=HTMLResponse)
+def lib_tickets(
+    request: Request,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = db.query(Ticket).filter(Ticket.tenant_id == user.tenant_id)
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    if status:
+        try: qy = qy.filter(Ticket.status == TicketStatus(status))
+        except ValueError: pass
+    rows = qy.order_by(Ticket.created_at.desc()).limit(500).all()
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="tickets-all", controls="All tickets (incidents + service requests)",
+            title="All tickets", rows=rows, row_type="ticket",
+            status_options=[s.value for s in TicketStatus],
+            **_common_filter_ctx(date_from, date_to),
+            status=status or "",
+            csv_url=f"/reports/library/tickets.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
+        ),
+    )
+
+
+@router.get("/reports/library/tickets.csv")
+def lib_tickets_csv(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = db.query(Ticket).filter(Ticket.tenant_id == user.tenant_id)
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    if status:
+        try: qy = qy.filter(Ticket.status == TicketStatus(status))
+        except ValueError: pass
+    rows = qy.order_by(Ticket.created_at.desc()).all()
+    return _stream_csv(
+        (_ticket_row(t) for t in rows),
+        _TICKET_HEADERS,
+        filename=f"tickets-all-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Service requests only ----------
+
+@router.get("/reports/library/service-requests", response_class=HTMLResponse)
+def lib_service_requests(
+    request: Request,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = (db.query(Ticket).filter(Ticket.tenant_id == user.tenant_id,
+                                  Ticket.kind == TicketKind.service_request))
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    if status:
+        try: qy = qy.filter(Ticket.status == TicketStatus(status))
+        except ValueError: pass
+    rows = qy.order_by(Ticket.created_at.desc()).limit(500).all()
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="service-requests", controls="Service requests",
+            title="Service requests only", rows=rows, row_type="ticket",
+            status_options=[s.value for s in TicketStatus],
+            **_common_filter_ctx(date_from, date_to),
+            status=status or "",
+            csv_url=f"/reports/library/service-requests.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
+        ),
+    )
+
+
+@router.get("/reports/library/service-requests.csv")
+def lib_service_requests_csv(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = (db.query(Ticket).filter(Ticket.tenant_id == user.tenant_id,
+                                  Ticket.kind == TicketKind.service_request))
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    if status:
+        try: qy = qy.filter(Ticket.status == TicketStatus(status))
+        except ValueError: pass
+    rows = qy.order_by(Ticket.created_at.desc()).all()
+    return _stream_csv(
+        (_ticket_row(t) for t in rows),
+        _TICKET_HEADERS,
+        filename=f"service-requests-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- SLA breaches ----------
+
+def _sla_breach_query(db, tenant_id, df, dt):
+    now = datetime.now(timezone.utc)
+    from sqlalchemy import or_, and_
+    qy = (db.query(Ticket)
+            .filter(Ticket.tenant_id == tenant_id,
+                    Ticket.due_resolution_at.is_not(None),
+                    or_(
+                        # Resolved late
+                        and_(Ticket.resolved_at.is_not(None),
+                             Ticket.resolved_at > Ticket.due_resolution_at),
+                        # Still open and past due
+                        and_(Ticket.resolved_at.is_(None),
+                             Ticket.due_resolution_at < now),
+                    )))
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    return qy.order_by(Ticket.due_resolution_at)
+
+
+@router.get("/reports/library/sla-breaches", response_class=HTMLResponse)
+def lib_sla_breaches(
+    request: Request,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=90)
+    dt = _parse_date(date_to)
+    rows = _sla_breach_query(db, user.tenant_id, df, dt).limit(500).all()
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="sla-breaches", controls="SLA breach register · A.5.26",
+            title="SLA breaches", rows=rows, row_type="ticket",
+            status_options=[],
+            **_common_filter_ctx(date_from, date_to),
+            status="",
+            csv_url=f"/reports/library/sla-breaches.csv?date_from={date_from or ''}&date_to={date_to or ''}",
+        ),
+    )
+
+
+@router.get("/reports/library/sla-breaches.csv")
+def lib_sla_breaches_csv(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=90)
+    dt = _parse_date(date_to)
+    rows = _sla_breach_query(db, user.tenant_id, df, dt).all()
+    return _stream_csv(
+        (_ticket_row(t) for t in rows), _TICKET_HEADERS,
+        filename=f"sla-breaches-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Backlog aging — open tickets bucketed by age ----------
+
+@router.get("/reports/library/backlog", response_class=HTMLResponse)
+def lib_backlog(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Ticket)
+              .filter(Ticket.tenant_id == user.tenant_id,
+                      Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+              .order_by(Ticket.created_at).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="backlog-aging", controls="Open tickets bucketed by age",
+            title="Backlog aging", rows=rows, row_type="ticket",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/backlog.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/backlog.csv")
+def lib_backlog_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Ticket)
+              .filter(Ticket.tenant_id == user.tenant_id,
+                      Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+              .order_by(Ticket.created_at).all())
+    now = datetime.now(timezone.utc)
+    def bucket(age_days):
+        if age_days <= 7: return "0-7d"
+        if age_days <= 30: return "8-30d"
+        if age_days <= 90: return "31-90d"
+        return ">90d"
+    def gen():
+        for t in rows:
+            age_days = (now - t.created_at).days if t.created_at else 0
+            row = _ticket_row(t)
+            row.extend([age_days, bucket(age_days)])
+            yield row
+    return _stream_csv(
+        gen(), _TICKET_HEADERS + ["age_days","age_bucket"],
+        filename=f"backlog-aging-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Workload by assignee ----------
+
+@router.get("/reports/library/workload", response_class=HTMLResponse)
+def lib_workload(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func as _f
+    # Per-assignee open count + breakdown by priority
+    rows_raw = (db.query(User, _f.count(Ticket.id))
+                  .join(Ticket, Ticket.assignee_id == User.id)
+                  .filter(User.tenant_id == user.tenant_id,
+                          Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+                  .group_by(User.id)
+                  .order_by(_f.count(Ticket.id).desc()).all())
+    enriched = []
+    for u, count in rows_raw:
+        by_prio = dict(db.query(Ticket.priority, _f.count(Ticket.id))
+                         .filter(Ticket.tenant_id == user.tenant_id,
+                                 Ticket.assignee_id == u.id,
+                                 Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+                         .group_by(Ticket.priority).all())
+        enriched.append({
+            "user": u, "open_count": count,
+            "low":      by_prio.get("low", 0) or 0,
+            "medium":   by_prio.get("medium", 0) or 0,
+            "high":     by_prio.get("high", 0) or 0,
+            "critical": by_prio.get("critical", 0) or 0,
+        })
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="workload", controls="Workload distribution",
+            title="Workload by assignee", rows=enriched, row_type="workload",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/workload.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/workload.csv")
+def lib_workload_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func as _f
+    rows_raw = (db.query(User, _f.count(Ticket.id))
+                  .join(Ticket, Ticket.assignee_id == User.id)
+                  .filter(User.tenant_id == user.tenant_id,
+                          Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+                  .group_by(User.id)
+                  .order_by(_f.count(Ticket.id).desc()).all())
+    def gen():
+        for u, count in rows_raw:
+            by_prio = dict(db.query(Ticket.priority, _f.count(Ticket.id))
+                             .filter(Ticket.tenant_id == user.tenant_id,
+                                     Ticket.assignee_id == u.id,
+                                     Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+                             .group_by(Ticket.priority).all())
+            yield [
+                u.email, (u.full_name or ""), u.role.value, count,
+                by_prio.get("low", 0) or 0,
+                by_prio.get("medium", 0) or 0,
+                by_prio.get("high", 0) or 0,
+                by_prio.get("critical", 0) or 0,
+            ]
+    return _stream_csv(
+        gen(),
+        ["email","name","role","open_count","low","medium","high","critical"],
+        filename=f"workload-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Top reporters ----------
+
+@router.get("/reports/library/top-reporters", response_class=HTMLResponse)
+def lib_top_reporters(
+    request: Request,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func as _f
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = (db.query(User, _f.count(Ticket.id))
+            .join(Ticket, Ticket.reporter_id == User.id)
+            .filter(User.tenant_id == user.tenant_id))
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    rows = qy.group_by(User.id).order_by(_f.count(Ticket.id).desc()).limit(50).all()
+    enriched = [{"user": u, "count": c} for u, c in rows]
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="top-reporters", controls="Top requesters in the window",
+            title="Top requesters", rows=enriched, row_type="top_reporter",
+            status_options=[],
+            **_common_filter_ctx(date_from, date_to),
+            status="",
+            csv_url=f"/reports/library/top-reporters.csv?date_from={date_from or ''}&date_to={date_to or ''}",
+        ),
+    )
+
+
+@router.get("/reports/library/top-reporters.csv")
+def lib_top_reporters_csv(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func as _f
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = (db.query(User, _f.count(Ticket.id))
+            .join(Ticket, Ticket.reporter_id == User.id)
+            .filter(User.tenant_id == user.tenant_id))
+    if df: qy = qy.filter(Ticket.created_at >= df)
+    if dt: qy = qy.filter(Ticket.created_at <= dt)
+    rows = qy.group_by(User.id).order_by(_f.count(Ticket.id).desc()).all()
+    def gen():
+        for u, c in rows:
+            yield [u.email, (u.full_name or ""),
+                   (u.department or ""), (u.location or ""), c]
+    return _stream_csv(
+        gen(),
+        ["email","name","department","location","ticket_count"],
+        filename=f"top-reporters-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Known errors (problems with a documented root_cause) ----------
+
+@router.get("/reports/library/known-errors", response_class=HTMLResponse)
+def lib_known_errors(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Problem)
+              .filter(Problem.tenant_id == user.tenant_id,
+                      Problem.root_cause.isnot(None),
+                      Problem.root_cause != "")
+              .order_by(Problem.updated_at.desc()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="known-errors", controls="A.5.27 — KEDB (problems with documented root cause)",
+            title="Known-Error Database (KEDB)", rows=rows, row_type="problem",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/known-errors.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/known-errors.csv")
+def lib_known_errors_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Problem)
+              .filter(Problem.tenant_id == user.tenant_id,
+                      Problem.root_cause.isnot(None),
+                      Problem.root_cause != "")
+              .order_by(Problem.updated_at.desc()).all())
+    def gen():
+        for p in rows:
+            yield [
+                p.problem_number, p.title, p.priority.value, p.status.value,
+                len(p.linked_tickets),
+                (p.workaround or "")[:1000].replace("\n", " ↵ "),
+                (p.root_cause or "")[:2000].replace("\n", " ↵ "),
+                p.created_at.astimezone(timezone.utc).isoformat() if p.created_at else "",
+                p.updated_at.astimezone(timezone.utc).isoformat() if p.updated_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["problem_number","title","priority","status","linked_ticket_count",
+         "workaround","root_cause","created_at_utc","updated_at_utc"],
+        filename=f"kedb-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Failed changes ----------
+
+@router.get("/reports/library/failed-changes", response_class=HTMLResponse)
+def lib_failed_changes(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Change)
+              .filter(Change.tenant_id == user.tenant_id,
+                      Change.status == ChangeStatus.failed)
+              .order_by(Change.created_at.desc()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="failed-changes", controls="A.8.32 — failed change post-mortem",
+            title="Failed changes (post-mortem)", rows=rows, row_type="change",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/failed-changes.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/failed-changes.csv")
+def lib_failed_changes_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Change)
+              .filter(Change.tenant_id == user.tenant_id,
+                      Change.status == ChangeStatus.failed)
+              .order_by(Change.created_at.desc()).all())
+    def gen():
+        for c in rows:
+            yield [
+                c.change_number, c.title, c.change_type.value, c.risk.value,
+                (c.requester.email if c.requester else ""),
+                (c.implementer.email if c.implementer else ""),
+                (c.cab_approver.email if c.cab_approver else ""),
+                c.actual_start.astimezone(timezone.utc).isoformat() if c.actual_start else "",
+                c.actual_end.astimezone(timezone.utc).isoformat() if c.actual_end else "",
+                (c.rollback_plan or "")[:1000].replace("\n", " ↵ "),
+            ]
+    return _stream_csv(
+        gen(),
+        ["change_number","title","type","risk","requester","implementer",
+         "cab_approver","actual_start_utc","actual_end_utc","rollback_plan"],
+        filename=f"failed-changes-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Emergency changes ----------
+
+@router.get("/reports/library/emergency-changes", response_class=HTMLResponse)
+def lib_emergency_changes(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Change)
+              .filter(Change.tenant_id == user.tenant_id,
+                      Change.change_type == ChangeType.emergency)
+              .order_by(Change.created_at.desc()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="emergency-changes", controls="A.8.32 — emergency change register",
+            title="Emergency changes", rows=rows, row_type="change",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/emergency-changes.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/emergency-changes.csv")
+def lib_emergency_changes_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Change)
+              .filter(Change.tenant_id == user.tenant_id,
+                      Change.change_type == ChangeType.emergency)
+              .order_by(Change.created_at.desc()).all())
+    def gen():
+        for c in rows:
+            yield [
+                c.change_number, c.title, c.risk.value, c.status.value,
+                (c.requester.email if c.requester else ""),
+                (c.cab_approver.email if c.cab_approver else ""),
+                c.cab_decision_at.astimezone(timezone.utc).isoformat() if c.cab_decision_at else "",
+                (c.cab_decision_note or "")[:500].replace("\n", " ↵ "),
+                c.created_at.astimezone(timezone.utc).isoformat() if c.created_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["change_number","title","risk","status","requester","cab_approver",
+         "cab_decision_at_utc","cab_decision_note","created_at_utc"],
+        filename=f"emergency-changes-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- CAB decision log ----------
+
+@router.get("/reports/library/cab-decisions", response_class=HTMLResponse)
+def lib_cab_decisions(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Change)
+              .filter(Change.tenant_id == user.tenant_id,
+                      Change.cab_decision_at.isnot(None))
+              .order_by(Change.cab_decision_at.desc()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="cab-decisions", controls="A.8.32 — CAB decision log",
+            title="CAB decision log", rows=rows, row_type="change",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/cab-decisions.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/cab-decisions.csv")
+def lib_cab_decisions_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(Change)
+              .filter(Change.tenant_id == user.tenant_id,
+                      Change.cab_decision_at.isnot(None))
+              .order_by(Change.cab_decision_at.desc()).all())
+    def gen():
+        for c in rows:
+            decision = "approved" if c.status in (
+                ChangeStatus.approved, ChangeStatus.in_progress,
+                ChangeStatus.completed, ChangeStatus.failed
+            ) else c.status.value
+            yield [
+                c.change_number, c.title, c.change_type.value, c.risk.value,
+                decision,
+                (c.requester.email if c.requester else ""),
+                (c.cab_approver.email if c.cab_approver else ""),
+                c.cab_decision_at.astimezone(timezone.utc).isoformat() if c.cab_decision_at else "",
+                (c.cab_decision_note or "")[:500].replace("\n", " ↵ "),
+            ]
+    return _stream_csv(
+        gen(),
+        ["change_number","title","type","risk","decision",
+         "requester","cab_approver","cab_decision_at_utc","cab_decision_note"],
+        filename=f"cab-decisions-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Stale endpoints (last_seen > 14d) ----------
+
+@router.get("/reports/library/stale-assets", response_class=HTMLResponse)
+def lib_stale_assets(
+    request: Request,
+    days: int = 14,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from sqlalchemy import or_
+    rows = (db.query(Agent)
+              .filter(Agent.tenant_id == user.tenant_id,
+                      or_(Agent.last_seen_at.is_(None),
+                          Agent.last_seen_at < cutoff))
+              .order_by(Agent.last_seen_at.asc().nullsfirst()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="stale-assets", controls=f"Endpoints not seen in {days}+ days",
+            title=f"Stale endpoints (not seen in {days}+ days)", rows=rows, row_type="agent",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url=f"/reports/library/stale-assets.csv?days={days}",
+        ),
+    )
+
+
+@router.get("/reports/library/stale-assets.csv")
+def lib_stale_assets_csv(
+    days: int = 14,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from sqlalchemy import or_
+    rows = (db.query(Agent)
+              .filter(Agent.tenant_id == user.tenant_id,
+                      or_(Agent.last_seen_at.is_(None),
+                          Agent.last_seen_at < cutoff))
+              .order_by(Agent.last_seen_at.asc().nullsfirst()).all())
+    now = datetime.now(timezone.utc)
+    def gen():
+        for a in rows:
+            stale_days = ((now - a.last_seen_at).days
+                          if a.last_seen_at else "never-checked-in")
+            yield [
+                a.hostname, a.machine_id, stale_days,
+                a.last_seen_at.astimezone(timezone.utc).isoformat() if a.last_seen_at else "",
+                a.registered_at.astimezone(timezone.utc).isoformat() if a.registered_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["hostname","machine_id","stale_days","last_seen_utc","registered_at_utc"],
+        filename=f"stale-assets-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Critical patches ----------
+
+@router.get("/reports/library/critical-patches", response_class=HTMLResponse)
+def lib_critical_patches(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(PatchObservation).join(Agent)
+              .filter(Agent.tenant_id == user.tenant_id,
+                      PatchObservation.resolved_at.is_(None),
+                      PatchObservation.severity == PatchSeverity.critical)
+              .order_by(PatchObservation.first_seen_at).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="critical-patches", controls="A.8.8 — critical-severity vulnerabilities outstanding",
+            title="Critical patches outstanding", rows=rows, row_type="patch",
+            status_options=[],
+            now=datetime.now(timezone.utc),
+            date_from="", date_to="", status="critical", only_open=1,
+            csv_url="/reports/library/critical-patches.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/critical-patches.csv")
+def lib_critical_patches_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(PatchObservation).join(Agent)
+              .filter(Agent.tenant_id == user.tenant_id,
+                      PatchObservation.resolved_at.is_(None),
+                      PatchObservation.severity == PatchSeverity.critical)
+              .order_by(PatchObservation.first_seen_at).all())
+    now = datetime.now(timezone.utc)
+    def gen():
+        for p in rows:
+            age_days = (now - p.first_seen_at).days if p.first_seen_at else ""
+            yield [
+                p.agent.hostname if p.agent else "",
+                p.package_name, p.current_version or "", p.available_version or "",
+                p.severity.value, p.source, (p.title or "")[:200], age_days,
+                p.first_seen_at.astimezone(timezone.utc).isoformat() if p.first_seen_at else "",
+                p.last_seen_at.astimezone(timezone.utc).isoformat() if p.last_seen_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["hostname","package","current_version","available_version","severity",
+         "source","title","days_outstanding","first_seen_utc","last_seen_utc"],
+        filename=f"critical-patches-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Aged patches (>30 days outstanding) ----------
+
+@router.get("/reports/library/aged-patches", response_class=HTMLResponse)
+def lib_aged_patches(
+    request: Request,
+    days: int = 30,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (db.query(PatchObservation).join(Agent)
+              .filter(Agent.tenant_id == user.tenant_id,
+                      PatchObservation.resolved_at.is_(None),
+                      PatchObservation.first_seen_at < cutoff)
+              .order_by(PatchObservation.first_seen_at).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="aged-patches", controls=f"A.8.8 — patches outstanding > {days}d",
+            title=f"Patches aged > {days} days", rows=rows, row_type="patch",
+            status_options=[],
+            now=datetime.now(timezone.utc),
+            date_from="", date_to="", status="", only_open=1,
+            csv_url=f"/reports/library/aged-patches.csv?days={days}",
+        ),
+    )
+
+
+@router.get("/reports/library/aged-patches.csv")
+def lib_aged_patches_csv(
+    days: int = 30,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (db.query(PatchObservation).join(Agent)
+              .filter(Agent.tenant_id == user.tenant_id,
+                      PatchObservation.resolved_at.is_(None),
+                      PatchObservation.first_seen_at < cutoff)
+              .order_by(PatchObservation.first_seen_at).all())
+    now = datetime.now(timezone.utc)
+    def gen():
+        for p in rows:
+            age_days = (now - p.first_seen_at).days if p.first_seen_at else ""
+            yield [
+                p.agent.hostname if p.agent else "",
+                p.package_name, p.severity.value,
+                age_days,
+                p.first_seen_at.astimezone(timezone.utc).isoformat() if p.first_seen_at else "",
+                p.last_seen_at.astimezone(timezone.utc).isoformat() if p.last_seen_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["hostname","package","severity","days_outstanding","first_seen_utc","last_seen_utc"],
+        filename=f"aged-patches-gt{days}d-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Inactive users ----------
+
+@router.get("/reports/library/inactive-users", response_class=HTMLResponse)
+def lib_inactive_users(
+    request: Request,
+    days: int = 90,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from sqlalchemy import or_
+    rows = (db.query(User)
+              .filter(User.tenant_id == user.tenant_id,
+                      User.is_active.is_(True),
+                      or_(User.last_login_at.is_(None),
+                          User.last_login_at < cutoff))
+              .order_by(User.last_login_at.asc().nullsfirst()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="inactive-users", controls=f"A.5.16/.18 — active accounts unused for {days}+ days",
+            title=f"Inactive users (no login in {days}+ days)", rows=rows, row_type="user",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url=f"/reports/library/inactive-users.csv?days={days}",
+        ),
+    )
+
+
+@router.get("/reports/library/inactive-users.csv")
+def lib_inactive_users_csv(
+    days: int = 90,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from sqlalchemy import or_
+    rows = (db.query(User)
+              .filter(User.tenant_id == user.tenant_id,
+                      User.is_active.is_(True),
+                      or_(User.last_login_at.is_(None),
+                          User.last_login_at < cutoff))
+              .order_by(User.last_login_at.asc().nullsfirst()).all())
+    now = datetime.now(timezone.utc)
+    def gen():
+        for u in rows:
+            inactive_days = ((now - u.last_login_at).days
+                             if u.last_login_at else "never-logged-in")
+            yield [
+                u.email, (u.full_name or ""), u.role.value,
+                inactive_days,
+                (u.department or ""), (u.location or ""),
+                u.last_login_at.astimezone(timezone.utc).isoformat() if u.last_login_at else "",
+                u.created_at.astimezone(timezone.utc).isoformat() if u.created_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["email","name","role","inactive_days","department","location",
+         "last_login_utc","created_at_utc"],
+        filename=f"inactive-users-{days}d-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Admin & agent roster ----------
+
+@router.get("/reports/library/admin-roster", response_class=HTMLResponse)
+def lib_admin_roster(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(User)
+              .filter(User.tenant_id == user.tenant_id,
+                      User.role.in_([UserRole.admin, UserRole.agent]))
+              .order_by(User.role, User.email).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="admin-roster", controls="A.5.15 — privileged access register",
+            title="Admin & agent roster", rows=rows, row_type="user",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/admin-roster.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/admin-roster.csv")
+def lib_admin_roster_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(User)
+              .filter(User.tenant_id == user.tenant_id,
+                      User.role.in_([UserRole.admin, UserRole.agent]))
+              .order_by(User.role, User.email).all())
+    def gen():
+        for u in rows:
+            yield [
+                u.email, (u.full_name or ""), u.role.value,
+                "active" if u.is_active else "deactivated",
+                "yes" if u.is_cab_member else "no",
+                (u.department or ""), (u.location or ""),
+                u.last_login_at.astimezone(timezone.utc).isoformat() if u.last_login_at else "",
+                u.created_at.astimezone(timezone.utc).isoformat() if u.created_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["email","name","role","status","is_cab","department","location",
+         "last_login_utc","created_at_utc"],
+        filename=f"admin-roster-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- KB usage (sorted by views) ----------
+
+@router.get("/reports/library/kb-usage", response_class=HTMLResponse)
+def lib_kb_usage(
+    request: Request,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(KbArticle)
+              .filter(KbArticle.tenant_id == user.tenant_id)
+              .order_by(KbArticle.view_count.desc()).limit(500).all())
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="kb-usage", controls="KB consumption — most-read articles",
+            title="KB usage — top articles", rows=rows, row_type="kb",
+            status_options=[],
+            date_from="", date_to="", status="",
+            csv_url="/reports/library/kb-usage.csv",
+        ),
+    )
+
+
+@router.get("/reports/library/kb-usage.csv")
+def lib_kb_usage_csv(
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    rows = (db.query(KbArticle)
+              .filter(KbArticle.tenant_id == user.tenant_id)
+              .order_by(KbArticle.view_count.desc()).all())
+    def gen():
+        for a in rows:
+            yield [
+                a.slug, a.title,
+                (a.category.name if a.category else ""),
+                a.status.value, a.visibility.value,
+                a.view_count,
+                (a.author.email if a.author else ""),
+                a.updated_at.astimezone(timezone.utc).isoformat() if a.updated_at else "",
+                a.published_at.astimezone(timezone.utc).isoformat() if a.published_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["slug","title","category","status","audience","views","author",
+         "updated_at_utc","published_at_utc"],
+        filename=f"kb-usage-{datetime.utcnow():%Y%m%d}.csv",
+    )
+
+
+# ---------- Remote actions history ----------
+
+@router.get("/reports/library/remote-actions", response_class=HTMLResponse)
+def lib_remote_actions(
+    request: Request,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = db.query(RemoteAction).filter(RemoteAction.tenant_id == user.tenant_id)
+    if df: qy = qy.filter(RemoteAction.created_at >= df)
+    if dt: qy = qy.filter(RemoteAction.created_at <= dt)
+    if status:
+        try: qy = qy.filter(RemoteAction.status == RemoteActionStatus(status))
+        except ValueError: pass
+    rows = qy.order_by(RemoteAction.created_at.desc()).limit(500).all()
+    return templates.TemplateResponse(
+        request=request, name="reports_run.html",
+        context=_ctx(user, db,
+            report_key="remote-actions", controls="A.5.28 · A.8.15 — privileged action audit log",
+            title="Remote action history", rows=rows, row_type="remote_action",
+            status_options=[s.value for s in RemoteActionStatus],
+            **_common_filter_ctx(date_from, date_to),
+            status=status or "",
+            csv_url=f"/reports/library/remote-actions.csv?date_from={date_from or ''}&date_to={date_to or ''}&status={status or ''}",
+        ),
+    )
+
+
+@router.get("/reports/library/remote-actions.csv")
+def lib_remote_actions_csv(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    df = _parse_date(date_from, default_days_ago=30)
+    dt = _parse_date(date_to)
+    qy = db.query(RemoteAction).filter(RemoteAction.tenant_id == user.tenant_id)
+    if df: qy = qy.filter(RemoteAction.created_at >= df)
+    if dt: qy = qy.filter(RemoteAction.created_at <= dt)
+    if status:
+        try: qy = qy.filter(RemoteAction.status == RemoteActionStatus(status))
+        except ValueError: pass
+    rows = qy.order_by(RemoteAction.created_at.desc()).all()
+    def gen():
+        for r in rows:
+            yield [
+                r.created_at.astimezone(timezone.utc).isoformat() if r.created_at else "",
+                r.kind.value, r.status.value,
+                (r.agent.hostname if r.agent else ""),
+                (r.created_by.email if r.created_by else "system"),
+                r.exit_code if r.exit_code is not None else "",
+                r.started_at.astimezone(timezone.utc).isoformat() if r.started_at else "",
+                r.finished_at.astimezone(timezone.utc).isoformat() if r.finished_at else "",
+            ]
+    return _stream_csv(
+        gen(),
+        ["created_at_utc","kind","status","hostname","actor","exit_code",
+         "started_at_utc","finished_at_utc"],
+        filename=f"remote-actions-{datetime.utcnow():%Y%m%d}.csv",
     )

@@ -208,6 +208,58 @@
     </tr>
     {% endfor %}
   </tbody>
+
+  {% elif row_type == "workload" %}
+  <thead><tr><th>Assignee</th><th>Role</th><th>Open total</th><th>Low</th><th>Medium</th><th>High</th><th>Critical</th></tr></thead>
+  <tbody>
+    {% for w in rows %}
+    <tr>
+      <td><strong>{{ w.user.display_name }}</strong><br><span style="font-size:11.5px;color:var(--text-3);">{{ w.user.email }}</span></td>
+      <td><span class="role-pill role-{{ w.user.role.value }}">{{ w.user.role.value }}</span></td>
+      <td><strong style="font-size:15px;">{{ w.open_count }}</strong></td>
+      <td>{{ w.low }}</td>
+      <td>{{ w.medium }}</td>
+      <td><strong style="color:#9a3412;">{{ w.high }}</strong></td>
+      <td><strong style="color:#7f1d1d;">{{ w.critical }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+
+  {% elif row_type == "top_reporter" %}
+  <thead><tr><th>Email</th><th>Name</th><th>Department</th><th>Office</th><th>Tickets filed</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><strong>{{ r.user.email }}</strong></td>
+      <td>{{ r.user.full_name or "—" }}</td>
+      <td style="font-size:12.5px; color:var(--text-3);">{{ r.user.department or "—" }}</td>
+      <td style="font-size:12.5px; color:var(--text-3);">{{ r.user.location or "—" }}</td>
+      <td><strong style="font-size:15px;">{{ r.count }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+
+  {% elif row_type == "remote_action" %}
+  <thead><tr><th>When (IST)</th><th>Action</th><th>Status</th><th>Endpoint</th><th>By</th><th>Exit</th><th>Finished (IST)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td style="font-size:12.5px; color:var(--text-3); white-space:nowrap;">{{ r.created_at | ist }}</td>
+      <td style="font-size:12.5px;"><strong>{{ r.kind.value }}</strong></td>
+      <td>
+        {% if r.status.value == 'succeeded' %}<span class="status status-resolved">{{ r.status.value }}</span>
+        {% elif r.status.value == 'failed' %}<span class="status status-cancelled">{{ r.status.value }}</span>
+        {% elif r.status.value == 'in_progress' %}<span class="status status-in_progress">{{ r.status.value.replace("_"," ") }}</span>
+        {% elif r.status.value == 'cancelled' %}<span class="status status-cancelled">{{ r.status.value }}</span>
+        {% else %}<span class="status status-open">{{ r.status.value }}</span>{% endif %}
+      </td>
+      <td>{{ r.agent.hostname if r.agent else "—" }}</td>
+      <td style="font-size:12px; color:var(--text-3);">{{ r.created_by.email if r.created_by else "system" }}</td>
+      <td>{% if r.exit_code is not none %}<code>{{ r.exit_code }}</code>{% else %}<span style="color:var(--text-4);">—</span>{% endif %}</td>
+      <td style="font-size:12.5px; color:var(--text-3);">{% if r.finished_at %}{{ r.finished_at | ist }}{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
   {% endif %}
 </table>
 {% else %}
