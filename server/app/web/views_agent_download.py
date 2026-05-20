@@ -24,6 +24,11 @@ ALLOWED_FILES = {
     "octoassist_agent.py":   "text/x-python",
     "install-windows.ps1":   "text/x-powershell",
     "README.md":             "text/markdown",
+    # Offline PSWindowsUpdate module — for endpoints whose firewall blocks
+    # powershellgallery.com but can still reach the OctoAssist server.
+    # ~230 KB, contains the PSWindowsUpdate/ folder structure ready to drop
+    # into $env:ProgramFiles\WindowsPowerShell\Modules\.
+    "pswindowsupdate.zip":   "application/zip",
 }
 
 router = APIRouter(tags=["agent-install"])

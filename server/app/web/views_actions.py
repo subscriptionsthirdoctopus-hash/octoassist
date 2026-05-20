@@ -178,37 +178,84 @@ async def asset_action_queue(
 
 
 # ---------- Canned PSWindowsUpdate self-repair ----------
-# Reusable PowerShell that re-bootstraps the PSGallery → NuGet → PSWindowsUpdate
-# chain on endpoints where the original install.ps1 didn't manage to lay it
-# down (TLS 1.2 not set, PSGallery untrusted, AV blocking, etc.). Idempotent.
-_PSW_INSTALL_SCRIPT = r"""
+# Two-stage installer:
+#   1. Try the orthodox path — TLS 1.2 + NuGet + PSGallery trust + Install-Module
+#   2. If PSGallery is unreachable (corporate firewall blocking the public CDN),
+#      fall back to the offline bundle we host at /agent/files/pswindowsupdate.zip
+#      — the endpoint already trusts and reaches the OctoAssist server every
+#      30 seconds, so this path works even on locked-down networks.
+#
+# The script uses a placeholder {SERVER_URL} which is resolved per-request
+# from the incoming Request object — keeps the URL right whether the server
+# is behind a custom domain, an IP, a non-standard port, etc.
+_PSW_INSTALL_SCRIPT_TEMPLATE = r"""
 $ErrorActionPreference = 'Continue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-try { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null } catch { Write-Host "NuGet bootstrap: $($_.Exception.Message)" }
-try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop } catch { Write-Host "PSGallery trust: $($_.Exception.Message)" }
-if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {
-    try { Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop } catch { Write-Host "Install-Module: $($_.Exception.Message)" }
+
+function Test-Installed { (Get-Module -ListAvailable PSWindowsUpdate) -ne $null }
+
+# Stage 1 — orthodox PSGallery path
+Write-Host '--- Stage 1: PSGallery ---'
+try { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null } catch { Write-Host ("NuGet bootstrap: {0}" -f $_.Exception.Message) }
+try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop } catch { Write-Host ("PSGallery trust: {0}" -f $_.Exception.Message) }
+if (-not (Test-Installed)) {
+    try { Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop } catch { Write-Host ("Install-Module: {0}" -f $_.Exception.Message) }
 }
+
+# Stage 2 — fall back to the offline bundle hosted on the OctoAssist server
+if (-not (Test-Installed)) {
+    Write-Host '--- Stage 2: offline bundle from OctoAssist server ---'
+    $bundleUrl = '{SERVER_URL}/agent/files/pswindowsupdate.zip'
+    $tmpZip   = Join-Path $env:TEMP 'pswindowsupdate.zip'
+    $modRoot  = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
+    try {
+        Write-Host ("downloading {0}" -f $bundleUrl)
+        Invoke-WebRequest -Uri $bundleUrl -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
+        if (-not (Test-Path $modRoot)) { New-Item -ItemType Directory -Path $modRoot -Force | Out-Null }
+        # Remove any old/broken install
+        $existing = Join-Path $modRoot 'PSWindowsUpdate'
+        if (Test-Path $existing) { Remove-Item -Path $existing -Recurse -Force -ErrorAction SilentlyContinue }
+        # Unzip — Expand-Archive needs PS5+; this is Win10+ so fine
+        Expand-Archive -Path $tmpZip -DestinationPath $modRoot -Force
+        Remove-Item $tmpZip -ErrorAction SilentlyContinue
+        Write-Host ("extracted PSWindowsUpdate to {0}" -f $existing)
+    } catch {
+        Write-Host ("offline bundle install failed: {0}" -f $_.Exception.Message)
+    }
+}
+
+# Verify
 $mod = Get-Module -ListAvailable PSWindowsUpdate | Select-Object -First 1
 if ($mod) {
-    Write-Host "OK: PSWindowsUpdate $($mod.Version) installed"
+    Write-Host ("OK: PSWindowsUpdate {0} installed" -f $mod.Version)
     exit 0
 } else {
-    Write-Error "PSWindowsUpdate still missing after self-repair attempt"
+    Write-Error "PSWindowsUpdate still missing after both PSGallery and offline-bundle attempts"
     exit 2
 }
 """.strip()
 
 
+def _build_psw_install_script(request: Request) -> str:
+    """Substitute {SERVER_URL} with the request's base URL so the bundled
+    PSWindowsUpdate.zip is fetched from the same OctoAssist server the
+    endpoint is already trusting + polling."""
+    base = str(request.base_url).rstrip("/")
+    return _PSW_INSTALL_SCRIPT_TEMPLATE.replace("{SERVER_URL}", base)
+
+
 @router.post("/asset/{agent_id}/fix-pswindowsupdate")
 def asset_fix_psw(
     agent_id: int,
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     """One-click remediation: queue the PSWindowsUpdate install script as a
-    custom_powershell remote action. Surfaces in the same audit/action log
-    as any other admin-initiated action."""
+    custom_powershell remote action. The script tries PSGallery first then
+    falls back to the offline bundle we host at /agent/files/pswindowsupdate.zip
+    — works even when the endpoint can't reach the public CDN.
+    Surfaces in the same audit/action log as any other admin-initiated action."""
     agent = db.get(Agent, agent_id)
     if agent is None or agent.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
@@ -216,7 +263,7 @@ def asset_fix_psw(
         action = ra_svc.queue(
             db, tenant_id=user.tenant_id, creator=user,
             agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
-            params={"script": _PSW_INSTALL_SCRIPT,
+            params={"script": _build_psw_install_script(request),
                     "label": "Self-repair: install PSWindowsUpdate"},
         )
     except ValueError as e:
