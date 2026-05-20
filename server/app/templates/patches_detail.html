@@ -149,7 +149,7 @@ function confirmDeploy(form) {
   if (n === 0) { alert('Pick at least one patch first.'); return false; }
   return confirm('Push ' + n + ' patch(es) to {{ agent.hostname|e }}?\n\n'
     + 'A patch window will be created and marked in_progress.\n'
-    + 'The agent installs them on its next check-in (or sooner if you trigger refresh.ps1).');
+    + 'Agents pick up the deployment on their next 5-minute poll.');
 }
 // Wire change event on every pkg checkbox to keep the counter live.
 document.querySelectorAll('input.pick-pkg').forEach(function (c) {

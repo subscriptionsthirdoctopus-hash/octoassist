@@ -202,13 +202,19 @@
           {% if r.fully_updated %}
             <span class="status status-resolved">✓ Fully Updated</span>
           {% elif r.needs_refresh %}
-            <button type="button" class="status status-on_hold"
-                    style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;"
-                    onclick="showRefreshModal('{{ r.hostname|e }}')">⟳ Refresh agent</button>
+            <form method="post" action="/asset/{{ r.agent_id }}/action" class="inline-form" style="display:inline;"
+                  onsubmit="return confirm('Trigger immediate check-in on {{ r.hostname|e }}?\n\nAgent re-scans within seconds. Runs silently as SYSTEM.');">
+              <input type="hidden" name="kind" value="force_refresh">
+              <button type="submit" class="status status-on_hold"
+                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">⟳ Refresh agent</button>
+            </form>
           {% elif r.scan_failed %}
-            <button type="button" class="status status-cancelled"
-                    style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;"
-                    onclick="showRefreshModal('{{ r.hostname|e }}')">⚠ Scan failed</button>
+            <form method="post" action="/asset/{{ r.agent_id }}/action" class="inline-form" style="display:inline;"
+                  onsubmit="return confirm('Retry the patch scan on {{ r.hostname|e }}?\n\nQueues a forced check-in; agent re-runs the scan within seconds.');">
+              <input type="hidden" name="kind" value="force_refresh">
+              <button type="submit" class="status status-cancelled"
+                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">⚠ Scan failed — retry</button>
+            </form>
           {% elif r.critical > 0 %}
             <span class="status status-cancelled">{{ r.pending_count }} pending</span>
           {% else %}
@@ -236,68 +242,11 @@
   {% endif %}
 </section>
 
-{# ───────── Refresh-agent modal ───────── #}
-<div id="refresh-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;align-items:center;justify-content:center;padding:24px;">
-  <div style="background:white;max-width:760px;width:100%;border-radius:8px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow:auto;">
-    <div class="row-between" style="margin-bottom:8px;">
-      <h2 style="margin:0;font-size:18px;">Refresh agent on <code id="refresh-host">—</code></h2>
-      <button type="button" onclick="closeRefreshModal()" class="link-button" style="font-size:22px;line-height:1;padding:0 6px;">×</button>
-    </div>
-    <p class="meta" style="margin:0 0 14px;">
-      The new agent will <strong>auto-update on its next scheduled check-in</strong> (every 6 hours).
-      To roll it out <em>right now</em>, RDP into the endpoint, open <strong>elevated PowerShell</strong>,
-      and paste this <strong>one</strong> permanent command. It always pulls the latest refresh logic
-      from the server — you never need to copy a different command, even after future updates.
-    </p>
-    <pre id="refresh-cmd" class="code" style="white-space:pre-wrap;word-break:break-all;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;font-size:13px;line-height:1.55;">iex (iwr -useb https://octoassist.thirdoctopus.com/agent/refresh.ps1).Content</pre>
-    <p class="meta" style="margin:10px 0 0;font-size:12px;">
-      What this does (in one HTTPS fetch + run):
-      installs missing PSWindowsUpdate + NuGet → pulls the newest <code>octoassist_agent.py</code>
-      → locates real Python → runs <code>--once</code> to apply the Windows Update lock-down
-      and post a fresh inventory + patch scan → tails the agent log.
-    </p>
-    <div class="row-between" style="margin-top:14px;align-items:center;">
-      <p class="meta" style="margin:0;font-size:12px;">
-        After it finishes the endpoint reports back within ~30 seconds and this row will flip to
-        <span class="status status-resolved">✓ Fully Updated</span> or <span class="status status-cancelled">N pending</span>.
-      </p>
-      <button type="button" class="primary" onclick="copyRefreshCmd()" id="refresh-copy-btn">Copy command</button>
-    </div>
-  </div>
-</div>
+{# Refresh modal removed — '⟳ Refresh agent' and '⚠ Scan failed — retry'
+   buttons now POST a force_refresh remote action directly. Admins never
+   see PowerShell commands. #}
 
 <script>
-function showRefreshModal(hostname) {
-  document.getElementById('refresh-host').innerText = hostname;
-  document.getElementById('refresh-modal').style.display = 'flex';
-}
-function closeRefreshModal() {
-  document.getElementById('refresh-modal').style.display = 'none';
-}
-function copyRefreshCmd() {
-  var el  = document.getElementById('refresh-cmd');
-  var btn = document.getElementById('refresh-copy-btn');
-  var txt = el.innerText;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt).then(function () {
-      var orig = btn.innerText;
-      btn.innerText = 'Copied!';
-      setTimeout(function () { btn.innerText = orig; }, 1500);
-    });
-  } else {
-    var r = document.createRange();
-    r.selectNode(el);
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(r);
-  }
-}
-document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape') closeRefreshModal();
-});
-document.getElementById('refresh-modal').addEventListener('click', function (e) {
-  if (e.target.id === 'refresh-modal') closeRefreshModal();
-});
-
 // --- Quick-deploy scheduling: copy the global datetime to each form's hidden field on submit ---
 function confirmQuickDeploy(form, count, title) {
   var when = document.getElementById('qd-scheduled-for').value;
