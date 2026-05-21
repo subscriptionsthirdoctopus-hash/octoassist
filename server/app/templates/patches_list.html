@@ -151,11 +151,28 @@
     &nbsp;·&nbsp;
     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:4px;vertical-align:middle;"></span> Offline (powered off / no network) — deploys queue until it returns
   </p>
+
+  <form method="get" action="/patches" class="filters" style="margin-bottom:12px;">
+    <div style="position:relative; flex:1; min-width:260px; max-width:420px;">
+      <span style="position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none;">🔍</span>
+      <input type="search" name="q" value="{{ q or '' }}"
+             placeholder="Search hostname, user, email, location, OS…"
+             autocomplete="off" style="padding-left:34px;">
+    </div>
+    <button type="submit" class="primary">Apply</button>
+    {% if q %}<a href="/patches" class="link-button">Clear</a>{% endif %}
+    <span class="meta" style="margin-left:auto; font-size:12.5px;">
+      {{ win_dash|length }} of {{ win_dash_total }} endpoint{{ "" if win_dash_total == 1 else "s" }} shown
+    </span>
+  </form>
+
   {% if win_dash %}
   <table class="data">
     <thead>
       <tr>
         <th>Hostname</th>
+        <th>Assigned to</th>
+        <th>Office</th>
         <th>OS</th>
         <th>Last scan</th>
         <th>Pending</th>
@@ -179,6 +196,18 @@
           {% endif %}
           <a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a>
         </td>
+        <td style="font-size:12.5px;">
+          {% if r.assigned_name %}
+            <strong style="color:var(--text-1);">{{ r.assigned_name }}</strong>
+            {% if r.assigned_email %}<br><span style="color:var(--text-3);font-size:11.5px;">{{ r.assigned_email }}</span>{% endif %}
+          {% elif r.logged_in_user %}
+            <span style="color:var(--text-2);">{{ r.logged_in_user }}</span>
+            <br><span style="color:var(--text-4);font-size:11px;font-style:italic;">(logged-in)</span>
+          {% else %}
+            <span style="color:var(--text-4);font-style:italic;">unassigned</span>
+          {% endif %}
+        </td>
+        <td style="font-size:12.5px;color:var(--text-2);">{{ r.location or "—" }}</td>
         <td style="font-size:12.5px;color:var(--slate);">{{ r.os_caption }}</td>
         <td>{% if r.last_scan_at %}{{ r.last_scan_at | ist }}{% else %}<span style="color:var(--slate);font-size:12px;">unknown</span>{% endif %}</td>
         <td><strong>{{ r.pending_count }}</strong></td>

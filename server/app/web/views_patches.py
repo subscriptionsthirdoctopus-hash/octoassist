@@ -44,12 +44,24 @@ def _parse_dt(s: str) -> datetime | None:
 @router.get("/patches", response_class=HTMLResponse)
 def patches_home(
     request: Request,
+    q: str = "",
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     tid = user.tenant_id
     # Windows-only per-endpoint dashboard (Linux + Mac filtered out)
-    win_dash = patches_svc.windows_endpoint_dashboard(db, tid)
+    win_dash_all = patches_svc.windows_endpoint_dashboard(db, tid)
+    needle = (q or "").strip().lower()
+    if needle:
+        def _hit(r):
+            hay = " | ".join(str(x or "").lower() for x in (
+                r.get("hostname"), r.get("assigned_name"), r.get("assigned_email"),
+                r.get("logged_in_user"), r.get("location"), r.get("os_caption"),
+            ))
+            return needle in hay
+        win_dash = [r for r in win_dash_all if _hit(r)]
+    else:
+        win_dash = win_dash_all
     sev = patches_svc.severity_breakdown(db, tid)
     top = patches_svc.top_missing_packages(db, tid, top=15)
     kpi = patches_svc.patch_kpis(db, tid)
@@ -82,7 +94,8 @@ def patches_home(
     return templates.TemplateResponse(
         request=request, name="patches_list.html",
         context=_ctx(user, db,
-                     win_dash=win_dash, kpi=kpi,
+                     win_dash=win_dash, win_dash_total=len(win_dash_all),
+                     q=needle, kpi=kpi,
                      vendors=vendors,
                      quick_deploy_options=quick_deploy_options,
                      chart_severity=charts.donut(sev, size=200),

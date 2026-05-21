@@ -188,6 +188,11 @@ def windows_endpoint_dashboard(db: Session, tenant_id: int) -> list[dict]:
             age = (_now() - agent.last_seen_at).total_seconds()
             if age <= 120:    online = "online"      # ✓ within 2 polls
             elif age <= 300:  online = "lagging"    # ⚠ recent but stale
+        # Resolve assignee + location. Prefer the Agent.primary_user (manually
+        # set or auto-linked by asset_linker), fall back to the snapshot's
+        # logged_in_user when the device hasn't been linked yet.
+        pu = agent.primary_user
+        logged_in = (payload or {}).get("logged_in_user")
         out.append({
             "agent_id":          agent.id,
             "hostname":          agent.hostname,
@@ -207,6 +212,11 @@ def windows_endpoint_dashboard(db: Session, tenant_id: int) -> list[dict]:
             "fully_updated":     scan_success and scan_known and pending == 0,
             "scan_failed":       scan_known and not scan_success,
             "needs_refresh":     not scan_known,  # old-agent flag
+            # Per-machine context — feeds the User + Location columns on /patches.
+            "assigned_name":     (pu.full_name if pu else None) or (pu.email if pu else None),
+            "assigned_email":    (pu.email if pu else None),
+            "logged_in_user":    logged_in,
+            "location":          agent.location or (pu.location if pu else None),
             "compliance_pct":    compliance,
             "online":            online,
         })
