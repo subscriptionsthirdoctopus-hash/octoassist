@@ -92,13 +92,16 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 
 ::selection { background: var(--accent-soft); color: var(--accent-hover); }
 
-/* ---------- Top bar — light, sticky, low-contrast chrome ---------- */
+/* ---------- Top bar — confident dark slate, sticky, brand-forward ----------
+   User feedback: the prior translucent-white bar was 'same as white, need
+   some highlighted color'. Industry leaders (Linear, GitHub, Vercel admin)
+   all use a dark slate / near-black topbar — high-contrast, premium, and
+   keeps the content area clean below. */
 .topbar {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: saturate(180%) blur(8px);
-  -webkit-backdrop-filter: saturate(180%) blur(8px);
-  color: var(--text-1);
-  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #0f172a 0%, #111c34 100%);
+  color: #f1f5f9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15), 0 4px 12px rgba(15, 23, 42, 0.18);
   padding: 10px 28px;
   display: flex;
   justify-content: space-between;
@@ -109,26 +112,31 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 }
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .brand-link { text-decoration: none; color: inherit; transition: opacity 0.12s; }
-.brand-link:hover { opacity: 0.85; text-decoration: none; }
+.brand-link:hover { opacity: 0.9; text-decoration: none; }
 .brand-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
-.brand-mark { font-weight: 700; letter-spacing: 1.2px; font-size: 11px; color: var(--text-3); }
-.brand-product { color: var(--text-1); font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
-.topbar nav { display: flex; align-items: center; gap: 4px; }
+.brand-mark { font-weight: 700; letter-spacing: 1.2px; font-size: 11px; color: rgba(148, 163, 184, 0.85); }
+.brand-product { color: white; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+.topbar nav { display: flex; align-items: center; gap: 2px; }
 .topbar nav a {
-  color: var(--text-2);
+  color: rgba(241, 245, 249, 0.78);
   text-decoration: none;
   font-size: 13.5px;
   font-weight: 500;
-  padding: 7px 11px;
+  padding: 7px 12px;
   border-radius: var(--r-sm);
   transition: background 0.12s, color 0.12s;
 }
-.topbar nav a:hover { color: var(--text-1); background: var(--hover); text-decoration: none; }
-.topbar nav .who {
-  color: var(--text-2); font-size: 13px; font-weight: 500;
-  padding-left: 12px; margin-left: 6px; border-left: 1px solid var(--line);
-  display: inline-flex; align-items: center; gap: 6px;
+.topbar nav a:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+  text-decoration: none;
 }
+.topbar nav .who {
+  color: rgba(241, 245, 249, 0.82); font-size: 13px; font-weight: 500;
+  padding-left: 14px; margin-left: 8px; border-left: 1px solid rgba(255, 255, 255, 0.12);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.topbar nav .who a, .topbar nav form button { color: rgba(241, 245, 249, 0.78); }
 .topbar nav .role-pill {
   font-size: 10px;
   padding: 2px 7px;
@@ -137,9 +145,10 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   letter-spacing: 0.5px;
   font-weight: 700;
 }
-.role-admin     { background: #dbeafe; color: #1e40af; }
-.role-agent     { background: #e0e7ff; color: #3730a3; }
-.role-requester { background: #f1f5f9; color: var(--text-3); }
+/* Role pills on dark background — higher saturation backgrounds for legibility */
+.role-admin     { background: #2563eb; color: white; }
+.role-agent     { background: #6366f1; color: white; }
+.role-requester { background: rgba(255, 255, 255, 0.18); color: white; }
 
 main { max-width: 1280px; margin: 0 auto; padding: 28px 28px 48px; }
 
