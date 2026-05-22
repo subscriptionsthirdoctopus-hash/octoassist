@@ -10,43 +10,47 @@ import math
 from html import escape
 
 
-# ----------  Brand palette ----------
+# ----------  Brand palette (dark-mode tuned) ----------
+# These are used for SVG fills/strokes inside server-rendered charts. The
+# constants are dark-mode safe — labels/axis ticks read on a dark surface,
+# data colours stay vivid. (Light-on-light or dark-on-dark would be invisible.)
 
-NAVY  = "#11233f"
-TEAL  = "#1aa6b7"
-SLATE = "#5a6473"
-LINE  = "#d8dee8"
-GREEN = "#2f9e6b"
-AMBER = "#c98a17"
-RED   = "#c1432a"
-BLUE  = "#1f4f9f"
-PURPLE = "#5b3a99"
+NAVY  = "#cbd5e1"   # slate-300 — used for chart text labels (renamed-in-spirit)
+TEAL  = "#3b82f6"   # accent blue — primary data colour
+SLATE = "#94a3b8"   # slate-400 — axis ticks, captions, "(N%)" suffixes
+LINE  = "#2e3a55"   # subtle dark border — grid lines on plots
+GREEN = "#22c55e"
+AMBER = "#f59e0b"
+RED   = "#ef4444"
+BLUE  = "#3b82f6"
+PURPLE = "#a78bfa"
 
-# Status colour mapping (matches the badge palette in styles.css)
+# Status colour mapping — dark-mode tuned to match the .status pill palette
+# in styles.css. Bright, saturated chips that sing on the dark surface.
 STATUS_COLORS = {
-    "open":          "#1f4f9f",
-    "in_progress":   "#8a5b00",
-    "on_hold":       "#5b3a99",
-    "resolved":      "#1f6e44",
-    "closed":        "#5a6473",
-    "cancelled":     "#8a3019",
+    "open":          "#3b82f6",
+    "in_progress":   "#f59e0b",
+    "on_hold":       "#a78bfa",
+    "resolved":      "#22c55e",
+    "closed":        "#94a3b8",
+    "cancelled":     "#ef4444",
     # change/problem extras
-    "draft":         "#5a6473",
-    "under_review":  "#8a5b00",
-    "approved":      "#1f6e44",
-    "rejected":      "#8a3019",
-    "completed":     "#1f6e44",
-    "failed":        "#8a3019",
-    "investigating": "#8a5b00",
-    "root_cause_identified": "#5b3a99",
-    "workaround_in_place":   "#5b3a99",
+    "draft":         "#94a3b8",
+    "under_review":  "#f59e0b",
+    "approved":      "#22c55e",
+    "rejected":      "#ef4444",
+    "completed":     "#22c55e",
+    "failed":        "#ef4444",
+    "investigating": "#f59e0b",
+    "root_cause_identified": "#a78bfa",
+    "workaround_in_place":   "#a78bfa",
 }
 
 PRIORITY_COLORS = {
-    "low":      "#5a6473",
-    "medium":   "#1f4f9f",
-    "high":     "#c98a17",
-    "critical": "#c1432a",
+    "low":      "#94a3b8",
+    "medium":   "#3b82f6",
+    "high":     "#f59e0b",
+    "critical": "#ef4444",
 }
 
 DEFAULT_PALETTE = [TEAL, NAVY, AMBER, GREEN, PURPLE, RED, BLUE, "#7c5cff", "#3aa6f0"]
@@ -112,9 +116,10 @@ def donut(
             f'<span class="val">{count} <span style="color:{SLATE}">({pct}%)</span></span></li>'
         )
 
+    # Dark-mode safe: slate-100 for the big number, slate-400 for the 'TOTAL' label.
     centre_text = (
-        f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="22" font-weight="700" fill="{NAVY}">{total}</text>'
-        f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" font-size="10" fill="{SLATE}" letter-spacing="1">TOTAL</text>'
+        f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="22" font-weight="700" fill="#f1f5f9">{total}</text>'
+        f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" font-size="10" fill="#94a3b8" letter-spacing="1">TOTAL</text>'
     )
 
     legend = (
@@ -140,25 +145,49 @@ def bars_h(
     label_w: int = 160,
     show_value: bool = True,
 ) -> str:
+    """Horizontal bar chart.
+
+    Layout: [label column] [bar area] [value column].
+    - Labels are right-truncated with an ellipsis when they exceed label_w
+      (rough 6.5px-per-char heuristic for the 12px sans font we use).
+    - Value column is reserved at the right edge so the count never
+      overlaps the bar or the label.
+    - Text fill defaults to slate-200 — readable on a dark surface.
+    """
     if not data:
-        return f'<div class="chart-empty" style="color:{SLATE};font-size:13px;padding:24px;">No data</div>'
+        return f'<div class="chart-empty" style="color:#94a3b8;font-size:13px;padding:24px;">No data</div>'
     max_val = max((c for _, c in data), default=0) or 1
     height = len(data) * (bar_height + 6) + 4
-    bar_max = width - label_w - 60
+    VALUE_COL_W = 44                              # reserved on the right for the count
+    bar_x = label_w + 8                           # 8px gap between label and bar
+    bar_max = max(40, width - label_w - VALUE_COL_W - 12)
+    value_x = bar_x + bar_max + 8
+
+    # Truncate labels that won't fit in the label column at 12px sans.
+    def _truncate(text: str) -> str:
+        max_chars = max(8, int(label_w / 6.5))
+        s = str(text or "")
+        return s if len(s) <= max_chars else s[: max_chars - 1].rstrip() + "…"
+
+    # Dark-mode safe text colors
+    LABEL_FILL = "#cbd5e1"   # slate-300
+    VALUE_FILL = "#f1f5f9"   # slate-100, slightly brighter for the count
 
     rows: list[str] = []
     for i, (label, count) in enumerate(data):
         y = i * (bar_height + 6)
         bar_w = (count / max_val) * bar_max
         color = _color_for(label, i)
+        truncated = _truncate(label)
         rows.append(
-            f'<text x="0" y="{y + bar_height/2 + 4}" font-size="12" fill="{NAVY}">{escape(str(label))}</text>'
-            f'<rect x="{label_w}" y="{y + 4}" width="{max(bar_w, 1.5):.1f}" height="{bar_height - 8}" rx="3" fill="{color}"/>'
+            f'<text x="0" y="{y + bar_height/2 + 4}" font-size="12" fill="{LABEL_FILL}">'
+            f'<title>{escape(str(label))}</title>{escape(truncated)}</text>'
+            f'<rect x="{bar_x}" y="{y + 4}" width="{max(bar_w, 1.5):.1f}" height="{bar_height - 8}" rx="3" fill="{color}"/>'
         )
         if show_value:
             rows.append(
-                f'<text x="{label_w + bar_w + 6}" y="{y + bar_height/2 + 4}" '
-                f'font-size="12" fill="{NAVY}" font-weight="600">{count}</text>'
+                f'<text x="{value_x}" y="{y + bar_height/2 + 4}" '
+                f'font-size="12" fill="{VALUE_FILL}" font-weight="700">{count}</text>'
             )
     return f'<svg class="chart-bars" viewBox="0 0 {width} {height}" width="100%" preserveAspectRatio="xMinYMin meet">{"".join(rows)}</svg>'
 

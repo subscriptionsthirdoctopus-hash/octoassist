@@ -740,9 +740,10 @@ def derive_vendor(package_name: str, source: str | None = None) -> str:
 
     Winget package ids follow Vendor.Product.SubProduct → vendor = first segment.
     Windows Update KBs (KB#####) → Microsoft Windows Update.
-    Linux apt packages → Linux (since this product is Windows-only going forward,
-    only the demo droplet hits this branch).
-    Anything unrecognisable → "Other".
+    Windows Update driver packages from the .msu pipeline come in messy forms
+    like 'intel - system - 10/3/2016 12:00:00 am - 10.x' — we trim those by
+    taking the first ' - ' segment and canonicalising against _VENDOR_CANON.
+    Linux apt packages → Linux. Anything unrecognisable → "Other".
     """
     pn = (package_name or "").strip()
     if not pn:
@@ -756,6 +757,11 @@ def derive_vendor(package_name: str, source: str | None = None) -> str:
         return "Linux distro packages"
     if s == "windows-update":
         return "Microsoft Windows Update"
+    # Driver-style ' - '-separated names: 'intel - system - <date>' etc.
+    # Take just the publisher token.
+    if " - " in pn:
+        first = pn.split(" - ", 1)[0].strip().lower()
+        return _VENDOR_CANON.get(first, first.capitalize() if first else "Other")
     # Winget Vendor.Product
     if "." in pn:
         first = pn.split(".", 1)[0].lower()
