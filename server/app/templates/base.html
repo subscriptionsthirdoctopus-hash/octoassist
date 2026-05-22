@@ -75,9 +75,9 @@
               <strong>Notifications</strong>
               <span class="meta">{{ (_notif.total if _notif else 0) }} item{{ "" if (_notif and _notif.total == 1) else "s" }}</span>
             </div>
-            {% if _notif and _notif.items %}
+            {% if _notif and _notif["items"] %}
             <ul class="bell-list">
-              {% for it in _notif.items %}
+              {% for it in _notif["items"] %}
               <li>
                 <a href="{{ it.url }}" class="bell-item severity-{{ it.severity }}">
                   <span class="bell-item-label">{{ it.label }}</span>
