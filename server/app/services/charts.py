@@ -116,10 +116,12 @@ def donut(
             f'<span class="val">{count} <span style="color:{SLATE}">({pct}%)</span></span></li>'
         )
 
-    # Dark-mode safe: slate-100 for the big number, slate-400 for the 'TOTAL' label.
+    # Theme-adaptive via currentColor — total uses the parent text colour at
+    # full weight, the 'TOTAL' caption uses fill-opacity to dim it without
+    # picking a hardcoded slate that breaks in the opposite theme.
     centre_text = (
-        f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="22" font-weight="700" fill="#f1f5f9">{total}</text>'
-        f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" font-size="10" fill="#94a3b8" letter-spacing="1">TOTAL</text>'
+        f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="22" font-weight="700" fill="currentColor">{total}</text>'
+        f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.6" letter-spacing="1">TOTAL</text>'
     )
 
     legend = (
@@ -145,51 +147,69 @@ def bars_h(
     label_w: int = 160,
     show_value: bool = True,
 ) -> str:
-    """Horizontal bar chart.
+    """Horizontal bar chart — theme-adaptive.
 
-    Layout: [label column] [bar area] [value column].
+    Layout: [label column] · [track + filled bar] · [count badge inline at bar end].
+
     - Labels are right-truncated with an ellipsis when they exceed label_w
-      (rough 6.5px-per-char heuristic for the 12px sans font we use).
-    - Value column is reserved at the right edge so the count never
-      overlaps the bar or the label.
-    - Text fill defaults to slate-200 — readable on a dark surface.
+      (rough 6.5px-per-char heuristic for the 12px sans font). Full text
+      is exposed via a hover <title>.
+    - Every bar sits in a subtle track so the eye can follow each row from
+      label → bar → count even when the bar itself is short.
+    - The count badge is inline — placed right after the bar's filled width
+      with a minimum left-offset so it never overlaps the label or the
+      track edge.
+    - Text fill is `currentColor` so it inherits from the parent CSS color
+      — auto-adapts to light + dark themes without needing rebuilds.
     """
     if not data:
-        return f'<div class="chart-empty" style="color:#94a3b8;font-size:13px;padding:24px;">No data</div>'
+        return ('<div class="chart-empty" style="color:var(--text-3);'
+                'font-size:13px;padding:24px;">No data</div>')
     max_val = max((c for _, c in data), default=0) or 1
-    height = len(data) * (bar_height + 6) + 4
-    VALUE_COL_W = 44                              # reserved on the right for the count
-    bar_x = label_w + 8                           # 8px gap between label and bar
-    bar_max = max(40, width - label_w - VALUE_COL_W - 12)
-    value_x = bar_x + bar_max + 8
+    row_pitch = bar_height + 8
+    height = len(data) * row_pitch + 4
+    VALUE_COL_W = 44                                # right-edge buffer
+    bar_x = label_w + 12                            # gap between label and bar
+    bar_max = max(60, width - label_w - VALUE_COL_W - 24)
+    MIN_VALUE_OFFSET = 60                           # short bars never push value too close to label
 
-    # Truncate labels that won't fit in the label column at 12px sans.
     def _truncate(text: str) -> str:
         max_chars = max(8, int(label_w / 6.5))
         s = str(text or "")
         return s if len(s) <= max_chars else s[: max_chars - 1].rstrip() + "…"
 
-    # Dark-mode safe text colors
-    LABEL_FILL = "#cbd5e1"   # slate-300
-    VALUE_FILL = "#f1f5f9"   # slate-100, slightly brighter for the count
-
     rows: list[str] = []
     for i, (label, count) in enumerate(data):
-        y = i * (bar_height + 6)
+        y = i * row_pitch
         bar_w = (count / max_val) * bar_max
+        bar_w_clamped = max(bar_w, 3.0)             # ≥3px even for count=0
         color = _color_for(label, i)
         truncated = _truncate(label)
+        text_y = y + bar_height / 2 + 4
+        # Inline value position: right after the bar end, but never closer
+        # than MIN_VALUE_OFFSET from bar_x (so short bars don't dump the
+        # count badge on top of the label).
+        value_x = bar_x + max(bar_w_clamped + 8, MIN_VALUE_OFFSET)
+
         rows.append(
-            f'<text x="0" y="{y + bar_height/2 + 4}" font-size="12" fill="{LABEL_FILL}">'
+            # Label (truncated + tooltip-safe full text)
+            f'<text x="0" y="{text_y}" font-size="12.5" font-weight="500" fill="currentColor">'
             f'<title>{escape(str(label))}</title>{escape(truncated)}</text>'
-            f'<rect x="{bar_x}" y="{y + 4}" width="{max(bar_w, 1.5):.1f}" height="{bar_height - 8}" rx="3" fill="{color}"/>'
+            # Subtle track behind the bar — gives every row a visible spine
+            f'<rect x="{bar_x}" y="{y + 4}" width="{bar_max:.1f}" height="{bar_height - 8}" rx="3" '
+            f'fill="currentColor" fill-opacity="0.08"/>'
+            # The actual data bar
+            f'<rect x="{bar_x}" y="{y + 4}" width="{bar_w_clamped:.1f}" height="{bar_height - 8}" '
+            f'rx="3" fill="{color}"/>'
         )
         if show_value:
             rows.append(
-                f'<text x="{value_x}" y="{y + bar_height/2 + 4}" '
-                f'font-size="12" fill="{VALUE_FILL}" font-weight="700">{count}</text>'
+                f'<text x="{value_x:.1f}" y="{text_y}" font-size="12.5" '
+                f'fill="currentColor" font-weight="700">{count}</text>'
             )
-    return f'<svg class="chart-bars" viewBox="0 0 {width} {height}" width="100%" preserveAspectRatio="xMinYMin meet">{"".join(rows)}</svg>'
+    return (f'<svg class="chart-bars" viewBox="0 0 {width} {height}" '
+            f'width="100%" preserveAspectRatio="xMinYMin meet">'
+            f'{"".join(rows)}</svg>')
 
 
 # ----------  Sparkline (tiny line chart for KPI cards) ----------
@@ -240,14 +260,18 @@ def line_series(
     values = [v for _, v in points]
     max_v = max(values) or 1
 
-    # Y-axis grid lines (at 0, 25, 50, 75, 100% of max)
+    # Y-axis grid lines + tick labels — currentColor at low opacity for grid
+    # so it reads as a subtle separator in both themes; axis numerals slightly
+    # stronger so they're legible.
     grid = []
     for frac in (0, 0.25, 0.5, 0.75, 1.0):
         y = pad_t + (1 - frac) * plot_h
         v = max_v * frac
         grid.append(
-            f'<line x1="{pad_l}" y1="{y:.1f}" x2="{pad_l + plot_w}" y2="{y:.1f}" stroke="{LINE}" stroke-width="1"/>'
-            f'<text x="{pad_l - 4}" y="{y + 3:.1f}" font-size="10" fill="{SLATE}" text-anchor="end">{int(round(v))}</text>'
+            f'<line x1="{pad_l}" y1="{y:.1f}" x2="{pad_l + plot_w}" y2="{y:.1f}" '
+            f'stroke="currentColor" stroke-opacity="0.12" stroke-width="1"/>'
+            f'<text x="{pad_l - 4}" y="{y + 3:.1f}" font-size="10" fill="currentColor" '
+            f'fill-opacity="0.6" text-anchor="end">{int(round(v))}</text>'
         )
 
     n = len(points)
@@ -272,7 +296,8 @@ def line_series(
             continue
         x, _, lbl, _ = pts[idx]
         x_labels.append(
-            f'<text x="{x:.1f}" y="{pad_t + plot_h + 16}" font-size="10" fill="{SLATE}" text-anchor="middle">{escape(lbl)}</text>'
+            f'<text x="{x:.1f}" y="{pad_t + plot_h + 16}" font-size="10" '
+            f'fill="currentColor" fill-opacity="0.6" text-anchor="middle">{escape(lbl)}</text>'
         )
 
     dots = "".join(

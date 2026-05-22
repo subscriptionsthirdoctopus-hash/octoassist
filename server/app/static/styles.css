@@ -341,20 +341,25 @@ table.data.audit code {
   border-radius: 3px;
   display: inline-block;
 }
-.chart-legend .lbl { color: var(--text); text-transform: capitalize; }
-.chart-legend .val { color: var(--navy); font-weight: 600; }
+.chart-legend .lbl { color: var(--text-2); text-transform: capitalize; }
+.chart-legend .val { color: var(--text-1); font-weight: 700; }
 
-/* Bars */
-.chart-bars { display: block; }
-.chart-line { display: block; }
-
-/* SVG charts inherit the page sans-serif stack so text matches the rest
-   of the UI (browsers default to a serif font inside <svg> otherwise). */
+/* Bars + line + donut SVGs:
+   - inherit page font (browsers default to serif inside <svg> otherwise)
+   - inherit page text colour via CSS `color` so currentColor in the SVG
+     resolves to the right tone for whichever theme is active. */
+.chart-bars,
+.chart-donut svg,
+.chart-line,
+.sparkline {
+  display: block;
+  color: var(--text-1);   /* SVG `fill="currentColor"` resolves to this */
+}
 .chart-bars text,
 .chart-donut svg text,
 .chart-line  text,
 .sparkline   text {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 @media (max-width: 900px) {
