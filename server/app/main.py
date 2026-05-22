@@ -30,6 +30,7 @@ from .web.views_portal import router as portal_router
 from .web.views_patches import router as patches_router
 from .web.views_problems import router as problems_router
 from .web.views_reports import router as reports_router
+from .web.views_search import router as search_router
 from .web.views_settings import router as settings_router
 from .web.views_software import router as software_router
 from .web.views_sso import router as sso_router
@@ -55,6 +56,55 @@ app = FastAPI(
 # the installer script bakes "http://..." into the agent config even though
 # the user requested it via https://octoassist.thirdoctopus.com.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+# ---------------------------------------------------------------------------
+# Notification middleware — populate request.state.notifications on every
+# authenticated browser request so the bell in base.html can render server-
+# side counts (no client polling needed). Skipped for /api/, /static/,
+# /agent/files/ and other non-HTML paths where the cost would be wasted.
+#
+# IMPORTANT: Starlette runs middleware in REVERSE order of add_middleware()
+# calls (last-added runs first on the request). This middleware reads
+# request.session, so it must run AFTER SessionMiddleware on the request —
+# which means it must be add_middleware()'d BEFORE SessionMiddleware below.
+# ---------------------------------------------------------------------------
+from starlette.middleware.base import BaseHTTPMiddleware
+from .services import notifications_panel as _np
+
+_SKIP_PREFIXES = ("/api/", "/static/", "/agent/files/", "/files/", "/health", "/favicon.ico")
+
+
+class NotificationContextMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Default: empty dict so templates can always read request.state.notifications
+        request.state.notifications = _np.empty()
+        path = request.url.path or ""
+        if not any(path.startswith(p) for p in _SKIP_PREFIXES):
+            # Defensive: even though we ordered the middleware correctly, the
+            # session might be missing for some early-error path.
+            user_id = None
+            try:
+                user_id = request.session.get("user_id")
+            except (AssertionError, AttributeError):
+                user_id = None
+            if user_id:
+                db: Session = SessionLocal()
+                try:
+                    user = db.get(User, user_id)
+                    if user and user.is_active:
+                        request.state.notifications = _np.compute(db, user)
+                except Exception:  # noqa: BLE001
+                    # Never block the page over notification math
+                    log.exception("notification middleware failed")
+                finally:
+                    db.close()
+        return await call_next(request)
+
+
+# Add notifications FIRST so SessionMiddleware (added below) wraps around
+# it and runs first on the request path — populating request.session before
+# the notification middleware tries to read it.
+app.add_middleware(NotificationContextMiddleware)
 
 app.add_middleware(
     SessionMiddleware,
@@ -85,6 +135,7 @@ app.include_router(tickets_router)      # /tickets, /tickets/{id}, ...
 app.include_router(problems_router)     # /problems, /problems/{id}, ...
 app.include_router(changes_router)      # /changes, /changes/{id}, ...
 app.include_router(reports_router)      # /reports, /reports/{tickets,sla,assets,changes}, /reports/export/*
+app.include_router(search_router)       # /search (HTML), /api/v1/search (JSON)
 app.include_router(patches_router)      # /patches, /patches/{agent_id}, /patches/export.csv
 app.include_router(software_router)     # /software (SAM), /software/product/{pub}/{prod}, /software/export.csv
 app.include_router(actions_router)      # /actions, /asset/{id}/{actions,processes,action}
