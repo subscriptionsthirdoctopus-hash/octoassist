@@ -1,9 +1,15 @@
 /* ============================================================
-   OctoAssist design tokens — DARK MODE
-   Per user feedback ('make the full layer should be dark'), the
-   whole app runs on a dark slate palette à la GitHub / Linear /
-   Vercel dark themes. Premium, low-fatigue for long admin sessions,
-   sharper contrast for status pills + KPI numerics.
+   OctoAssist design tokens — dual theme
+
+   Two modes: dark (default — current shipped look) and light.
+   The user toggles via the ☀️/🌙 switch in the topbar. Preference
+   persists in localStorage and is applied to <html data-theme="…">
+   before first paint (see the inline script in base.html) so there's
+   no flash on navigation.
+
+   Every component reads ONLY these CSS custom properties — no
+   hardcoded background:white / color:#0f172a anywhere in component
+   rules — which is why switching themes is a single token swap.
    ============================================================ */
 :root {
   /* Accent: bumped a shade brighter so it sings against dark surfaces */
@@ -63,7 +69,85 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
                Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Topbar — exposed as its own token so each theme can pick a different
+     fill while components like .topbar stay theme-agnostic. */
+  --topbar-bg: linear-gradient(180deg, #1a2438 0%, #131c2f 100%);
+  --topbar-border: var(--line);
+  --topbar-shadow: 0 1px 0 rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.25);
 }
+
+/* ============================================================
+   LIGHT MODE — override every token. Toggled via <html data-theme="light">.
+   The 8-shade slate ramp is symmetric with the dark theme so the visual
+   hierarchy (page < surface < surface-2 < hover) is preserved on either side.
+   ============================================================ */
+:root[data-theme="light"] {
+  --accent:        #2563eb;
+  --accent-hover:  #1d4ed8;
+  --accent-soft:   #eff6ff;
+  --accent-border: #93c5fd;
+
+  --navy: #0f172a;
+  --teal: #2563eb;
+
+  --bg:         #f8fafc;
+  --surface:    #ffffff;
+  --surface-2:  #f1f5f9;
+  --line:       #e2e8f0;
+  --line-strong: #cbd5e1;
+  --hover:      #f1f5f9;
+
+  --text-1: #0f172a;
+  --text-2: #334155;
+  --text-3: #64748b;
+  --text-4: #94a3b8;
+
+  --green: #16a34a;
+  --red:   #dc2626;
+  --amber: #d97706;
+
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-2: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-3: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.20);
+
+  --topbar-bg: rgba(255, 255, 255, 0.92);
+  --topbar-border: var(--line);
+  --topbar-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* Status + priority pills — light-mode variants.
+   On dark we use translucent tints; on light we use the original solid
+   pastel pairs because translucent tints disappear into the surface. */
+:root[data-theme="light"] .status-open         { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+:root[data-theme="light"] .status-in_progress  { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+:root[data-theme="light"] .status-on_hold      { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+:root[data-theme="light"] .status-resolved     { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+:root[data-theme="light"] .status-closed       { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
+:root[data-theme="light"] .status-cancelled    { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+:root[data-theme="light"] .prio-low      { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
+:root[data-theme="light"] .prio-medium   { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+:root[data-theme="light"] .prio-high     { background: #fed7aa; color: #9a3412; border-color: #fdba74; }
+:root[data-theme="light"] .prio-critical { background: #fecaca; color: #7f1d1d; border-color: #fca5a5; }
+
+/* Alerts — same story: solid pastel pairs on light, translucent on dark. */
+:root[data-theme="light"] .alert.error   { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
+:root[data-theme="light"] .alert.success { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+:root[data-theme="light"] .alert.warn    { background: #fffbeb; border-color: #fde68a; color: #78350f; }
+:root[data-theme="light"] .alert.info    { background: var(--accent-soft); border-color: var(--accent-border); color: #1e3a8a; }
+
+/* Role pills in the topbar work on both themes but pop better on light
+   with solid backgrounds matching the original wave-1 design. */
+:root[data-theme="light"] .role-admin     { background: #dbeafe; color: #1e40af; }
+:root[data-theme="light"] .role-agent     { background: #e0e7ff; color: #3730a3; }
+:root[data-theme="light"] .role-requester { background: #f1f5f9; color: var(--text-3); }
+:root[data-theme="light"] .topbar nav a       { color: var(--text-2); }
+:root[data-theme="light"] .topbar nav a:hover { color: var(--text-1); }
+:root[data-theme="light"] .topbar nav .who    { color: var(--text-2); border-left-color: var(--line); }
+:root[data-theme="light"] .brand-mark         { color: var(--text-3); }
+:root[data-theme="light"] .brand-product      { color: var(--text-1); }
 
 * { box-sizing: border-box; }
 
@@ -93,15 +177,17 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 
 ::selection { background: var(--accent-soft); color: var(--accent-hover); }
 
-/* ---------- Top bar — one notch lighter than the body, separates chrome ----------
-   In dark mode the trick is the topbar should be one shade LIGHTER than the
-   page to visually float above content. (In light mode the opposite — bar
-   darker than page — would be true.) */
+/* ---------- Top bar — theme-aware via tokens ----------
+   In dark mode the topbar is one shade lighter than the page; in light mode
+   it's a translucent white with backdrop blur. Both end up "floating above"
+   content via a soft drop shadow. */
 .topbar {
-  background: linear-gradient(180deg, #1a2438 0%, #131c2f 100%);
+  background: var(--topbar-bg);
+  backdrop-filter: saturate(180%) blur(8px);
+  -webkit-backdrop-filter: saturate(180%) blur(8px);
   color: var(--text-1);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--topbar-border);
+  box-shadow: var(--topbar-shadow);
   padding: 10px 28px;
   display: flex;
   justify-content: space-between;
@@ -149,6 +235,36 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .role-admin     { background: #2563eb; color: white; }
 .role-agent     { background: #6366f1; color: white; }
 .role-requester { background: rgba(255, 255, 255, 0.18); color: white; }
+
+/* Theme toggle button — sits in the topbar, swaps icon per current theme.
+   Default state = dark theme = show ☀️ (the action). Light theme = show 🌙. */
+.theme-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: inherit;
+  width: 32px; height: 32px;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  margin: 0 8px;
+  box-shadow: none;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.05); }
+.theme-toggle:active { transform: scale(0.95); }
+:root[data-theme="light"] .theme-toggle { border-color: var(--line-strong); }
+:root[data-theme="light"] .theme-toggle:hover { background: var(--hover); }
+
+.theme-icon-light, .theme-icon-dark { line-height: 1; }
+.theme-icon-dark { display: none; }                       /* dark mode (default): hide moon */
+:root[data-theme="light"] .theme-icon-light { display: none; } /* light mode: hide sun */
+:root[data-theme="light"] .theme-icon-dark  { display: inline; }
 
 main { max-width: 1280px; margin: 0 auto; padding: 28px 28px 48px; }
 
