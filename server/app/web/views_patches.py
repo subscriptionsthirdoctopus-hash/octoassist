@@ -45,6 +45,9 @@ def _parse_dt(s: str) -> datetime | None:
 def patches_home(
     request: Request,
     q: str = "",
+    online: str = "",
+    office: str = "",
+    posture: str = "",
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -52,16 +55,33 @@ def patches_home(
     # Windows-only per-endpoint dashboard (Linux + Mac filtered out)
     win_dash_all = patches_svc.windows_endpoint_dashboard(db, tid)
     needle = (q or "").strip().lower()
-    if needle:
-        def _hit(r):
+
+    # Quick-filter chips — derive available offices from data so the UI only
+    # shows chips that would actually match something.
+    offices = sorted({(r.get("location") or "").strip()
+                      for r in win_dash_all if r.get("location")})
+
+    def _hit(r):
+        if needle:
             hay = " | ".join(str(x or "").lower() for x in (
                 r.get("hostname"), r.get("assigned_name"), r.get("assigned_email"),
                 r.get("logged_in_user"), r.get("location"), r.get("os_caption"),
             ))
-            return needle in hay
-        win_dash = [r for r in win_dash_all if _hit(r)]
-    else:
-        win_dash = win_dash_all
+            if needle not in hay:
+                return False
+        if online and (r.get("online") or "") != online:
+            return False
+        if office and (r.get("location") or "").lower() != office.lower():
+            return False
+        if posture == "fully_updated" and not r.get("fully_updated"):
+            return False
+        if posture == "pending" and (r.get("fully_updated") or r.get("scan_failed")):
+            return False
+        if posture == "scan_failed" and not r.get("scan_failed"):
+            return False
+        return True
+
+    win_dash = [r for r in win_dash_all if _hit(r)]
     sev = patches_svc.severity_breakdown(db, tid)
     top = patches_svc.top_missing_packages(db, tid, top=15)
     kpi = patches_svc.patch_kpis(db, tid)
@@ -96,6 +116,8 @@ def patches_home(
         context=_ctx(user, db,
                      win_dash=win_dash, win_dash_total=len(win_dash_all),
                      q=needle, kpi=kpi,
+                     filter_online=online, filter_office=office, filter_posture=posture,
+                     offices=offices,
                      vendors=vendors,
                      quick_deploy_options=quick_deploy_options,
                      chart_severity=charts.donut(sev, size=200),

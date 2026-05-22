@@ -152,19 +152,104 @@
     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:4px;vertical-align:middle;"></span> Offline (powered off / no network) — deploys queue until it returns
   </p>
 
-  <form method="get" action="/patches" class="filters" style="margin-bottom:12px;">
-    <div style="position:relative; flex:1; min-width:260px; max-width:420px;">
-      <span style="position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none;">🔍</span>
-      <input type="search" name="q" value="{{ q or '' }}"
-             placeholder="Search hostname, user, email, location, OS…"
-             autocomplete="off" style="padding-left:34px;">
+  <style>
+    .pf-search-wrap { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:14px 16px; margin-bottom:14px; box-shadow:var(--shadow-1); }
+    .pf-search { position:relative; }
+    .pf-search input[type=search] {
+      width:100%; padding:12px 14px 12px 44px; font-size:14.5px;
+      background:var(--surface-2); border:1px solid var(--line);
+      border-radius:var(--r-md); color:var(--text-1);
+      transition:border-color .12s, box-shadow .12s;
+    }
+    .pf-search input[type=search]::placeholder { color:var(--text-4); }
+    .pf-search input[type=search]:focus { border-color:var(--accent); box-shadow:var(--focus-ring); outline:none; }
+    .pf-search .glyph { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:17px; opacity:.65; pointer-events:none; }
+    .pf-search .submit { position:absolute; right:6px; top:50%; transform:translateY(-50%); padding:6px 14px; font-size:12.5px; min-height:0; }
+
+    .pf-chips-label { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.7px; margin:14px 0 8px; }
+    .pf-chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .pf-chip {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:5px 11px; border-radius:999px;
+      background:var(--surface-2); border:1px solid var(--line);
+      color:var(--text-2); font-size:12px; font-weight:500;
+      text-decoration:none; transition:all .12s; white-space:nowrap;
+    }
+    .pf-chip:hover { background:var(--hover); border-color:var(--line-strong); color:var(--text-1); text-decoration:none; }
+    .pf-chip.active { background:var(--accent); border-color:var(--accent); color:white; font-weight:600; }
+    .pf-chip .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+    .pf-chip .dot.online  { background:#22c55e; }
+    .pf-chip .dot.lagging { background:#f59e0b; }
+    .pf-chip .dot.offline { background:#ef4444; }
+
+    .pf-result-row { display:flex; align-items:center; gap:10px; margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
+    .pf-result-row .count { font-size:13px; color:var(--text-2); }
+    .pf-result-row .count strong { color:var(--text-1); font-weight:700; }
+    .pf-result-row .clear { font-size:12.5px; color:var(--accent); text-decoration:none; font-weight:500; }
+    .pf-result-row .clear:hover { text-decoration:underline; }
+  </style>
+
+  <div class="pf-search-wrap">
+    {# Primary search box — big, clear, dark-mode visible #}
+    <form method="get" action="/patches" class="pf-search">
+      <span class="glyph">🔍</span>
+      <input type="search" name="q" value="{{ q or '' }}" autocomplete="off"
+             placeholder="Search by hostname, assigned user, email, office, OS…">
+      <button type="submit" class="primary submit">Search</button>
+      {# Preserve other active filters when submitting #}
+      {% if filter_online %}<input type="hidden" name="online" value="{{ filter_online }}">{% endif %}
+      {% if filter_office %}<input type="hidden" name="office" value="{{ filter_office }}">{% endif %}
+      {% if filter_posture %}<input type="hidden" name="posture" value="{{ filter_posture }}">{% endif %}
+    </form>
+
+    {# Posture chips — by patch state #}
+    <p class="pf-chips-label">Patch posture</p>
+    <div class="pf-chips">
+      <a class="pf-chip {% if not filter_posture %}active{% endif %}"
+         href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_online %}online={{ filter_online }}&{% endif %}{% if filter_office %}office={{ filter_office|urlencode }}{% endif %}">All</a>
+      <a class="pf-chip {% if filter_posture == 'fully_updated' %}active{% endif %}"
+         href="/patches?posture=fully_updated{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">✓ Fully updated</a>
+      <a class="pf-chip {% if filter_posture == 'pending' %}active{% endif %}"
+         href="/patches?posture=pending{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">⏳ Has pending</a>
+      <a class="pf-chip {% if filter_posture == 'scan_failed' %}active{% endif %}"
+         href="/patches?posture=scan_failed{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">⚠ Scan failed</a>
     </div>
-    <button type="submit" class="primary">Apply</button>
-    {% if q %}<a href="/patches" class="link-button">Clear</a>{% endif %}
-    <span class="meta" style="margin-left:auto; font-size:12.5px;">
-      {{ win_dash|length }} of {{ win_dash_total }} endpoint{{ "" if win_dash_total == 1 else "s" }} shown
-    </span>
-  </form>
+
+    {# Connectivity chips #}
+    <p class="pf-chips-label">Connectivity</p>
+    <div class="pf-chips">
+      <a class="pf-chip {% if not filter_online %}active{% endif %}"
+         href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_office %}office={{ filter_office|urlencode }}&{% endif %}{% if filter_posture %}posture={{ filter_posture }}{% endif %}">All</a>
+      <a class="pf-chip {% if filter_online == 'online' %}active{% endif %}"
+         href="/patches?online=online{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}"><span class="dot online"></span> Online</a>
+      <a class="pf-chip {% if filter_online == 'lagging' %}active{% endif %}"
+         href="/patches?online=lagging{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}"><span class="dot lagging"></span> Lagging</a>
+      <a class="pf-chip {% if filter_online == 'offline' %}active{% endif %}"
+         href="/patches?online=offline{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}"><span class="dot offline"></span> Offline</a>
+    </div>
+
+    {# Office chips — only render if there are offices in the data #}
+    {% if offices %}
+    <p class="pf-chips-label">Office</p>
+    <div class="pf-chips">
+      <a class="pf-chip {% if not filter_office %}active{% endif %}"
+         href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_online %}online={{ filter_online }}&{% endif %}{% if filter_posture %}posture={{ filter_posture }}{% endif %}">All offices</a>
+      {% for o in offices %}
+      <a class="pf-chip {% if filter_office == o %}active{% endif %}"
+         href="/patches?office={{ o|urlencode }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}">📍 {{ o }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="pf-result-row">
+      <span class="count">
+        <strong>{{ win_dash|length }}</strong> of {{ win_dash_total }} endpoint{{ "" if win_dash_total == 1 else "s" }} shown
+      </span>
+      {% if q or filter_online or filter_office or filter_posture %}
+      <a class="clear" href="/patches">Clear all filters ✕</a>
+      {% endif %}
+    </div>
+  </div>
 
   {% if win_dash %}
   <table class="data">
