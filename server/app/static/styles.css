@@ -244,39 +244,41 @@ table.data.audit code {
   margin-bottom: 28px;
 }
 .kpi-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   padding: 18px 20px 16px;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);    /* so chart SVGs inside resolve currentColor correctly */
 }
 .kpi-card .kpi-label {
   margin: 0 0 8px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  color: var(--slate);
+  color: var(--text-3);
   font-weight: 600;
 }
 .kpi-card .kpi-value {
   margin: 0;
   font-size: 32px;
   font-weight: 800;
-  color: var(--navy);
+  color: var(--text-1);
   letter-spacing: -0.6px;
   line-height: 1.1;
 }
 .kpi-card .kpi-unit {
   font-size: 18px;
-  color: var(--slate);
+  color: var(--text-3);
   font-weight: 600;
   margin-left: 2px;
 }
 .kpi-card .kpi-sub {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--slate);
+  color: var(--text-3);
   line-height: 1.4;
 }
 .kpi-card .kpi-spark {
@@ -295,18 +297,20 @@ table.data.audit code {
 .report-row.charts-grid-3  { grid-template-columns: repeat(3, 1fr); }
 
 .report-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   padding: 18px 20px;
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);    /* SVG charts inside use this for currentColor */
 }
 .report-card h3 {
   margin: 0 0 14px;
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: var(--slate);
-  font-weight: 600;
+  color: var(--text-3);
+  font-weight: 700;
 }
 
 /* Donut */
@@ -666,10 +670,11 @@ button.danger:hover, .button.danger:hover {
 /* ---------- Auth page ---------- */
 .auth-page main { max-width: 420px; padding-top: 60px; }
 .auth-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 24px;
+  box-shadow: var(--shadow-2);
 }
 .auth-card h1 { margin: 0 0 16px 0; font-size: 20px; }
 .auth-card form { display: flex; flex-direction: column; gap: 12px; }
@@ -701,7 +706,7 @@ button.danger:hover, .button.danger:hover {
 }
 .auth-divider:before { left: 0; }
 .auth-divider:after  { right: 0; }
-.auth-divider span { background: white; padding: 0 8px; }
+.auth-divider span { background: var(--surface); padding: 0 8px; }
 
 /* ---------- Code blocks ---------- */
 code, pre.code {

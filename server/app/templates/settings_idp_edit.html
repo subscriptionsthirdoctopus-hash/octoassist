@@ -41,11 +41,11 @@
   </p>
   <div style="display:grid;grid-template-columns:140px 1fr auto;gap:10px;align-items:center;">
     <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Redirect URI</strong>
-    <code id="redir-uri" style="background:white;border:1px solid var(--line);padding:8px 10px;border-radius:4px;font-size:13px;word-break:break-all;">{{ redirect_uri }}</code>
+    <code id="redir-uri" style="background:var(--surface);border:1px solid var(--line);padding:8px 10px;border-radius:4px;font-size:13px;word-break:break-all;">{{ redirect_uri }}</code>
     <button type="button" class="button" onclick="copyRedirectUri()">Copy</button>
 
     <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Sign-out URL</strong>
-    <code style="background:white;border:1px solid var(--line);padding:8px 10px;border-radius:4px;font-size:13px;word-break:break-all;">{{ redirect_uri.rsplit('/auth/', 1)[0] }}/login</code>
+    <code style="background:var(--surface);border:1px solid var(--line);padding:8px 10px;border-radius:4px;font-size:13px;word-break:break-all;">{{ redirect_uri.rsplit('/auth/', 1)[0] }}/login</code>
     <span></span>
 
     <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Token types</strong>

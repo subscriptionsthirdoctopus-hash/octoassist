@@ -76,7 +76,7 @@
     <button type="submit" class="button">Send test email</button>
   </form>
   {% if tenant.smtp_last_test_at %}
-  <div style="margin-top:14px;padding:10px 12px;border-radius:4px;border:1px solid var(--line);background:#f8fafc;font-size:13px;">
+  <div style="margin-top:14px;padding:10px 12px;border-radius:4px;border:1px solid var(--line);background:var(--surface-2);font-size:13px;">
     <strong>Last test:</strong>
     {% if tenant.smtp_last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
     <span class="meta">at {{ tenant.smtp_last_test_at | ist }}</span>

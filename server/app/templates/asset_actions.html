@@ -40,7 +40,7 @@
     </tr>
     {% if a.stdout or a.stderr %}
     <tr>
-      <td colspan="6" style="padding:8px 12px;background:#f8fafc;">
+      <td colspan="6" style="padding:8px 12px;background:var(--surface-2);">
         {% if a.stdout %}
         <details>
           <summary style="cursor:pointer;font-size:11.5px;color:var(--teal);">stdout ({{ a.stdout|length }} chars)</summary>
