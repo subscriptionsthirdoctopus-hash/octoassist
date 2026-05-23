@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Category routing — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Category routing</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ rules|length }} rule{{ "" if rules|length == 1 else "s" }}</p>
+  </div>
+</section>
+
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin-top:0;">How this works</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">
+    When a new ticket is created, OctoAssist first tries to auto-assign based on the reporter's
+    <a href="/settings/locations"><strong>location</strong></a>. If no location rule matches, it falls back
+    to the rule for the ticket's <strong>category</strong> below. Useful for routing Network tickets to one
+    technician, Endpoint tickets to another, regardless of reporter location.
+  </p>
+</section>
+
+<div class="card form" style="max-width:none;">
+  <h3 style="margin-top:0;">Add category rule</h3>
+  {% if available_cats and staff %}
+  <form method="post" action="/settings/categories-routing/new" class="row-form" style="align-items:end;gap:12px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label style="flex:1;">Category
+      <select name="category_id" required>
+        <option value="">— pick a category —</option>
+        {% for c in available_cats %}
+        <option value="{{ c.id }}">{{ c.kind.value }} · {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="flex:2;">Default assignee
+      <select name="default_assignee_id" required>
+        <option value="">— pick a technician —</option>
+        {% for s in staff %}
+        <option value="{{ s.id }}">{{ s.display_name }} ({{ s.role.value }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Add rule</button>
+  </form>
+  {% elif not available_cats %}
+  <p class="meta" style="color:#64748b;">All active categories already have a rule. Delete one below to re-add.</p>
+  {% else %}
+  <p class="meta" style="color:#dc2626;">No active admin/agent users. <a href="/users">Promote a user to agent</a> first.</p>
+  {% endif %}
+</div>
+
+{% if rules %}
+<table class="data" style="margin-top:16px;">
+  <thead><tr><th>Category</th><th>Type</th><th>Auto-assigns to</th><th>Role</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+    {% for r in rules %}
+    <tr>
+      <td><strong>{{ r.category.name if r.category else "—" }}</strong></td>
+      <td>{% if r.category %}<span class="prio prio-medium">{{ r.category.kind.value }}</span>{% endif %}</td>
+      <td>{{ r.default_assignee.display_name if r.default_assignee else "— (deleted)" }}</td>
+      <td>{% if r.default_assignee %}<span class="role-pill role-{{ r.default_assignee.role.value }}">{{ r.default_assignee.role.value }}</span>{% endif %}</td>
+      <td>{{ r.created_at | ist }}</td>
+      <td>
+        <form method="post" action="/settings/categories-routing/{{ r.id }}/delete" class="inline-form"
+              onsubmit="return confirm('Delete the category rule for {{ r.category.name|e if r.category else r.id }}?');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <button type="submit" class="link-button" style="color:#dc2626;">delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty" style="margin-top:16px;"><h2>No category rules yet</h2><p>Add a rule above to auto-assign tickets when no location rule matches.</p></div>
+{% endif %}
+{% endblock %}

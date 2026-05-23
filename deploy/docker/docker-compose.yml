@@ -1,0 +1,83 @@
+# OctoAssist Docker Compose stack
+# Designed to co-host on the hrms-erp droplet alongside the HRMS stack.
+# Runs in its own network, on its own DB, with the app port bound only to
+# 127.0.0.1 (loopback) — i.e. NOT public. Access via SSH tunnel until the
+# subdomain is set up.
+
+name: octoassist
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: octoassist-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: octoassist
+      POSTGRES_USER: octoassist
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U octoassist -d octoassist"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - octoassist-network
+
+  app:
+    image: octoassist-server:latest
+    container_name: octoassist-app
+    restart: unless-stopped
+    build:
+      # Repo root so we can bundle both server/ and agent-py/.
+      context: ../../
+      dockerfile: server/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Use the explicit container name, not the unqualified service name
+      # "postgres", because we are connected to the hrms-erp_hrms-network
+      # which also has a "postgres" alias for HRMS's database.
+      OCTOASSIST_DATABASE_URL: postgresql+psycopg://octoassist:${POSTGRES_PASSWORD}@octoassist-postgres:5432/octoassist
+      OCTOASSIST_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      OCTOASSIST_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OCTOASSIST_BIND_HOST: 0.0.0.0
+      OCTOASSIST_BIND_PORT: "8080"
+      OCTOASSIST_TENANT_NAME: ${TENANT_NAME:-Third Octopus}
+      OCTOASSIST_ENCRYPTION_KEY: ${OCTOASSIST_ENCRYPTION_KEY}
+    ports:
+      # Public HTTP on TCP/8088. WARNING: HTTP Basic over plaintext —
+      # admin password transits in clear text. Acceptable for early demo;
+      # switch to loopback ("127.0.0.1:8088:8080") and add HTTPS via the
+      # HRMS nginx (subdomain) before any real production use.
+      - "8088:8080"
+    networks:
+      - octoassist-network
+      # Also attach to HRMS's network so the hrms-nginx container can
+      # proxy to us by service name (octoassist-app:8080) for the
+      # octoassist.thirdoctopus.com subdomain. The network is owned by
+      # the HRMS compose project — we just declare it as external here.
+      - hrms-network
+    volumes:
+      - /opt/octoassist/uploads:/srv/octoassist/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8080/health', timeout=3); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  octoassist-network:
+    driver: bridge
+  hrms-network:
+    external: true
+    name: hrms-erp_hrms-network
+
+volumes:
+  postgres_data:
+    driver: local

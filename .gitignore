@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+.env
+
+# .NET
+bin/
+obj/
+*.user
+
+# WiX
+*.wixobj
+*.wixpdb
+
+# Build outputs
+dist/
+deploy/out/
+*.pfx
+*.msi
+
+# Docker — generated secrets, never commit
+deploy/docker/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Agent download — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Asset Agent — install on a host</h1>
+  <p class="meta">Cross-platform Python agent. Downloads the script + the OS-specific installer.</p>
+</section>
+
+<div class="card" style="max-width:880px;">
+  <h3 style="margin-top:0;">Tenant enrolment key</h3>
+  <div class="key-row">
+    <code class="key-value">{{ enrolment_key }}</code>
+  </div>
+  <p class="meta" style="margin-top:8px;">Paste this into the install command below. After first check-in, each agent receives its own long-lived bearer token; the enrolment key is shared across the tenant.</p>
+</div>
+
+<section style="margin-top:24px;">
+  <h2>Linux (Ubuntu / Debian / RHEL)</h2>
+  <ol class="meta" style="line-height:1.7;font-size:14px;color:var(--text);">
+    <li>Download both files to the target host:
+      <pre class="code">curl -fsSL -o octoassist_agent.py "{{ server_url }}/agent/files/octoassist_agent.py"
+curl -fsSL -o install-linux.sh    "{{ server_url }}/agent/files/install-linux.sh"</pre>
+    </li>
+    <li>Run the installer as root:
+      <pre class="code">sudo bash install-linux.sh \
+    --server-url={{ server_url }} \
+    --enrolment-key={{ enrolment_key }}</pre>
+    </li>
+    <li>Verify:
+      <pre class="code">systemctl status octoassist-agent
+journalctl -u octoassist-agent -f</pre>
+    </li>
+  </ol>
+</section>
+
+<section style="margin-top:24px;">
+  <h2>Windows (10 / 11 / Server 2019+)</h2>
+  <ol class="meta" style="line-height:1.7;font-size:14px;color:var(--text);">
+    <li>Make sure Python 3.10+ is installed (<code>winget install Python.Python.3.12</code>).</li>
+    <li>Download both files. Open PowerShell as Administrator in the same folder:
+      <pre class="code">Invoke-WebRequest -Uri "{{ server_url }}/agent/files/octoassist_agent.py" -OutFile octoassist_agent.py
+Invoke-WebRequest -Uri "{{ server_url }}/agent/files/install-windows.ps1"  -OutFile install-windows.ps1</pre>
+    </li>
+    <li>Run the installer:
+      <pre class="code">.\install-windows.ps1 `
+    -ServerUrl {{ server_url }} `
+    -EnrolmentKey {{ enrolment_key }}</pre>
+    </li>
+  </ol>
+  <p class="meta">Installs as a Task Scheduler job running as <code>SYSTEM</code> at boot. AV-friendly because it's stock <code>python.exe</code> running a <code>.py</code> file — no PyInstaller binary to scan.</p>
+</section>
+
+<section style="margin-top:24px;">
+  <h2>Direct downloads</h2>
+  <table class="data" style="max-width:680px;">
+    <thead><tr><th>File</th><th>Purpose</th><th></th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>octoassist_agent.py</code></td>
+        <td>The agent itself — cross-platform, no pip deps</td>
+        <td><a class="button" href="/agent/files/octoassist_agent.py">Download</a></td>
+      </tr>
+      <tr>
+        <td><code>install-linux.sh</code></td>
+        <td>Linux installer (systemd)</td>
+        <td><a class="button" href="/agent/files/install-linux.sh">Download</a></td>
+      </tr>
+      <tr>
+        <td><code>install-windows.ps1</code></td>
+        <td>Windows installer (Task Scheduler)</td>
+        <td><a class="button" href="/agent/files/install-windows.ps1">Download</a></td>
+      </tr>
+      <tr>
+        <td><code>README.md</code></td>
+        <td>Install / verify / uninstall reference</td>
+        <td><a class="button" href="/agent/files/README.md">Download</a></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<p class="meta" style="margin-top:32px;font-size:13px;">
+  For Windows-only deployments at scale (with MSI / GPO push), use the C# agent in <code>installer/</code> instead — it builds an MSI with WiX. The Python agent is the lighter cross-platform option for fewer-than-50-host pilots.
+</p>
+{% endblock %}

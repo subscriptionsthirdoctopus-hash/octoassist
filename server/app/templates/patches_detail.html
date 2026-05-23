@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Patches — {{ agent.hostname }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ agent.hostname }} — patches</h1>
+      <p class="meta">
+        <a href="/patches">← All endpoints</a>
+        · last seen {% if agent.last_seen_at %}{{ agent.last_seen_at | ist }}{% else %}never{% endif %}
+      </p>
+    </div>
+    <div class="actions">
+      <a class="button" href="/asset/{{ agent.id }}">Asset details ›</a>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Critical</p>
+    <p class="kpi-value" style="color:var(--red);">{{ counts.critical }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Important</p>
+    <p class="kpi-value" style="color:var(--amber);">{{ counts.important }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Moderate</p>
+    <p class="kpi-value">{{ counts.moderate }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Low / unknown</p>
+    <p class="kpi-value">{{ counts.low + counts.unknown }}</p>
+  </div>
+</section>
+
+{% if patches %}
+<form method="post" action="/patches/{{ agent.id }}/deploy"
+      onsubmit="return confirmDeploy(this)">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <section class="card" style="margin-top:14px;">
+    <div class="row-between" style="margin-bottom:8px;">
+      <h2 style="margin:0;font-size:18px;">Currently missing ({{ patches|length }})</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <strong style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--slate);">Quick-select:</strong>
+        <button type="button" class="link-button" onclick="selectPatches('all')">All</button>
+        <button type="button" class="link-button" onclick="selectPatches('none')">None</button>
+        <button type="button" class="link-button" onclick="selectPatches('critical')">Critical only</button>
+        <button type="button" class="link-button" onclick="selectPatches('critical-important')">Critical + Important</button>
+        <button type="button" class="link-button" onclick="selectPatches('non-low')">Everything except low/unknown</button>
+      </div>
+    </div>
+    <table class="data" style="margin:0;">
+      <thead>
+        <tr>
+          <th style="width:32px;"><input type="checkbox" id="pick-all" onchange="toggleAll(this)"></th>
+          <th>Severity</th>
+          <th>Package</th>
+          <th>Current</th>
+          <th>Available</th>
+          <th>First seen</th>
+          <th>Age</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in patches %}
+        {% set age_days = ((p.last_seen_at - p.first_seen_at).total_seconds() / 86400) | round(0, 'floor') | int %}
+        <tr>
+          <td>
+            <input type="checkbox" class="pick-pkg" name="package"
+                   value="{{ p.package_name }}"
+                   data-sev="{{ p.severity.value }}">
+          </td>
+          <td>
+            {% set sev = p.severity.value %}
+            {% if sev == 'critical' %}<span class="prio prio-critical">{{ sev }}</span>
+            {% elif sev == 'important' %}<span class="prio prio-high">{{ sev }}</span>
+            {% elif sev == 'moderate' %}<span class="prio prio-medium">{{ sev }}</span>
+            {% else %}<span class="prio prio-low">{{ sev }}</span>{% endif %}
+          </td>
+          <td><strong>{{ p.package_name }}</strong>{% if p.title %}<div style="color:var(--slate);font-size:12px;">{{ p.title[:160] }}</div>{% endif %}</td>
+          <td>{{ p.current_version or "—" }}</td>
+          <td>{{ p.available_version or "—" }}</td>
+          <td>{{ p.first_seen_at | istdate }}</td>
+          <td>{% if age_days > 90 %}<span class="breach">{{ age_days }}d</span>{% else %}{{ age_days }}d{% endif %}</td>
+          <td style="color:var(--slate);font-size:12.5px;">{{ p.source }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <div class="card" style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+    <p class="meta" style="margin:0;font-size:13px;">
+      <strong id="pick-count">0</strong> patch(es) selected.
+      Pushes a new window scoped to <strong>{{ agent.hostname }}</strong>; agent installs on next 5-min poll
+      via <code>Install-WindowsUpdate -MicrosoftUpdate</code> / <code>winget upgrade</code>.
+    </p>
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+      <label style="display:flex;flex-direction:column;font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">
+        Schedule for (IST, blank = now)
+        <input type="datetime-local" name="scheduled_for" id="pick-schedule"
+               style="margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px;">
+      </label>
+      <button type="submit" class="primary" id="push-btn" disabled>
+        Push selected patches to {{ agent.hostname }}
+      </button>
+    </div>
+  </div>
+</form>
+{% else %}
+<div class="empty">
+  <h2>This endpoint is fully patched 🎯</h2>
+  <p>No missing patches reported on the last check-in.</p>
+</div>
+{% endif %}
+
+<script>
+function selectPatches(mode) {
+  document.querySelectorAll('input.pick-pkg').forEach(function (c) {
+    var s = c.dataset.sev;
+    if (mode === 'all') c.checked = true;
+    else if (mode === 'none') c.checked = false;
+    else if (mode === 'critical') c.checked = (s === 'critical');
+    else if (mode === 'critical-important') c.checked = (s === 'critical' || s === 'important');
+    else if (mode === 'non-low') c.checked = (s !== 'low' && s !== 'unknown');
+  });
+  updatePickCount();
+}
+function toggleAll(cb) {
+  document.querySelectorAll('input.pick-pkg').forEach(function (c) { c.checked = cb.checked; });
+  updatePickCount();
+}
+function updatePickCount() {
+  var n = document.querySelectorAll('input.pick-pkg:checked').length;
+  document.getElementById('pick-count').innerText = n;
+  document.getElementById('push-btn').disabled = (n === 0);
+  var when = (document.getElementById('pick-schedule') || {}).value || '';
+  var verb = when ? ('Schedule ' + n + ' patch(es) for ' + when.replace('T', ' '))
+                  : ('Push ' + n + ' patch(es) to {{ agent.hostname|e }}');
+  document.getElementById('push-btn').innerText = n === 0
+    ? 'Push selected patches to {{ agent.hostname|e }}'
+    : verb;
+}
+document.getElementById('pick-schedule') && document.getElementById('pick-schedule').addEventListener('input', updatePickCount);
+function confirmDeploy(form) {
+  var n = form.querySelectorAll('input.pick-pkg:checked').length;
+  if (n === 0) { alert('Pick at least one patch first.'); return false; }
+  return confirm('Push ' + n + ' patch(es) to {{ agent.hostname|e }}?\n\n'
+    + 'A patch window will be created and marked in_progress.\n'
+    + 'Agents pick up the deployment on their next 5-minute poll.');
+}
+// Wire change event on every pkg checkbox to keep the counter live.
+document.querySelectorAll('input.pick-pkg').forEach(function (c) {
+  c.addEventListener('change', updatePickCount);
+});
+</script>
+{% endblock %}

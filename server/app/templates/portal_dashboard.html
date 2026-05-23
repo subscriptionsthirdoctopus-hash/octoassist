@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}My Tickets — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>My Tickets</h1>
+      <p class="meta">Welcome, {{ current_user.full_name or current_user.email }}. {% if open_count %}<strong>{{ open_count }}</strong> open · {% endif %}{{ rows|length }} total shown</p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/portal/new?kind=incident">+ Report an Issue</a>
+      <a class="button" href="/portal/new?kind=service_request">+ Request Service</a>
+      <a class="button" href="/portal/kb">📚 Help Articles</a>
+    </div>
+  </div>
+</section>
+
+{% if kb_suggestions %}
+<section class="card" style="background:#f0f9ff;border-left:4px solid #0284c7;margin-bottom:14px;">
+  <h3 style="margin:0 0 8px;font-size:14px;color:#075985;">💡 Before you log a ticket — try these articles</h3>
+  <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7;">
+    {% for a in kb_suggestions %}
+    <li><a href="/portal/kb/{{ a.slug }}" style="color:#0369a1;">{{ a.title }}</a>{% if a.summary %} <span class="meta">— {{ a.summary[:90] }}{% if a.summary|length > 90 %}…{% endif %}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <p class="meta" style="margin:8px 0 0;font-size:11.5px;"><a href="/portal/kb" style="color:#0369a1;">Browse all help articles →</a></p>
+</section>
+{% endif %}
+
+<style>
+  .portal-filters { display:flex; gap:10px; align-items:end; margin: 8px 0 14px; flex-wrap:wrap; }
+  .portal-filters input, .portal-filters select { padding:8px 10px; border:1px solid var(--line,#e2e8f0); border-radius:6px; font-size:13px; min-width: 200px; }
+  .portal-filters button { padding:8px 14px; }
+  .portal-filters .clear { color: var(--slate,#64748b); font-size:12px; text-decoration:none; }
+  .ticket-icon { font-size: 18px; margin-right:6px; }
+  table.data td.ticket-cell { display:flex; align-items:center; gap:4px; }
+</style>
+
+<form method="get" action="/portal" class="portal-filters">
+  <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate,#64748b);">Search
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="Title, description, ticket #" autocomplete="off">
+  </label>
+  <label style="display:flex;flex-direction:column;font-size:12px;color:var(--slate,#64748b);">Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_"," ")|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="primary">Apply</button>
+  {% if q or filter_status %}<a class="clear" href="/portal">clear</a>{% endif %}
+</form>
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>#</th><th>Title</th><th>Category</th><th>Status</th><th>Resolve by</th></tr></thead>
+  <tbody>
+    {% for t in rows %}
+    {% set ttb = time_to_breach(t.due_resolution_at) %}
+    <tr>
+      <td><a href="/portal/ticket/{{ t.id }}">{{ t.ticket_number }}</a></td>
+      <td class="ticket-cell"><span class="ticket-icon">{{ icon_for(t.category) }}</span><a href="/portal/ticket/{{ t.id }}" style="color:inherit;text-decoration:none;">{{ t.title }}</a></td>
+      <td>{{ t.category.name if t.category else "—" }}</td>
+      <td><span class="status status-{{ t.status.value }}">{{ t.status.value.replace("_", " ") }}</span></td>
+      <td class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  {% if q or filter_status %}
+  <h2>No tickets match your filters</h2>
+  <p><a href="/portal">Clear filters</a> or log a new ticket.</p>
+  {% else %}
+  <h2>You haven't logged any tickets yet</h2>
+  <p>Use the buttons above to report an issue or request something.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

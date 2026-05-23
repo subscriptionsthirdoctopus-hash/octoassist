@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Users — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between" style="align-items:flex-start;">
+    <div>
+      <h1>Users</h1>
+      <p class="meta">Admin-provisioned + auto-synced from Microsoft Entra. End-users live in the requester role.</p>
+    </div>
+    <div class="actions" style="display:flex;gap:8px;align-items:center;">
+      {% if entra_idp %}
+      <form method="post" action="/users/sync-entra" class="inline-form"
+            onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…';">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <button type="submit" class="button">↻ Sync from Entra</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<form method="get" action="/users" class="card" style="max-width:none;margin-bottom:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+  <label style="flex:1;min-width:240px;">Search
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="email, name, department, location, title…"
+           style="width:100%;padding:6px 10px;font-size:13px;" autofocus>
+  </label>
+  <label>Role
+    <select name="role" style="padding:6px;">
+      <option value="">All</option>
+      {% for r in roles %}<option value="{{ r }}" {% if filter_role == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status" style="padding:6px;">
+      <option value="">All</option>
+      <option value="active"   {% if filter_status == "active" %}selected{% endif %}>active</option>
+      <option value="disabled" {% if filter_status == "disabled" %}selected{% endif %}>disabled</option>
+    </select>
+  </label>
+  {% if departments %}<label>Department
+    <select name="department" style="padding:6px;">
+      <option value="">All</option>
+      {% for d in departments %}<option value="{{ d }}" {% if filter_department == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+    </select>
+  </label>{% endif %}
+  {% if locations %}<label>Location
+    <select name="location" style="padding:6px;">
+      <option value="">All</option>
+      {% for l in locations %}<option value="{{ l }}" {% if filter_location == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+  </label>{% endif %}
+  <button type="submit" class="button">Apply</button>
+  {% if q or filter_role or filter_status or filter_department or filter_location %}<a href="/users" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
+  <span class="meta" style="margin-left:auto;font-size:12px;">{{ rows|length }} match{{ "" if rows|length == 1 else "es" }}</span>
+</form>
+
+{% if flash %}
+<div class="card" style="max-width:none;margin-bottom:16px;background:#dcfce7;border-left:4px solid #16a34a;">
+  <p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p>
+</div>
+{% endif %}
+{% if error %}
+<div class="card" style="max-width:none;margin-bottom:16px;background:#fee2e2;border-left:4px solid #dc2626;">
+  <p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p>
+</div>
+{% endif %}
+
+{% if created_email and created_password %}
+<div class="alert success">
+  <strong>User created.</strong> Share these credentials with <code>{{ created_email }}</code> over a secure channel — they will not be shown again.<br>
+  Temporary password: <code>{{ created_password }}</code>
+</div>
+{% endif %}
+
+<div class="card form">
+  <h3>Create a user manually</h3>
+  <p class="meta" style="margin-top:0;">For service accounts or one-offs. For your real team, use <strong>↻ Sync from Entra</strong> above, then bulk-promote below.</p>
+  <form method="post" action="/users/new" class="row-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label>Email
+      <input type="email" name="email" required>
+    </label>
+    <label>Full name
+      <input type="text" name="full_name">
+    </label>
+    <label>Role
+      <select name="role" required>
+        {% for r in roles %}
+        <option value="{{ r }}" {% if r == "requester" %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Create</button>
+  </form>
+</div>
+
+<form method="post" action="/users/bulk-update" id="bulk-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <div class="card" style="max-width:none;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <strong style="margin-right:auto;">Bulk action on selected:</strong>
+    <button type="submit" name="action" value="promote_agent"    class="button">→ Make technician (agent)</button>
+    <button type="submit" name="action" value="promote_admin"    class="button">→ Make admin</button>
+    <button type="submit" name="action" value="demote_requester" class="button">→ Demote to requester</button>
+    <button type="submit" name="action" value="deactivate"       class="button" style="color:var(--red,#dc2626);">Deactivate</button>
+    <button type="submit" name="action" value="activate"         class="button">Reactivate</button>
+    <button type="submit" name="action" value="delete"           class="button"
+            style="background:#dc2626;color:white;border-color:#dc2626;"
+            onclick="return confirm('Permanently DELETE the selected user(s)?\nUsers with ticket history will be skipped automatically (use Deactivate for those).\nThis cannot be undone.');">🗑 Delete</button>
+  </div>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width:32px;"><input type="checkbox" id="check-all" onclick="document.querySelectorAll('input[name=user_ids]').forEach(c=>c.checked=this.checked);"></th>
+        <th>Email</th>
+        <th>Name</th>
+        <th>Role</th>
+        <th>Department</th>
+        <th>Location</th>
+        <th>Title</th>
+        <th>Status</th>
+        <th>Last login</th>
+        <th>Synced</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in rows %}
+      <tr class="{% if not u.is_active %}row-disabled{% endif %}">
+        <td>
+          {% if u.id != current_user.id %}
+          <input type="checkbox" name="user_ids" value="{{ u.id }}">
+          {% endif %}
+        </td>
+        <td>{{ u.email }}{% if u.entra_oid %} <span title="Synced from Entra ID" style="color:var(--teal);font-size:11px;">⌬</span>{% endif %}</td>
+        <td>{{ u.full_name or "—" }}</td>
+        <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
+        <td>{{ u.department or "—" }}</td>
+        <td>{{ u.location or "—" }}</td>
+        <td>{{ u.job_title or "—" }}</td>
+        <td>{{ "active" if u.is_active else "disabled" }}</td>
+        <td>{% if u.last_login_at %}{{ u.last_login_at | ist }}{% else %}—{% endif %}</td>
+        <td>{% if u.synced_at %}{{ u.synced_at | ist }}{% else %}—{% endif %}</td>
+        <td>
+          {% if u.id != current_user.id %}
+            {% if u.is_active %}
+            <button type="submit" class="link-button" formaction="/users/{{ u.id }}/deactivate" formmethod="post">deactivate</button>
+            {% else %}
+            <button type="submit" class="link-button" formaction="/users/{{ u.id }}/activate"   formmethod="post">activate</button>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
+{% endblock %}

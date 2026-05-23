@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Changes Report — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Changes Report</h1>
+      <p class="meta">Window: last {{ days }} days · <a href="/reports">← Dashboard</a></p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/reports/export/changes.csv">Export CSV</a>
+      <a class="button" href="?days=7">7d</a>
+      <a class="button" href="?days=30">30d</a>
+      <a class="button" href="?days=90">90d</a>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Created</p>
+    <p class="kpi-value">{{ throughput.created }}</p>
+    <p class="kpi-sub">in last {{ days }} days</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Completed</p>
+    <p class="kpi-value">{{ throughput.completed }}</p>
+    <p class="kpi-sub">change windows successful</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Failed</p>
+    <p class="kpi-value">{{ throughput.failed }}</p>
+    <p class="kpi-sub">required rollback</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Success rate</p>
+    <p class="kpi-value">{{ throughput.success_rate }}<span class="kpi-unit">%</span></p>
+    <p class="kpi-sub">completed / (completed + failed)</p>
+  </div>
+</section>
+
+<section class="report-row two-col-charts">
+  <div class="report-card">
+    <h3>Changes by status</h3>
+    {{ chart_status|safe }}
+  </div>
+  <div class="report-card">
+    <h3>Changes by type</h3>
+    {{ chart_type|safe }}
+  </div>
+</section>
+
+<section>
+  <h2>Upcoming change windows</h2>
+  {% if upcoming %}
+  <table class="data">
+    <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Risk</th><th>Status</th><th>Planned start</th><th>Implementer</th></tr></thead>
+    <tbody>
+      {% for c in upcoming %}
+      <tr>
+        <td><a href="/changes/{{ c.id }}">{{ c.change_number }}</a></td>
+        <td>{{ c.title }}</td>
+        <td>{{ c.change_type.value }}</td>
+        <td><span class="prio prio-{{ 'critical' if c.risk.value == 'high' else ('high' if c.risk.value == 'medium' else 'low') }}">{{ c.risk.value }}</span></td>
+        <td><span class="status status-{{ 'in_progress' if c.status.value == 'in_progress' else 'resolved' }}">{{ c.status.value.replace("_", " ") }}</span></td>
+        <td>{{ c.planned_start | ist if c.planned_start else "—" }}</td>
+        <td>{{ c.implementer.display_name if c.implementer else "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><p>No approved or in-progress changes scheduled.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% block title %}OctoAssist — ITSM, calmly.{% endblock %}
+{% block body_class %}landing-v3{% endblock %}
+{% block content %}
+
+{# ───────────────────────  HERO  ──────────────────────── #}
+<section class="lh-hero">
+  <div class="lh-container hero-grid">
+    <div class="hero-copy">
+      <p class="lh-eyebrow">OctoAssist ITSM</p>
+      <h1 class="lh-h1">
+        ITSM, calmly.
+      </h1>
+      <p class="lh-lede">
+        OctoAssist is an ITIL-aligned IT Service Management platform for mid-market enterprises.
+        Tickets, assets, audit trail, and self-service in one place — without the suite-vendor cost.
+      </p>
+      <div class="lh-cta-row">
+        <a href="/login" class="lh-button primary big">Sign in</a>
+        {% for i in enabled_idps %}
+          <a href="/auth/oidc/{{ i.id }}/start" class="lh-button big">Sign in with {{ i.display_name }}</a>
+        {% endfor %}
+        <a href="#contact" class="lh-button ghost big">Book a walk-through</a>
+      </div>
+      <p class="hero-meta">
+        <span>5-week deployment</span>
+        <span>·</span>
+        <span>3 years bug-fix coverage</span>
+        <span>·</span>
+        <span>Unlimited end-users</span>
+      </p>
+    </div>
+
+    {# Inline browser-window product mock — clean, consistent with the real app #}
+    <div class="hero-mock" aria-hidden="true">
+      <div class="mock-window">
+        <div class="mock-chrome">
+          <span class="mock-dot dot-red"></span>
+          <span class="mock-dot dot-amber"></span>
+          <span class="mock-dot dot-green"></span>
+          <span class="mock-url">octoassist.example.com/tickets</span>
+        </div>
+        <div class="mock-body">
+          <div class="mock-topbar">
+            <strong>OctoAssist</strong>
+            <span>Tickets</span>
+            <span>Assets</span>
+            <span>Settings</span>
+          </div>
+          <div class="mock-page">
+            <div class="mock-h1">Tickets</div>
+            <div class="mock-meta">128 open · 7 SLA at risk · 214 resolved this week</div>
+            <table class="mock-table">
+              <thead><tr><th>#</th><th>Title</th><th>Priority</th><th>Status</th><th>Resolve by</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>INC-00214</td>
+                  <td>Outlook crashing on launch — Finance dept</td>
+                  <td><span class="m-prio prio-high">high</span></td>
+                  <td><span class="m-status status-in_progress">in progress</span></td>
+                  <td>3h 12m</td>
+                </tr>
+                <tr>
+                  <td>SR-00118</td>
+                  <td>New laptop request — Priya Mehra</td>
+                  <td><span class="m-prio prio-medium">medium</span></td>
+                  <td><span class="m-status status-open">open</span></td>
+                  <td>2d 4h</td>
+                </tr>
+                <tr>
+                  <td>INC-00213</td>
+                  <td>VPN disconnects every 30 minutes</td>
+                  <td><span class="m-prio prio-critical">critical</span></td>
+                  <td><span class="m-status status-in_progress">in progress</span></td>
+                  <td class="breach">-22m</td>
+                </tr>
+                <tr>
+                  <td>SR-00117</td>
+                  <td>Onboarding · Rohit Singh starts Monday</td>
+                  <td><span class="m-prio prio-medium">medium</span></td>
+                  <td><span class="m-status status-on_hold">on hold</span></td>
+                  <td>4d</td>
+                </tr>
+                <tr>
+                  <td>INC-00212</td>
+                  <td>Printer offline — Mumbai HQ floor 4</td>
+                  <td><span class="m-prio prio-low">low</span></td>
+                  <td><span class="m-status status-resolved">resolved</span></td>
+                  <td>—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ───────────────────  WHO IT'S FOR  ──────────────────── #}
+<section class="lh-section lh-band">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">Built for</p>
+    <h2 class="lh-h2">Mid-market IT teams that have outgrown spreadsheets and email — but don't need ServiceNow.</h2>
+    <p class="lh-section-sub">
+      OctoAssist sits exactly where ITIL rigor meets boutique pricing. Audit-ready by default, deployable in five weeks, with three years of bug-fix coverage included.
+    </p>
+    <div class="industries">
+      <div><strong>BFSI</strong><span>SEBI CSCRF audit-ready</span></div>
+      <div><strong>Manufacturing</strong><span>Multi-site asset visibility</span></div>
+      <div><strong>Pharma</strong><span>GxP-aligned change records</span></div>
+      <div><strong>Capital Markets</strong><span>RE-grade endpoint hygiene</span></div>
+      <div><strong>Professional Services</strong><span>Client-facing SLA evidence</span></div>
+    </div>
+  </div>
+</section>
+
+{# ───────────────────  THE PLATFORM (mocks)  ──────────────── #}
+<section class="lh-section">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">What you actually get</p>
+    <h2 class="lh-h2">Three workflows. One platform.</h2>
+
+    <div class="features-stack">
+
+      {# Feature 1 — Ticketing #}
+      <div class="feature-row">
+        <div class="feature-text">
+          <h3>Tickets that don't get lost.</h3>
+          <p>
+            Unified incident and service-request model with auto-classification, priority routing,
+            and a configurable SLA matrix. First-response and resolution timers run continuously,
+            with breach detection that doubles as your audit evidence.
+          </p>
+          <ul class="feature-bullets">
+            <li>Pre-built service catalogue: laptop request, VPN access, password reset, onboarding, offboarding</li>
+            <li>Threaded comments — public and internal-only</li>
+            <li>Append-only audit log with before / after values</li>
+            <li>End-user self-service portal — branded, mobile-friendly</li>
+          </ul>
+        </div>
+        <div class="feature-mock">
+          <div class="mock-window mock-window-sm">
+            <div class="mock-chrome">
+              <span class="mock-dot dot-red"></span>
+              <span class="mock-dot dot-amber"></span>
+              <span class="mock-dot dot-green"></span>
+              <span class="mock-url">.../tickets/INC-00214</span>
+            </div>
+            <div class="mock-body">
+              <div class="mock-page">
+                <div class="mock-ticket-head">
+                  <div>
+                    <div class="mock-h2">INC-00214 · Outlook crashing on launch</div>
+                    <div class="mock-meta-sm">Incident · Software Issue · created 09:14 by Priya Mehra</div>
+                  </div>
+                  <div>
+                    <span class="m-prio prio-high">high</span>
+                    <span class="m-status status-in_progress">in progress</span>
+                  </div>
+                </div>
+                <div class="mock-cards">
+                  <div><span class="lbl">Resolve by</span><span class="val">3h 12m</span></div>
+                  <div><span class="lbl">Assignee</span><span class="val">Arun K.</span></div>
+                  <div><span class="lbl">First reply</span><span class="val">12m</span></div>
+                </div>
+                <div class="mock-comment">
+                  <strong>Arun K.</strong> · 09:21
+                  <p>Reproduced on a clean profile. Looks like the recent Office update — rolling back.</p>
+                </div>
+                <div class="mock-comment internal">
+                  <strong>Arun K. (internal)</strong> · 09:24
+                  <p>KB-127 covers this rollback. Linking.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# Feature 2 — Asset agent #}
+      <div class="feature-row reverse">
+        <div class="feature-text">
+          <h3>Every endpoint, automatically.</h3>
+          <p>
+            Lightweight Windows agent installs via MSI / GPO and auto-inventories every endpoint:
+            hardware, installed software, OS version, BIOS serial, network interfaces, logged-in user.
+            Refreshes every six hours. Unlimited installs, no per-seat fee.
+          </p>
+          <ul class="feature-bullets">
+            <li>Hardware: CPU, RAM, disks, manufacturer, model, BIOS serial</li>
+            <li>Installed software with version + publisher (HKLM uninstall keys)</li>
+            <li>Network: MAC, IP, interface name</li>
+            <li>Deployable via GPO with our self-signed Trusted Publisher cert</li>
+          </ul>
+        </div>
+        <div class="feature-mock">
+          <div class="mock-window mock-window-sm">
+            <div class="mock-chrome">
+              <span class="mock-dot dot-red"></span>
+              <span class="mock-dot dot-amber"></span>
+              <span class="mock-dot dot-green"></span>
+              <span class="mock-url">.../assets</span>
+            </div>
+            <div class="mock-body">
+              <div class="mock-page">
+                <div class="mock-h2">Asset Register</div>
+                <div class="mock-meta-sm">214 endpoints reporting</div>
+                <table class="mock-table">
+                  <thead><tr><th>Hostname</th><th>OS</th><th>RAM</th><th>User</th><th>Last seen</th></tr></thead>
+                  <tbody>
+                    <tr><td>LT-FIN-014</td><td>Windows 11 Pro</td><td>16.0 GB</td><td>priya.mehra</td><td>2h ago</td></tr>
+                    <tr><td>LT-DEV-022</td><td>Windows 11 Pro</td><td>32.0 GB</td><td>arun.k</td><td>14m ago</td></tr>
+                    <tr><td>WS-OPS-101</td><td>Windows 10 Pro</td><td>8.0 GB</td><td>rohit.s</td><td>5h ago</td></tr>
+                    <tr><td>LT-MKT-008</td><td>Windows 11 Pro</td><td>16.0 GB</td><td>kavya.r</td><td>30m ago</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# Feature 3 — Audit / compliance #}
+      <div class="feature-row">
+        <div class="feature-text">
+          <h3>Audit-ready, not audit-rushed.</h3>
+          <p>
+            Every action — ticket creation, assignment, status change, comment, asset modification,
+            configuration edit — is appended to an immutable event log with user, timestamp, and
+            before / after values. Map directly to ISO 27001:2022, DPDP Act 2023, and SEBI CSCRF.
+          </p>
+          <ul class="feature-bullets">
+            <li>Append-only — events cannot be edited or deleted</li>
+            <li>Surfaced inline on the ticket detail page, not a separate &quot;audit module&quot;</li>
+            <li>Role-based access · admin / agent / requester</li>
+            <li>Microsoft Entra ID single sign-on supported</li>
+          </ul>
+        </div>
+        <div class="feature-mock">
+          <div class="mock-window mock-window-sm">
+            <div class="mock-chrome">
+              <span class="mock-dot dot-red"></span>
+              <span class="mock-dot dot-amber"></span>
+              <span class="mock-dot dot-green"></span>
+              <span class="mock-url">.../tickets/INC-00214 · audit log</span>
+            </div>
+            <div class="mock-body">
+              <div class="mock-page">
+                <div class="mock-h2">Audit log</div>
+                <table class="mock-table mock-audit">
+                  <thead><tr><th>When</th><th>Who</th><th>Event</th><th>Detail</th></tr></thead>
+                  <tbody>
+                    <tr><td>09:14</td><td>Priya M.</td><td>created</td><td><code>INC-00214 · high · Software Issue</code></td></tr>
+                    <tr><td>09:18</td><td>system</td><td>assigned</td><td><code>→ Arun K.</code></td></tr>
+                    <tr><td>09:21</td><td>Arun K.</td><td>status_changed</td><td><code>open → in_progress</code></td></tr>
+                    <tr><td>09:21</td><td>Arun K.</td><td>comment_added</td><td><code>"Reproduced on a clean profile..."</code></td></tr>
+                    <tr><td>09:24</td><td>Arun K.</td><td>comment_added</td><td><code>internal · "KB-127 covers..."</code></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+{# ────────────────────  MODULES  ─────────────────── #}
+<section class="lh-section lh-band">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">Modules</p>
+    <h2 class="lh-h2">All in. No add-ons.</h2>
+    <p class="lh-section-sub">
+      Every module below is part of the platform — no per-module, per-user, or per-endpoint licence.
+    </p>
+
+    <div class="module-rows">
+      <div>
+        <h4>Service Operations</h4>
+        <ul>
+          <li>Incident Management</li>
+          <li>Service Request Management</li>
+          <li>Self-Service Portal</li>
+          <li>Knowledge Base <span class="lh-soon">phase 3</span></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Service Governance</h4>
+        <ul>
+          <li>SLA Management</li>
+          <li>Audit &amp; Compliance Logging</li>
+          <li>Change Management <span class="lh-soon">phase 3</span></li>
+          <li>Problem Management <span class="lh-soon">phase 3</span></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Endpoint &amp; Reporting</h4>
+        <ul>
+          <li>Asset Discovery Agent <span class="lh-tag-included">included</span></li>
+          <li>Patch Management <span class="lh-soon">phase 4</span></li>
+          <li>Reporting &amp; Dashboards <span class="lh-soon">phase 3</span></li>
+          <li>Microsoft Entra SSO</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ──────────────────  COMPLIANCE  ────────────────── #}
+<section class="lh-section">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">Built for regulated industries</p>
+    <h2 class="lh-h2">Audit-ready by default.</h2>
+    <p class="lh-section-sub">
+      OctoAssist's data model is designed around the artefacts assessors actually sample — change records,
+      role-based access, SLA evidence, and continuous asset inventory.
+    </p>
+
+    <div class="compliance-grid">
+      <div class="compliance-card">
+        <div class="compliance-badge">ISO 27001:2022</div>
+        <ul>
+          <li>A.5.18 Access rights — RBAC + audit log</li>
+          <li>A.5.32 IP &amp; software inventory</li>
+          <li>A.8.16 Monitoring activities</li>
+          <li>A.8.32 Change management</li>
+        </ul>
+      </div>
+      <div class="compliance-card">
+        <div class="compliance-badge">DPDP Act 2023</div>
+        <ul>
+          <li>Personal-data minimisation in tickets</li>
+          <li>Role-based access on portal data</li>
+          <li>Auditable consent trail</li>
+          <li>Right-to-erasure operational pattern</li>
+        </ul>
+      </div>
+      <div class="compliance-card">
+        <div class="compliance-badge">SEBI CSCRF</div>
+        <ul>
+          <li>Continuous asset inventory of regulated endpoints</li>
+          <li>Patch posture for systems supporting REs</li>
+          <li>Change-management evidence sampling</li>
+          <li>Incident response timelines and audit log</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ────────────────  TIMELINE  ────────────────── #}
+<section class="lh-section lh-band">
+  <div class="lh-container">
+    <p class="lh-eyebrow lh-eyebrow-dark">Engagement model</p>
+    <h2 class="lh-h2">Five weeks to go-live. Six months of hypercare. Three years of bug-fix coverage.</h2>
+
+    <ol class="lh-timeline">
+      <li><span>Week 1</span><strong>Discovery &amp; Design</strong><p>Workshop, service catalogue, SLA matrix, role design</p></li>
+      <li><span>Week 2</span><strong>Provisioning</strong><p>Environment setup, branding, RBAC, categories, workflows</p></li>
+      <li><span>Week 3</span><strong>Configuration</strong><p>Asset Agent rollout, KB seeding, Entra integration</p></li>
+      <li><span>Week 4</span><strong>UAT</strong><p>Test scripts, end-user validation, defect closure</p></li>
+      <li><span>Week 5</span><strong>Go-Live</strong><p>Admin &amp; end-user training, cutover, knowledge transfer</p></li>
+    </ol>
+  </div>
+</section>
+
+{# ────────────────  CTA  ────────────────── #}
+<section class="lh-section lh-cta-band-section" id="contact">
+  <div class="lh-container">
+    <div class="lh-cta-band">
+      <div>
+        <h2 class="lh-h2 light">See it. Try it. Decide.</h2>
+        <p class="lh-section-sub light">
+          Walk-through call, sandbox access, or a costed proposal — whichever's most useful for where you are.
+        </p>
+        <ul class="lh-contact-list">
+          <li><span>Email</span><a href="mailto:hello@octoassist.app?subject=OctoAssist%20-%20Walk-through%20request">hello@octoassist.app</a></li>
+          <li><span>HQ</span>Mumbai, India</li>
+        </ul>
+      </div>
+      <form class="lh-cta-form" method="post" action="/contact">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <h3>Talk to us</h3>
+        <label>Name<input type="text" name="name" required></label>
+        <label>Work email<input type="email" name="email" required></label>
+        <label>Organisation<input type="text" name="org"></label>
+        <label>Phone<input type="tel" name="phone"></label>
+        <label>What are you looking for?<textarea name="message" rows="3"></textarea></label>
+        <button type="submit" class="lh-button primary big">Request a walk-through</button>
+        <p class="lh-form-fineprint">By submitting, you agree to be contacted about OctoAssist.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

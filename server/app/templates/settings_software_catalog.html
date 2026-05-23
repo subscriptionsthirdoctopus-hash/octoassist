@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Software catalog — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>📦 Software catalog</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ rows|length }} package{{ "" if rows|length == 1 else "s" }} curated</p>
+  </div>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<section class="card" style="max-width:none; margin-bottom:14px;">
+  <h3 style="margin-top:0;">How this works</h3>
+  <p class="meta" style="margin:0; line-height:1.55;">
+    Curate the installers your team deploys regularly — Chrome, Acrobat Reader, the VPN client, internal LOB apps —
+    once, with their silent-install args and (optionally) an uninstall command. They then appear in the
+    <a href="/software/deploy">Deploy software</a> dropdown so the helpdesk picks a package + endpoints + clicks
+    <strong>Queue deploy</strong>. No more pasting URLs and remembering vendor-specific silent flags every time.
+  </p>
+  <p class="meta" style="margin:8px 0 0; font-size:12px;">
+    <strong>Installer URL</strong> can be a public vendor link, an Azure Blob / SharePoint share, a corporate file
+    server (must be HTTPS-reachable from the endpoint), or use the OctoAssist upload pipeline to host it.
+  </p>
+</section>
+
+<details class="card" style="max-width:none; margin-bottom:16px;" {% if rows|length == 0 %}open{% endif %}>
+  <summary style="cursor:pointer; font-weight:600; font-size:14px;">➕ Add new package</summary>
+  <form method="post" action="/settings/software-catalog/new" style="display:grid; gap:12px; margin-top:14px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px;">
+      <label>Name<input type="text" name="name" required maxlength="120" placeholder="e.g. Google Chrome"></label>
+      <label>Vendor<input type="text" name="vendor" maxlength="120" placeholder="e.g. Google"></label>
+      <label>Version<input type="text" name="version" maxlength="60" placeholder="e.g. 130.0.6723"></label>
+    </div>
+    <label>Installer URL <span class="meta">(HTTPS-reachable from endpoints)</span>
+      <input type="url" name="installer_url" required placeholder="https://dl.google.com/.../chrome.msi">
+    </label>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <label>Silent install args <span class="meta">(e.g. /quiet /norestart for MSI, /S for NSIS)</span>
+        <input type="text" name="install_args" placeholder="/quiet /norestart">
+      </label>
+      <label>Uninstall command <span class="meta">(optional; e.g. msiexec /x {ProductCode} /quiet)</span>
+        <input type="text" name="uninstall_command" placeholder="msiexec /x {GUID} /quiet">
+      </label>
+    </div>
+    <label>Notes <span class="meta">(licensing, prereqs, internal context — visible to the deploy operator)</span>
+      <textarea name="notes" rows="3" placeholder="Org-licensed for all staff. Auto-update enabled post-install."></textarea>
+    </label>
+    <label>Sort order <span class="meta">(lower = appears higher in dropdowns; 0 = alphabetical)</span>
+      <input type="number" name="sort_order" value="0" style="width:120px;">
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Add to catalog</button>
+    </div>
+  </form>
+</details>
+
+{% if rows %}
+<div style="display:flex; flex-direction:column; gap:12px;">
+  {% for p in rows %}
+  <details class="card" style="max-width:none; padding:14px 16px; {% if not p.is_active %}opacity:0.65;{% endif %}">
+    <summary style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+      <span style="display:flex; align-items:baseline; gap:8px;">
+        <strong style="font-size:14px;">{{ p.name }}</strong>
+        {% if p.version %}<span style="font-size:12.5px; color:var(--text-3);">{{ p.version }}</span>{% endif %}
+        {% if p.vendor %}<span style="font-size:11.5px; padding:1px 7px; background:var(--bg); border:1px solid var(--line); border-radius:4px; color:var(--text-3);">{{ p.vendor }}</span>{% endif %}
+        {% if not p.is_active %}<span class="status status-cancelled">inactive</span>{% endif %}
+      </span>
+      <span class="meta" style="font-size:11.5px;">Updated {{ p.updated_at | ist }}</span>
+    </summary>
+    <form method="post" action="/settings/software-catalog/{{ p.id }}/edit" style="display:grid; gap:10px; margin-top:14px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px;">
+        <label>Name<input type="text" name="name" value="{{ p.name }}" required></label>
+        <label>Vendor<input type="text" name="vendor" value="{{ p.vendor }}"></label>
+        <label>Version<input type="text" name="version" value="{{ p.version }}"></label>
+      </div>
+      <label>Installer URL<input type="url" name="installer_url" value="{{ p.installer_url }}" required></label>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <label>Install args<input type="text" name="install_args" value="{{ p.install_args }}"></label>
+        <label>Uninstall command<input type="text" name="uninstall_command" value="{{ p.uninstall_command }}"></label>
+      </div>
+      <label>Notes<textarea name="notes" rows="3">{{ p.notes }}</textarea></label>
+      <div style="display:flex; gap:14px; align-items:center;">
+        <label style="display:flex; align-items:center; gap:6px;">Sort order
+          <input type="number" name="sort_order" value="{{ p.sort_order }}" style="width:90px;">
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" name="is_active" value="1" {% if p.is_active %}checked{% endif %}>
+          Active — visible in deploy dropdown
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Save</button>
+        <button type="submit" form="del-pkg-{{ p.id }}" class="danger" style="color:var(--red);">Delete</button>
+      </div>
+    </form>
+    <form id="del-pkg-{{ p.id }}" method="post" action="/settings/software-catalog/{{ p.id }}/delete"
+          onsubmit="return confirm('Delete &quot;{{ p.name|e }}&quot; from the catalog?');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}"></form>
+  </details>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <h2>No packages in the catalog yet</h2>
+  <p>Add your first one above. Common starting set: Chrome, Acrobat Reader, the VPN client, your LOB app.</p>
+</div>
+{% endif %}
+{% endblock %}

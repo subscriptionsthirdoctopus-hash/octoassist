@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}New {{ "Issue" if ticket_kind == "incident" else "Service Request" }} — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{% if ticket_kind == "incident" %}Report an Issue{% else %}Request Service{% endif %}</h1>
+  <p class="meta">{% if ticket_kind == "incident" %}Tell us what's broken or behaving unexpectedly. Attach a screenshot if it helps.{% else %}Tell us what you need. Attach a screenshot or document if it helps.{% endif %}</p>
+</section>
+
+<style>
+  .cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-top:6px; }
+  .cat-card { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:14px 8px;
+              border:1px solid var(--line,#e2e8f0); border-radius:8px; cursor:pointer; background:var(--surface);
+              transition: border-color .12s, transform .12s, box-shadow .12s; text-align:center; }
+  .cat-card:hover { transform: translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,.06); }
+  .cat-card .icon { font-size:26px; line-height:1; margin-bottom:6px; }
+  .cat-card .name { font-size:12.5px; font-weight:600; }
+  .cat-card .sub  { font-size:10.5px; color:var(--slate,#64748b); margin-top:3px; }
+  .cat-card input { position:absolute; opacity:0; pointer-events:none; }
+  .cat-card.selected { border-color: var(--accent,#2563eb); box-shadow:0 0 0 2px rgba(37,99,235,.12); }
+  .attach-zone { border:2px dashed var(--line,#e2e8f0); border-radius:8px; padding:14px; text-align:center;
+                 color:var(--slate,#64748b); font-size:13px; }
+  .attach-zone input { display:block; margin:6px auto 0; }
+  .attach-list { margin-top:8px; font-size:12px; color:#334155; }
+</style>
+
+<form method="post" action="/portal/new" class="card form" enctype="multipart/form-data" id="ticketForm">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <label>Subject
+    <input type="text" name="title" required maxlength="255" placeholder="One-line summary" autofocus>
+  </label>
+
+  <label>Category</label>
+  {% if categories %}
+  <div class="cat-grid" id="catGrid">
+    {% for c in categories %}
+    <label class="cat-card" data-cat-id="{{ c.id }}">
+      <input type="radio" name="category_id" value="{{ c.id }}" required {% if loop.first %}checked{% endif %}>
+      <span class="icon">{{ icon_for(c) }}</span>
+      <span class="name">{{ c.name }}</span>
+      {% if c.requires_approval %}<span class="sub">approval required</span>{% endif %}
+    </label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="meta" style="color:#dc2626;">No categories available. Ask an admin to add some under Settings → SLA.</p>
+  {% endif %}
+
+  {% if kb_hints %}
+  <div id="kbHintBox" style="display:none;background:#f0f9ff;border-left:4px solid #0284c7;padding:12px 14px;border-radius:6px;margin-top:4px;">
+    <p style="margin:0 0 6px;font-size:12.5px;font-weight:700;color:#075985;">💡 Might solve your issue without a ticket</p>
+    <ul id="kbHintList" style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;"></ul>
+  </div>
+  <script id="kbHintData" type="application/json">{{ kb_hints | tojson }}</script>
+  {% endif %}
+
+  <label>Details
+    <textarea name="description" rows="6" placeholder="The more context you give us, the faster we can help."></textarea>
+  </label>
+
+  <label>Attachments <span class="meta" style="font-weight:normal;">(optional — screenshots, logs, docs · <strong>max 2 MB per file</strong>)</span>
+    <div class="attach-zone">
+      Drop files here or
+      <input type="file" name="attachments" multiple data-max-bytes="2097152">
+      <div class="attach-list" id="attachList"></div>
+      <div id="attachErr" style="color:#dc2626;font-size:12px;margin-top:6px;display:none;"></div>
+    </div>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Submit</button>
+    <a href="/portal" class="link-button">Cancel</a>
+  </div>
+</form>
+
+<script>
+(function(){
+  // Category card selection visual + KB hints
+  var grid = document.getElementById("catGrid");
+  var hintBox = document.getElementById("kbHintBox");
+  var hintList = document.getElementById("kbHintList");
+  var hintDataEl = document.getElementById("kbHintData");
+  var kbHints = {};
+  if (hintDataEl) {
+    try { kbHints = JSON.parse(hintDataEl.textContent || "{}"); } catch(e){}
+  }
+  function paintHints(catId){
+    if (!hintBox || !hintList) return;
+    var arts = kbHints[catId];
+    if (!arts || !arts.length) { hintBox.style.display = "none"; return; }
+    var html = "";
+    for (var i=0; i<arts.length; i++) {
+      var a = arts[i];
+      var safeTitle = (a.title||"").replace(/[&<>"]/g, function(c){
+        return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c];
+      });
+      var safeSummary = (a.summary||"").replace(/[&<>"]/g, function(c){
+        return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c];
+      });
+      html += '<li><a href="/portal/kb/' + encodeURIComponent(a.slug) +
+              '" target="_blank" style="color:#0369a1;">' + safeTitle + '</a>' +
+              (safeSummary ? ' <span style="color:#64748b;">— ' + safeSummary + '</span>' : '') + '</li>';
+    }
+    hintList.innerHTML = html;
+    hintBox.style.display = "block";
+  }
+  if (grid) {
+    function paint(){
+      var activeId = null;
+      grid.querySelectorAll(".cat-card").forEach(function(card){
+        var input = card.querySelector("input[type=radio]");
+        if (input && input.checked) {
+          card.classList.add("selected");
+          activeId = input.value;
+        } else {
+          card.classList.remove("selected");
+        }
+      });
+      if (activeId) paintHints(activeId);
+    }
+    grid.addEventListener("change", paint);
+    paint();
+  }
+  // Show selected filenames + enforce 2 MB per file client-side
+  var fileInput = document.querySelector("input[type=file][name=attachments]");
+  var list = document.getElementById("attachList");
+  var errBox = document.getElementById("attachErr");
+  var form = document.getElementById("ticketForm");
+  var MAX = fileInput ? parseInt(fileInput.dataset.maxBytes || "2097152", 10) : 2097152;
+  function checkFiles() {
+    if (!fileInput || !fileInput.files.length) {
+      if (list) list.textContent = "";
+      if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
+      return true;
+    }
+    var names = [], tooBig = [];
+    for (var i=0; i<fileInput.files.length; i++) {
+      var f = fileInput.files[i];
+      names.push(f.name + " (" + (f.size/1024).toFixed(1) + " KB)");
+      if (f.size > MAX) tooBig.push(f.name);
+    }
+    if (list) list.textContent = names.join(" · ");
+    if (tooBig.length) {
+      if (errBox) {
+        errBox.style.display = "block";
+        errBox.textContent = "Too large (max 2 MB): " + tooBig.join(", ");
+      }
+      return false;
+    }
+    if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
+    return true;
+  }
+  if (fileInput) fileInput.addEventListener("change", checkFiles);
+  if (form) form.addEventListener("submit", function(e){
+    if (!checkFiles()) { e.preventDefault(); }
+  });
+})();
+</script>
+{% endblock %}

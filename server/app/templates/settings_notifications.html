@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
+  <h1>📧 Notifications</h1>
+  <p class="meta">Mail provider, notification email, and outbound configuration.</p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+
+<div class="card">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Mail provider</h3>
+  <p class="meta" style="margin:0 0 12px;">
+    Microsoft Graph is preferred for M365 tenants — it doesn't need SMTP AUTH (which is blocked by default in modern M365).
+  </p>
+  <form method="post" action="/settings/tenant/mail-provider" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label class="checkbox">
+      <input type="radio" name="mail_provider" value="smtp" {% if (tenant.mail_provider or 'smtp') == 'smtp' %}checked{% endif %}>
+      <strong>SMTP</strong>
+      <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">Classic outbound SMTP.</span>
+    </label>
+    <label class="checkbox">
+      <input type="radio" name="mail_provider" value="graph" {% if (tenant.mail_provider or 'smtp') == 'graph' %}checked{% endif %}>
+      <strong>Microsoft Graph</strong>
+      <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">App-registration based. No SMTP AUTH.</span>
+    </label>
+    <button type="submit" class="button">Save provider</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Notification email</h3>
+  <form method="post" action="/settings/tenant/notification-email" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <input type="email" name="notification_email" value="{{ tenant.notification_email or '' }}"
+           placeholder="alerts@example.com"
+           style="flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    <button type="submit" class="button primary">Save</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">SMTP — outbound email</h3>
+  <form method="post" action="/settings/tenant/smtp" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:760px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label>Host
+      <input type="text" name="smtp_host" value="{{ tenant.smtp_host or 'smtp.office365.com' }}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label>Port
+      <input type="number" name="smtp_port" value="{{ tenant.smtp_port or 587 }}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label>Username
+      <input type="text" name="smtp_username" value="{{ tenant.smtp_username or '' }}" autocomplete="off"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label>Password <span class="meta" style="font-weight:normal;">(blank to keep existing)</span>
+      <input type="password" name="smtp_password" value="" autocomplete="new-password"
+             placeholder="{% if tenant.smtp_password %}•••••• stored{% else %}paste app password{% endif %}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label style="grid-column:1/-1;">From address
+      <input type="email" name="smtp_from" value="{{ tenant.smtp_from or '' }}"
+             placeholder="OctoAssist Alerts &lt;noreply@example.com&gt;"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label class="checkbox" style="grid-column:1/-1;">
+      <input type="checkbox" name="smtp_use_tls" value="1" {% if tenant.smtp_use_tls or tenant.smtp_use_tls is none %}checked{% endif %}>
+      Use STARTTLS
+    </label>
+    <div class="form-actions" style="grid-column:1/-1;">
+      <button type="submit" class="button primary">Save SMTP settings</button>
+    </div>
+  </form>
+  <form method="post" action="/settings/tenant/smtp/test" style="margin-top:12px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <button type="submit" class="button">Send test email</button>
+  </form>
+  {% if tenant.smtp_last_test_at %}
+  <div style="margin-top:14px;padding:10px 12px;border-radius:4px;border:1px solid var(--line);background:var(--surface-2);font-size:13px;">
+    <strong>Last test:</strong>
+    {% if tenant.smtp_last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
+    <span class="meta">at {{ tenant.smtp_last_test_at | ist }}</span>
+    {% if tenant.smtp_last_test_message %}<pre class="code" style="margin-top:8px;font-size:11.5px;">{{ tenant.smtp_last_test_message }}</pre>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Microsoft Graph — outbound email</h3>
+  <form method="post" action="/settings/tenant/graph" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:760px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label>Directory (tenant) ID
+      <input type="text" name="graph_tenant_id" value="{{ tenant.graph_tenant_id or '' }}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label>Application (client) ID
+      <input type="text" name="graph_client_id" value="{{ tenant.graph_client_id or '' }}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label style="grid-column:1/-1;">Client secret <span class="meta" style="font-weight:normal;">(blank to keep existing)</span>
+      <input type="password" name="graph_client_secret" value="" autocomplete="new-password"
+             placeholder="{% if tenant.graph_client_secret %}•••••• stored{% else %}paste Value{% endif %}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <label style="grid-column:1/-1;">From mailbox
+      <input type="email" name="graph_from" value="{{ tenant.graph_from or '' }}"
+             style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:14px;">
+    </label>
+    <div class="form-actions" style="grid-column:1/-1;">
+      <button type="submit" class="button primary">Save Graph settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ idp.display_name }} — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{{ idp.display_name }}</h1>
+  <p class="meta">
+    <a href="/settings">← Back to Settings</a>
+    · Type: {{ idp.kind.value }}
+    · Status: {% if idp.is_enabled %}<span class="status status-resolved">enabled</span>{% else %}<span class="status status-on_hold">disabled</span>{% endif %}
+  </p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+{# ------------------------------------------------------------------
+   HTTP / non-localhost gating — explain the AADSTS50011 case loudly
+   ------------------------------------------------------------------ #}
+{% if not is_https %}
+<div class="alert error">
+  <strong>Heads up — Azure rejects HTTP redirect URIs except <code>http://localhost</code>.</strong>
+  This server is currently on plain HTTP at a public IP. If you try to sign in with this IdP you will see
+  <code>AADSTS50011: The redirect URI ... does not match the redirect URIs configured for the application</code>
+  even after pasting the URI into the Azure portal. To use Microsoft sign-in in production, either:
+  <ol style="margin:8px 0 0 24px;">
+    <li>Deploy OctoAssist on a public hostname with HTTPS (Let's Encrypt subdomain — recommended), <strong>or</strong></li>
+    <li>For local development only, run OctoAssist on <code>http://localhost:&lt;port&gt;</code> and use that exact URI.</li>
+  </ol>
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------------
+   Copy block — the single most important thing on this page
+   ------------------------------------------------------------------ #}
+<section class="card" style="border-left:4px solid var(--accent,#2563eb);background:#eff6ff;">
+  <h3 style="margin:0 0 8px;">Paste this into Azure portal</h3>
+  <p class="meta" style="margin:0 0 12px;">
+    Azure portal → <strong>Entra ID → App registrations → {{ idp.display_name }} → Authentication →
+    Add a platform → Web → Redirect URI</strong>. After saving in Azure, click <strong>Grant admin consent</strong>
+    on the API permissions page if not already done.
+  </p>
+  <div style="display:grid;grid-template-columns:140px 1fr auto;gap:10px;align-items:center;">
+    <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Redirect URI</strong>
+    <code id="redir-uri" style="background:var(--surface);border:1px solid var(--line);padding:8px 10px;border-radius:4px;font-size:13px;word-break:break-all;">{{ redirect_uri }}</code>
+    <button type="button" class="button" onclick="copyRedirectUri()">Copy</button>
+
+    <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Sign-out URL</strong>
+    <code style="background:var(--surface);border:1px solid var(--line);padding:8px 10px;border-radius:4px;font-size:13px;word-break:break-all;">{{ redirect_uri.rsplit('/auth/', 1)[0] }}/login</code>
+    <span></span>
+
+    <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Token types</strong>
+    <span class="meta" style="font-size:12.5px;">ID tokens (used by hybrid flow / authorization code)</span>
+    <span></span>
+
+    <strong style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">API perms</strong>
+    <span class="meta" style="font-size:12.5px;">Microsoft Graph → Delegated → <code>openid</code>, <code>profile</code>, <code>email</code>, <code>User.Read</code> — Grant admin consent</span>
+    <span></span>
+  </div>
+</section>
+
+{% if idp.last_test_at %}
+<section class="card" style="margin-top:14px;">
+  <h3 style="margin:0 0 6px;font-size:14px;">Last test</h3>
+  <p style="margin:0;">
+    {% if idp.last_test_ok %}<span class="status status-resolved">OK</span>{% else %}<span class="status status-cancelled">FAIL</span>{% endif %}
+    at {{ idp.last_test_at | ist }}
+  </p>
+  {% if idp.last_test_message %}<pre class="code" style="margin-top:8px;font-size:11.5px;">{{ idp.last_test_message }}</pre>{% endif %}
+</section>
+{% endif %}
+
+<form method="post" action="/settings/idp/{{ idp.id }}/save" class="card form" autocomplete="off" style="margin-top:18px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <h3>Provider configuration</h3>
+
+  <label>Display name <span class="meta">(text shown on the login button — e.g. "Sign in with Microsoft")</span>
+    <input type="text" name="display_name" value="{{ idp.display_name }}" required>
+  </label>
+
+  <label>Entra Tenant ID
+    <span class="meta">
+      GUID like <code>00000000-0000-0000-0000-000000000000</code>,
+      domain like <code>contoso.onmicrosoft.com</code>,
+      or <code>organizations</code> for multi-tenant (any Microsoft work account)
+    </span>
+    <input type="text" name="entra_tenant_id" value="{{ idp.config.get('entra_tenant_id', '') }}" required
+           placeholder="organizations">
+  </label>
+
+  <label>Application (client) ID
+    <input type="text" name="client_id" value="{{ idp.config.get('client_id', '') }}" required>
+  </label>
+
+  <label>Client secret <span class="meta">(leave blank to keep the current secret)</span>
+    <input type="password" name="client_secret" value="" autocomplete="new-password"
+           placeholder="{% if idp.config.get('client_secret') %}•••• already stored — paste new secret to rotate{% else %}paste secret value here{% endif %}">
+  </label>
+
+  <label>Allowed email domains <span class="meta">(comma-separated, blank = allow all)</span>
+    <input type="text" name="allowed_email_domains" value="{{ idp.config.get('allowed_email_domains', '') }}"
+           placeholder="contoso.com, example.com">
+  </label>
+
+  <h3>Provisioning</h3>
+
+  <label class="checkbox">
+    <input type="checkbox" name="auto_provision" value="1" {% if idp.auto_provision %}checked{% endif %}>
+    Auto-create OctoAssist users on first sign-in
+  </label>
+
+  <label>Default role for auto-provisioned users
+    <select name="default_role">
+      {% for r in roles %}
+      <option value="{{ r }}" {% if idp.default_role.value == r %}selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <h3>Activation</h3>
+
+  <label class="checkbox">
+    <input type="checkbox" name="is_enabled" value="1" {% if idp.is_enabled %}checked{% endif %}>
+    Enable — show <strong>"Sign in with {{ idp.display_name }}"</strong> button on the login page
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Save</button>
+    <a href="/settings" class="link-button">Cancel</a>
+  </div>
+</form>
+
+<form method="post" action="/settings/idp/{{ idp.id }}/test" class="inline-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <button type="submit">Test connection</button>
+</form>
+
+<form method="post" action="/settings/idp/{{ idp.id }}/delete" class="inline-form" onsubmit="return confirm('Delete this provider? Users will lose SSO access.');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <button type="submit" class="link-button" style="color: var(--red);">Delete provider</button>
+</form>
+
+<script>
+function copyRedirectUri() {
+  const el = document.getElementById('redir-uri');
+  const text = el.innerText.trim();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = event.target;
+      const orig = btn.innerText;
+      btn.innerText = 'Copied!';
+      setTimeout(() => { btn.innerText = orig; }, 1200);
+    });
+  } else {
+    const range = document.createRange();
+    range.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  }
+}
+</script>
+{% endblock %}

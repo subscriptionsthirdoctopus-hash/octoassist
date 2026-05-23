@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Problems — OctoAssist{% endblock %}
+{% block content %}
+
+<style>
+  .kpi-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px; }
+  .kpi-tile {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 12px 14px; box-shadow: var(--shadow-1); display:flex; flex-direction:column; gap:2px;
+    text-decoration:none; color:inherit; transition: border-color .12s, box-shadow .12s;
+  }
+  .kpi-tile:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); text-decoration:none; }
+  .kpi-tile .kpi-label { font-size:11px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.6px; }
+  .kpi-tile .kpi-val { font-size:22px; font-weight:700; color:var(--text-1); line-height:1.1; letter-spacing:-0.01em; }
+  .kpi-tile.investigating { border-left:3px solid var(--accent); }
+  .kpi-tile.workaround    { border-left:3px solid var(--amber); }
+  .kpi-tile.known         { border-left:3px solid #7c3aed; }
+  .kpi-tile.resolved      { border-left:3px solid var(--green); }
+  .kpi-tile.total         { border-left:3px solid var(--text-3); }
+
+  .p-title { display:flex; flex-direction:column; gap:2px; min-width:240px; }
+  .p-title .p-link { color:var(--text-1); font-weight:600; font-size:13.5px; text-decoration:none; }
+  .p-title .p-link:hover { color:var(--accent); text-decoration:underline; }
+  .p-title .p-sub  { font-size:11.5px; color:var(--text-3); }
+
+  .linked-count { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--bg); border:1px solid var(--line); border-radius:999px; font-size:11.5px; font-weight:600; color:var(--text-2); }
+  .linked-count.zero { color:var(--text-4); }
+
+  /* Problem status colors — orthogonal from ticket status */
+  .pstatus { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid transparent; text-transform:capitalize; letter-spacing:.2px; }
+  .pstatus::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
+  .pstatus.s-investigating  { background:#dbeafe; color:#1e40af; border-color:#bfdbfe; }
+  .pstatus.s-workaround_in_place { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+  .pstatus.s-known_error    { background:#ede9fe; color:#5b21b6; border-color:#ddd6fe; }
+  .pstatus.s-resolved       { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+  .pstatus.s-closed         { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+
+  .filters .search-wrap { position:relative; flex:1; min-width:240px; max-width:380px; }
+  .filters .search-wrap input { padding-left:34px; }
+  .filters .search-wrap::before { content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none; }
+</style>
+
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Problems</h1>
+      <p class="meta">Root-cause analysis for recurring incidents · {{ rows|length }} shown{% if q or filter_status %} · filtered from {{ kpi.total }}{% else %} · {{ kpi.total }} total{% endif %}</p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/problems/new">+ New problem</a>
+    </div>
+  </div>
+</section>
+
+<div class="kpi-strip">
+  <a class="kpi-tile investigating" href="/problems?status=investigating">
+    <span class="kpi-label">Investigating</span>
+    <span class="kpi-val">{{ kpi.investigating }}</span>
+  </a>
+  <a class="kpi-tile workaround" href="/problems?status=workaround_in_place">
+    <span class="kpi-label">Workaround</span>
+    <span class="kpi-val">{{ kpi.workaround_in_place }}</span>
+  </a>
+  <a class="kpi-tile known" href="/problems?status=known_error">
+    <span class="kpi-label">Known error</span>
+    <span class="kpi-val">{{ kpi.known_error }}</span>
+  </a>
+  <a class="kpi-tile resolved" href="/problems?status=resolved">
+    <span class="kpi-label">Resolved</span>
+    <span class="kpi-val">{{ kpi.resolved }}</span>
+  </a>
+  <a class="kpi-tile total" href="/problems">
+    <span class="kpi-label">All</span>
+    <span class="kpi-val">{{ kpi.total }}</span>
+  </a>
+</div>
+
+<form method="get" action="/problems" class="filters">
+  <div class="search-wrap">
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="Search title, description, problem #" autocomplete="off">
+  </div>
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s.replace("_"," ") | capitalize }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="primary">Apply</button>
+  {% if q or filter_status %}<a href="/problems" class="link-button">Clear</a>{% endif %}
+</form>
+
+{% if rows %}
+<table class="data">
+  <thead>
+    <tr>
+      <th style="width:90px;">Problem</th>
+      <th>Title</th>
+      <th style="width:140px;">Status</th>
+      <th style="width:90px;">Priority</th>
+      <th style="width:110px;">Linked</th>
+      <th style="width:160px;">Assignee</th>
+      <th style="width:110px;">Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in rows %}
+    <tr>
+      <td><a href="/problems/{{ p.id }}" style="font-family:var(--font-mono); font-size:12.5px; color:var(--text-2);">{{ p.problem_number }}</a></td>
+      <td>
+        <div class="p-title">
+          <a class="p-link" href="/problems/{{ p.id }}">{{ p.title }}</a>
+          {% if p.description %}<span class="p-sub">{{ p.description[:90] }}{% if p.description|length > 90 %}…{% endif %}</span>{% endif %}
+        </div>
+      </td>
+      <td><span class="pstatus s-{{ p.status.value }}">{{ p.status.value.replace("_"," ") }}</span></td>
+      <td><span class="prio prio-{{ p.priority.value }}">{{ p.priority.value }}</span></td>
+      <td>
+        <span class="linked-count {% if p.linked_tickets|length == 0 %}zero{% endif %}">
+          🔗 {{ p.linked_tickets|length }} ticket{{ "" if p.linked_tickets|length == 1 else "s" }}
+        </span>
+      </td>
+      <td>
+        {% if p.assignee %}
+        <span style="color:var(--text-1); font-weight:500;">{{ p.assignee.display_name }}</span>
+        {% else %}<span style="color:var(--text-4); font-style:italic;">Unassigned</span>{% endif %}
+      </td>
+      <td style="color:var(--text-3); font-size:12.5px;">{{ p.created_at | istdate }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No problems match</h2>
+  <p>Open a problem when you spot a pattern across multiple incidents — supports root-cause investigation and Known-Error tracking.</p>
+</div>
+{% endif %}
+{% endblock %}

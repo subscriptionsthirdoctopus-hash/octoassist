@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Locations & Routing — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Locations &amp; Routing</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ rules|length }} rule{{ "" if rules|length == 1 else "s" }} configured</p>
+  </div>
+</section>
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin-top:0;">How this works</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">When a new ticket is created, OctoAssist stamps it with a <strong>location</strong> derived from the reporter's primary laptop (or their Entra office). If that location matches one of the rules below, the ticket is automatically assigned to the named technician.</p>
+</section>
+<div class="card form" style="max-width:none;">
+  <h3 style="margin-top:0;">Add routing rule</h3>
+  <form method="post" action="/settings/locations/new" class="row-form" style="align-items:end;gap:12px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label style="flex:1;">Location
+      <input type="text" name="location" required list="known-locations" placeholder="e.g. Mumbai">
+      <datalist id="known-locations">{% for loc in known_locations %}<option value="{{ loc }}">{% endfor %}</datalist>
+    </label>
+    <label style="flex:2;">Default assignee
+      <select name="default_assignee_id" required>
+        <option value="">— pick a technician —</option>
+        {% for s in staff %}<option value="{{ s.id }}">{{ s.display_name }} ({{ s.role.value }}){% if s.location %} · {{ s.location }}{% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Add rule</button>
+  </form>
+</div>
+{% if rules %}
+<table class="data" style="margin-top:16px;">
+<thead><tr><th>Location</th><th>Auto-assigns to</th><th>Role</th><th>Created</th><th></th></tr></thead>
+<tbody>{% for r in rules %}
+<tr><td><strong>{{ r.location }}</strong></td><td>{{ r.default_assignee.display_name if r.default_assignee else "—" }}</td><td>{% if r.default_assignee %}<span class="role-pill role-{{ r.default_assignee.role.value }}">{{ r.default_assignee.role.value }}</span>{% endif %}</td><td>{{ r.created_at | ist }}</td><td><form method="post" action="/settings/locations/{{ r.id }}/delete" class="inline-form" onsubmit="return confirm('Delete rule for {{ r.location|e }}?');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}"><button type="submit" class="link-button" style="color:#dc2626;">delete</button></form></td></tr>
+{% endfor %}</tbody>
+</table>
+{% else %}<div class="empty" style="margin-top:16px;"><h2>No routing rules yet</h2><p>Add a rule above.</p></div>{% endif %}
+{% endblock %}

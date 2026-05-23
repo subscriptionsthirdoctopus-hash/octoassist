@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}SLA Matrix — Settings — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
+  <h1>Categories &amp; SLA Matrix</h1>
+  <p class="meta">
+    Add new categories, set per-category response &amp; resolution targets in minutes.
+    Tickets created under a category inherit these defaults. SLA breach detection
+    uses the current values, so changes apply prospectively.
+  </p>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+
+<details class="card" style="max-width:none; margin-bottom:18px;" {% if categories|length == 0 %}open{% endif %}>
+  <summary style="cursor:pointer; font-weight:600; font-size:14px;">➕ Add new category</summary>
+  <form method="post" action="/settings/sla/new" style="display:grid; gap:12px; margin-top:14px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px;">
+      <label>Name <span class="meta">(e.g. 'Network', 'Laptop hardware')</span>
+        <input type="text" name="name" required maxlength="120" placeholder="e.g. Network">
+      </label>
+      <label>Kind
+        <select name="kind">
+          {% for k in kinds %}<option value="{{ k }}">{{ k.replace("_"," ") }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Default priority
+        <select name="default_priority">
+          {% for p in priorities %}<option value="{{ p }}" {% if p == "medium" %}selected{% endif %}>{{ p }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; align-items:end;">
+      <label>Response SLA <span class="meta">(minutes)</span>
+        <input type="number" name="sla_response_minutes" value="240" min="1" max="100000">
+      </label>
+      <label>Resolution SLA <span class="meta">(minutes)</span>
+        <input type="number" name="sla_resolution_minutes" value="1440" min="1" max="200000">
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="requires_approval" value="1">
+        Requires manager approval
+      </label>
+    </div>
+    <label>Description <span class="meta">(optional, shown to requesters in the portal)</span>
+      <input type="text" name="description" maxlength="200" placeholder="e.g. WiFi, VPN, switch / router issues">
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Add category</button>
+    </div>
+  </form>
+</details>
+
+<form method="post" action="/settings/sla">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table class="data" style="margin:0;">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Kind</th>
+          <th>Default priority</th>
+          <th>Response (min)</th>
+          <th>Resolution (min)</th>
+          <th>Needs approval</th>
+          <th>Active</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set current_kind = none %}
+        {% for c in categories %}
+        {% if c.kind.value != current_kind %}
+          {% set current_kind = c.kind.value %}
+          <tr style="background:var(--surface-2);">
+            <td colspan="8" style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--slate);padding:8px 12px;">
+              {{ c.kind.value.replace("_", " ") }}
+            </td>
+          </tr>
+        {% endif %}
+        <tr>
+          <td>
+            <strong>{{ c.name }}</strong>
+            {% if c.description %}
+            <p class="meta" style="margin:2px 0 0;font-size:12px;">{{ c.description }}</p>
+            {% endif %}
+          </td>
+          <td>{{ c.kind.value.replace("_", " ") }}</td>
+          <td>
+            <select name="cat_{{ c.id }}_priority" style="width:120px;">
+              {% for p in priorities %}
+              <option value="{{ p }}" {% if c.default_priority.value == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td>
+            <input type="number" name="cat_{{ c.id }}_response_min"
+                   value="{{ c.sla_response_minutes }}" min="1" max="100000"
+                   style="width:90px;text-align:right;">
+            <span class="meta" style="font-size:11px;color:var(--slate);">
+              = {{ "%.1f"|format(c.sla_response_minutes / 60) }} h
+            </span>
+          </td>
+          <td>
+            <input type="number" name="cat_{{ c.id }}_resolution_min"
+                   value="{{ c.sla_resolution_minutes }}" min="1" max="200000"
+                   style="width:100px;text-align:right;">
+            <span class="meta" style="font-size:11px;color:var(--slate);">
+              = {{ "%.1f"|format(c.sla_resolution_minutes / 60) }} h
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <input type="checkbox" name="cat_{{ c.id }}_requires_approval" value="1"
+                   {% if c.requires_approval %}checked{% endif %}>
+          </td>
+          <td style="text-align:center;">
+            <input type="checkbox" name="cat_{{ c.id }}_is_active" value="1"
+                   {% if c.is_active %}checked{% endif %}>
+          </td>
+          <td style="text-align:right;">
+            <button type="submit" form="cat-del-{{ c.id }}" class="link-button"
+                    style="color:var(--red); font-size:11.5px;">delete</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="form-actions" style="margin-top:16px;">
+    <button type="submit" class="primary">Save SLA matrix</button>
+    <a href="/settings" class="link-button">Cancel</a>
+  </div>
+</form>
+
+{# Per-row delete forms — declared outside the main edit form so submitting
+   one doesn't carry the whole SLA-matrix payload. Wired to the table
+   delete buttons via form="cat-del-{id}". #}
+{% for c in categories %}
+<form id="cat-del-{{ c.id }}" method="post" action="/settings/sla/{{ c.id }}/delete"
+      onsubmit="return confirm('Delete category &quot;{{ c.name|e }}&quot;?\n\nIf it has tickets, the delete will be refused (deactivate it instead by unticking Active + Save).');"
+      style="display:none;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}"></form>
+{% endfor %}
+
+<section class="card" style="margin-top:24px;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Common SLA presets (reference)</h3>
+  <table class="data" style="max-width:760px;margin:0;">
+    <thead><tr><th>Priority</th><th>Response</th><th>Resolution</th><th>Typical use</th></tr></thead>
+    <tbody>
+      <tr><td><span class="prio prio-critical">critical</span></td><td>15–30 min</td><td>2–4 h</td><td>Outage, security incident, plant-floor down</td></tr>
+      <tr><td><span class="prio prio-high">high</span></td><td>1 h</td><td>4–8 h</td><td>VIP user, network, email, access</td></tr>
+      <tr><td><span class="prio prio-medium">medium</span></td><td>4 h</td><td>24 h</td><td>Standard hardware / software issues</td></tr>
+      <tr><td><span class="prio prio-low">low</span></td><td>8 h</td><td>2–3 business days</td><td>Cosmetic, low impact, single-user requests</td></tr>
+    </tbody>
+  </table>
+  <p class="meta" style="margin:12px 0 0;font-size:12px;">
+    Indian-business-hours reference: 1 day ≈ 540 min (9 h), 1 week ≈ 2700 min (45 h).
+  </p>
+</section>
+{% endblock %}

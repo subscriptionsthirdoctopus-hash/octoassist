@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Install Agent — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Install the OctoAssist agent on a Windows endpoint</h1>
+  <p class="meta">One PowerShell line. Installs Python (if missing), the agent script, a Scheduled Task running as SYSTEM, and runs the first check-in.</p>
+</section>
+
+<div class="card">
+  <h3 style="margin-top:0;">Step 1 &mdash; Open an elevated PowerShell on the endpoint</h3>
+  <p>Start menu &rarr; right-click <strong>Windows PowerShell</strong> &rarr; <strong>Run as administrator</strong>.</p>
+
+  <h3>Step 2 &mdash; Paste this one line</h3>
+  <pre class="code" style="white-space:pre-wrap;word-break:break-all;">iex (iwr -useb {{ server_url }}/agent/install.ps1).Content</pre>
+  <p class="meta" style="margin-top:6px;font-size:12.5px;">
+    The script auto-detects Python, installs it via <code>winget</code> if missing, downloads
+    <code>octoassist_agent.py</code> to <code>C:\Program Files\OctoAssist Agent\</code>, writes
+    config to <code>C:\ProgramData\OctoAssist\agent.json</code>, registers the
+    <strong>OctoAssist Agent</strong> Scheduled Task running as <code>NT AUTHORITY\SYSTEM</code>,
+    and runs the first check-in. The endpoint appears in <a href="/assets">/assets</a> within a minute.
+  </p>
+
+  <h3>Step 3 &mdash; Verify</h3>
+  <ul>
+    <li>Open <a href="/assets">/assets</a> &mdash; new hostname appears.</li>
+    <li>Open <a href="/patches">/patches</a> &mdash; the endpoint's missing patches start surfacing on the next check-in (every 6 hours, or run <code>--once</code> manually).</li>
+  </ul>
+</div>
+
+<div class="card" style="margin-top:18px;">
+  <h3 style="margin-top:0;">Tenant details</h3>
+  <dl style="margin:0;">
+    <dt>Tenant</dt><dd>{{ tenant.name }}</dd>
+    <dt>Server URL</dt><dd><code>{{ server_url }}</code></dd>
+    <dt>Enrolment key</dt>
+    <dd>
+      <code style="font-family:ui-monospace,monospace;">{{ tenant.enrolment_key }}</code>
+      <span class="meta" style="display:block;font-size:12px;margin-top:4px;">
+        Shared across all endpoints; baked into the install one-liner above automatically.
+        Rotate from <a href="/settings">/settings</a> if it ever leaks.
+      </span>
+    </dd>
+  </dl>
+</div>
+
+<div class="card" style="margin-top:18px;">
+  <h3 style="margin-top:0;">What the agent reports</h3>
+  <ul>
+    <li><strong>Hardware</strong> &mdash; CPU, RAM, disks, BIOS, manufacturer, model</li>
+    <li><strong>OS</strong> &mdash; Windows edition, build, install date</li>
+    <li><strong>Software inventory</strong> &mdash; installed apps from <code>HKLM\...\Uninstall</code> (Win32 + WOW6432)</li>
+    <li><strong>Available updates</strong> &mdash; from <code>winget upgrade</code> (vendor-aware: Google, Adobe, Microsoft, Mozilla, etc.) and <code>PSWindowsUpdate</code> KBs</li>
+    <li><strong>Logged-in user, network interfaces</strong></li>
+  </ul>
+  <p class="meta" style="margin:0;font-size:12px;">
+    Inventory + patches refresh every 6 hours. When a patch window is scheduled with
+    auto-execute and the matching packages are approved, the agent pulls and installs
+    them via <code>winget upgrade --silent</code> / <code>Install-WindowsUpdate</code>.
+  </p>
+</div>
+
+<div class="card" style="margin-top:18px;">
+  <h3 style="margin-top:0;">Uninstall on the endpoint</h3>
+  <pre class="code">Unregister-ScheduledTask -TaskName "OctoAssist Agent" -Confirm:$false
+Remove-Item -Recurse -Force "C:\Program Files\OctoAssist Agent","C:\ProgramData\OctoAssist"</pre>
+</div>
+{% endblock %}

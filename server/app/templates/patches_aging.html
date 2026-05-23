@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Patch aging — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Patch aging</h1>
+      <p class="meta">How long patches have been outstanding · audit-grade evidence for ISO 27001 / SEBI CSCRF</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="/patches">← Fleet view</a>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-grid">
+  {% set b = aging.buckets %}
+  <div class="kpi-card">
+    <p class="kpi-label">0 – 7 days</p>
+    <p class="kpi-value">{{ b['0-7d'].total }}</p>
+    <p class="kpi-sub">{{ b['0-7d'].critical }} critical · {{ b['0-7d'].important }} important</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">8 – 30 days</p>
+    <p class="kpi-value" style="color:var(--amber);">{{ b['8-30d'].total }}</p>
+    <p class="kpi-sub">{{ b['8-30d'].critical }} critical · {{ b['8-30d'].important }} important</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">31 – 90 days</p>
+    <p class="kpi-value" style="color:var(--amber);">{{ b['31-90d'].total }}</p>
+    <p class="kpi-sub">{{ b['31-90d'].critical }} critical · {{ b['31-90d'].important }} important</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">&gt; 90 days</p>
+    <p class="kpi-value" style="color:var(--red);">{{ b['>90d'].total }}</p>
+    <p class="kpi-sub">{{ b['>90d'].critical }} critical · {{ b['>90d'].important }} important · audit risk</p>
+  </div>
+</section>
+
+<section class="report-row">
+  <div class="report-card">
+    <h3>All unresolved patches by age</h3>
+    {{ chart_age|safe }}
+  </div>
+</section>
+
+{% if aging.oldest_critical %}
+<section>
+  <h2>Oldest unresolved CRITICAL patches</h2>
+  <p class="meta">Top 25 by age. Each row is direct evidence in an ISO 27001 / SEBI CSCRF audit.</p>
+  <table class="data">
+    <thead><tr><th>Hostname</th><th>Package</th><th>Available</th><th>First seen</th><th>Age</th></tr></thead>
+    <tbody>
+      {% for r in aging.oldest_critical %}
+      <tr>
+        <td><a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a></td>
+        <td>{{ r.package }}</td>
+        <td>{{ r.version or "—" }}</td>
+        <td>{{ r.first_seen | ist }}</td>
+        <td><span class="{% if r.age_days > 90 %}breach{% endif %}"><strong>{{ r.age_days }}d</strong></span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section>
+  <h2>Recently resolved (last 30 days)</h2>
+  {% if recently_resolved %}
+  <table class="data">
+    <thead><tr><th>Hostname</th><th>Package</th><th>Severity</th><th>First seen</th><th>Resolved</th><th>Time-to-patch</th></tr></thead>
+    <tbody>
+      {% for r in recently_resolved %}
+      {% set hours = ((r.resolved_at - r.first_seen_at).total_seconds() / 3600) | round(0, 'floor') | int %}
+      {% set days  = (hours / 24) | round(0, 'floor') | int %}
+      <tr>
+        <td>{{ r.agent.hostname if r.agent else "—" }}</td>
+        <td>{{ r.package_name }}</td>
+        <td>
+          {% if r.severity.value == 'critical' %}<span class="prio prio-critical">critical</span>
+          {% elif r.severity.value == 'important' %}<span class="prio prio-high">important</span>
+          {% else %}<span class="prio prio-medium">{{ r.severity.value }}</span>{% endif %}
+        </td>
+        <td>{{ r.first_seen_at | istdate }}</td>
+        <td>{{ r.resolved_at | ist }}</td>
+        <td>{% if days >= 1 %}{{ days }}d{% else %}{{ hours }}h{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><p class="meta">No patches have been resolved in the last 30 days.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

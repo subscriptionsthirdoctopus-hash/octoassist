@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Bulk patch deploy — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between" style="align-items:flex-start;">
+    <div>
+      <h1>Bulk patch deploy</h1>
+      <p class="meta"><a href="/patches">← Patches</a> · pick endpoints × packages → one click</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin-top:0;">How this works</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">
+    Tick endpoints on the <strong>left</strong>, tick specific packages on the <strong>right</strong>,
+    then click <strong>Deploy</strong>. OctoAssist creates a Patch Window with hand-picked targets
+    and starts it immediately (or at the scheduled time). Agents pick the job up on their next
+    30-second poll and install as SYSTEM.
+  </p>
+</section>
+
+<form method="post" action="/patches/bulk-deploy" id="bulk-deploy-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <div class="card" style="max-width:none;margin-bottom:16px;display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+    <label style="flex:1;min-width:240px;">Window name (optional)
+      <input type="text" name="name" placeholder="auto-generated if blank"
+             style="width:100%;padding:6px 10px;font-size:13px;">
+    </label>
+    <label>Schedule (optional, IST)
+      <input type="datetime-local" name="scheduled_for" style="padding:6px;">
+    </label>
+    <button type="submit" class="button primary" id="deploy-btn">↪ Deploy</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <h2 style="margin:0 0 8px;">Endpoints ({{ endpoints|length }} with pending)</h2>
+      <div class="card" style="max-width:none;padding:8px 12px;margin-bottom:8px;">
+        <label style="font-size:13px;">
+          <input type="checkbox" onclick="document.querySelectorAll('input[name=agent_ids]').forEach(c=>c.checked=this.checked);updateCounts();">
+          Select all
+        </label>
+        <span id="ep-count" class="meta" style="margin-left:12px;">0 selected</span>
+      </div>
+      <table class="data">
+        <thead><tr><th style="width:32px;"></th><th>Hostname</th><th>OS</th><th>Pending</th><th>Last Seen</th></tr></thead>
+        <tbody>
+          {% for e in endpoints %}
+          <tr>
+            <td><input type="checkbox" name="agent_ids" value="{{ e.agent_id }}" onclick="updateCounts();"></td>
+            <td><a href="/asset/{{ e.agent_id }}">{{ e.hostname }}</a></td>
+            <td style="font-size:12px;color:var(--slate);">{{ e.os_caption or "—" }}</td>
+            <td>{{ e.pending_count }}</td>
+            <td>{% if e.last_seen_at %}{{ e.last_seen_at | ist }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if not endpoints %}<div class="empty"><p>No endpoints with pending patches. All caught up.</p></div>{% endif %}
+    </div>
+
+    <div>
+      <h2 style="margin:0 0 8px;">Packages ({{ packages|length }} distinct, Windows-only)</h2>
+      <div class="card" style="max-width:none;padding:8px 12px;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label style="font-size:13px;">
+          <input type="checkbox" onclick="document.querySelectorAll('#pkg-table input[name=package_names]').forEach(c=>{if(c.closest('tr').style.display!=='none')c.checked=this.checked;});updateCounts();">
+          Select all (visible)
+        </label>
+        <input type="search" id="pkg-filter" placeholder="filter packages…" oninput="filterPkgs(this.value);"
+               style="flex:1;min-width:160px;padding:4px 8px;font-size:13px;">
+        <span id="pkg-count" class="meta">0 selected</span>
+      </div>
+      <table class="data" id="pkg-table">
+        <thead><tr><th style="width:32px;"></th><th>Package</th><th>Severity</th><th>Affected</th></tr></thead>
+        <tbody>
+          {% for p in packages %}
+          <tr data-name="{{ p.name|lower }}">
+            <td><input type="checkbox" name="package_names" value="{{ p.name }}" onclick="updateCounts();"></td>
+            <td title="{{ p.source }}">{{ p.name }}</td>
+            <td><span class="prio prio-{{ p.severity }}">{{ p.severity }}</span></td>
+            <td>{{ p.affected }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if not packages %}<div class="empty"><p>No pending Windows packages across the fleet.</p></div>{% endif %}
+    </div>
+  </div>
+</form>
+
+<script>
+  function updateCounts() {
+    const eps = document.querySelectorAll('input[name=agent_ids]:checked').length;
+    const pks = document.querySelectorAll('input[name=package_names]:checked').length;
+    document.getElementById('ep-count').textContent = eps + ' selected';
+    document.getElementById('pkg-count').textContent = pks + ' selected';
+    document.getElementById('deploy-btn').textContent = '↪ Deploy ' + eps + ' endpoint(s) × ' + pks + ' package(s)';
+  }
+  function filterPkgs(needle) {
+    const n = (needle || '').toLowerCase();
+    document.querySelectorAll('#pkg-table tbody tr').forEach(row => {
+      const hay = (row.getAttribute('data-name') || '');
+      row.style.display = (!n || hay.indexOf(n) >= 0) ? '' : 'none';
+    });
+  }
+</script>
+{% endblock %}

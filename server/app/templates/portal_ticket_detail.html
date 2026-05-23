@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket_number }} — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>{{ icon_for(ticket.category) }} {{ ticket.ticket_number }} <span class="meta-inline">·</span> {{ ticket.title }}</h1>
+      <p class="meta">{{ ticket.kind.value.replace("_", " ") | capitalize }} · {{ ticket.category.name if ticket.category else "—" }} · created {{ ticket.created_at | ist }}</p>
+    </div>
+    <div class="ticket-meta">
+      <span class="status status-{{ ticket.status.value }}">{{ ticket.status.value.replace("_", " ") }}</span>
+    </div>
+  </div>
+</section>
+
+<style>
+  .timeline { display:flex; align-items:center; gap:0; margin:14px 0 22px; }
+  .tl-step { flex:1; text-align:center; position:relative; }
+  .tl-dot { width:28px; height:28px; border-radius:50%; background:#e2e8f0; color:#64748b;
+            margin:0 auto 6px; display:flex; align-items:center; justify-content:center;
+            font-weight:700; font-size:13px; border:2px solid #e2e8f0; }
+  .tl-label { font-size:11.5px; color:#64748b; font-weight:600; }
+  .tl-step.done .tl-dot     { background:#16a34a; color:white; border-color:#16a34a; }
+  .tl-step.done .tl-label   { color:#14532d; }
+  .tl-step.current .tl-dot  { background:#2563eb; color:white; border-color:#2563eb;
+                              box-shadow:0 0 0 4px rgba(37,99,235,.18); }
+  .tl-step.current .tl-label{ color:#1e3a8a; }
+  .tl-step.cancelled .tl-dot{ background:#dc2626; color:white; border-color:#dc2626; }
+  .tl-bar { flex:0 0 auto; width:100%; height:3px; background:#e2e8f0; margin:0 -4px; align-self:flex-start;
+            margin-top:13px; }
+  .tl-step.done + .tl-bar, .tl-step.current + .tl-bar { background: linear-gradient(to right,#16a34a 50%,#e2e8f0 50%); }
+  .attach-list { list-style:none; padding:0; margin:6px 0 0; }
+  .attach-list li { padding:8px 10px; background:var(--surface-2); border:1px solid var(--line,#e2e8f0);
+                    border-radius:6px; margin-bottom:6px; display:flex; align-items:center; gap:10px; font-size:13px; }
+  .attach-list .fname { flex:1; font-weight:600; color:#0f172a; text-decoration:none; }
+  .attach-list .fname:hover { text-decoration:underline; }
+  .attach-list .fmeta { color:#64748b; font-size:11.5px; }
+  .file-icon { font-size:18px; }
+</style>
+
+<section>
+  <div class="timeline">
+    {% for step in status_steps(ticket) %}
+      <div class="tl-step {{ step.state }}">
+        <div class="tl-dot">
+          {% if step.state == "done" %}✓{% elif step.state == "current" %}●{% elif step.state == "cancelled" %}✕{% else %}{{ loop.index }}{% endif %}
+        </div>
+        <div class="tl-label">{{ step.label }}</div>
+      </div>
+      {% if not loop.last %}<div class="tl-bar"></div>{% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cards">
+  <div class="card">
+    <h3>Handled by</h3>
+    {% if ticket.assignee %}
+      <p><strong>{{ ticket.assignee.display_name }}</strong></p>
+      <p class="meta">{{ ticket.assignee.role.value | capitalize }}</p>
+    {% else %}
+      <p class="meta">Not assigned yet — we'll route it shortly.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>SLA</h3>
+    {% set ttb = time_to_breach(ticket.due_resolution_at) %}
+    <dl>
+      <dt>Resolve by</dt><dd>{% if ticket.due_resolution_at %}{{ ticket.due_resolution_at | ist }}{% else %}—{% endif %}</dd>
+      <dt>Time remaining</dt><dd class="{% if ttb[1] %}breach{% endif %}">{{ ttb[0] }}</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <h2>What you wrote</h2>
+  <div class="card prose" style="white-space:pre-wrap;">{{ ticket.description or "(no details)" }}</div>
+</section>
+
+{% if attachments %}
+<section>
+  <h2>Attachments ({{ attachments|length }})</h2>
+  <ul class="attach-list">
+    {% for a in attachments %}
+    <li>
+      <span class="file-icon">📎</span>
+      <a class="fname" href="{{ a.url }}" target="_blank" rel="noopener">{{ a.filename }}</a>
+      <span class="fmeta">{{ (a.size_bytes / 1024) | round(1) }} KB · uploaded by {{ a.uploader }} · {{ a.created_at | ist }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section>
+  <h2>Conversation</h2>
+  {% for c in ticket.comments if not c.is_internal %}
+  <div class="comment">
+    <div class="comment-head">
+      <strong>{{ c.author.display_name if c.author else "—" }}</strong>
+      <span class="meta-inline">·</span>
+      <span>{{ c.created_at | ist }}</span>
+    </div>
+    <div class="comment-body prose" style="white-space:pre-wrap;">{{ c.body }}</div>
+  </div>
+  {% else %}
+  <p class="meta">No replies yet.</p>
+  {% endfor %}
+
+  {% if attach_error %}
+  <div class="card" style="background:#fee2e2;border-left:4px solid #dc2626;margin-bottom:10px;">
+    <p style="margin:0;font-size:13px;color:#7f1d1d;">⚠ {{ attach_error }}</p>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/portal/ticket/{{ ticket.id }}/comment" class="card form" enctype="multipart/form-data" id="commentForm">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label>Add a comment
+      <textarea name="body" rows="4" placeholder="Reply, add detail, ask a question…"></textarea>
+    </label>
+    <label>Attach files <span class="meta" style="font-weight:normal;">(optional · <strong>max 2 MB per file</strong>)</span>
+      <input type="file" name="attachments" multiple data-max-bytes="2097152" id="commentFiles">
+      <div id="commentAttachErr" style="color:#dc2626;font-size:12px;margin-top:6px;display:none;"></div>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Post reply</button>
+    </div>
+  </form>
+  <script>
+  (function(){
+    var input = document.getElementById("commentFiles");
+    var err = document.getElementById("commentAttachErr");
+    var form = document.getElementById("commentForm");
+    if (!input || !form) return;
+    var MAX = parseInt(input.dataset.maxBytes || "2097152", 10);
+    function check(){
+      var bad = [];
+      for (var i=0; i<input.files.length; i++) {
+        if (input.files[i].size > MAX) bad.push(input.files[i].name);
+      }
+      if (bad.length) { err.style.display="block"; err.textContent="Too large (max 2 MB): " + bad.join(", "); return false; }
+      err.style.display="none"; err.textContent=""; return true;
+    }
+    input.addEventListener("change", check);
+    form.addEventListener("submit", function(e){ if (!check()) e.preventDefault(); });
+  })();
+  </script>
+</section>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.product }} — Software (SAM){% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="meta" style="margin:0;"><a href="/software">← Software (SAM)</a></p>
+  <h1>{{ detail.product }}</h1>
+  <p class="meta">
+    <strong>{{ detail.publisher }}</strong>
+    · <span class="role-pill" style="background:var(--navy);color:white;font-size:10px;">{{ detail.category }}</span>
+    {% set lp = detail.license_posture %}
+    {% if lp == 'licensed_paid' %}
+      <span class="prio prio-critical">{{ license_labels[lp] }}</span>
+    {% elif lp == 'licensed_oem' %}
+      <span class="prio prio-medium">{{ license_labels[lp] }}</span>
+    {% elif lp == 'free_personal' %}
+      <span class="prio prio-high">{{ license_labels[lp] }}</span>
+    {% elif lp == 'freeware_oss' %}
+      <span class="prio prio-low">{{ license_labels[lp] }}</span>
+    {% else %}
+      <span class="prio prio-low" style="background:#e6e6e6;color:#444;">{{ license_labels[lp] }}</span>
+    {% endif %}
+  </p>
+</section>
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Installs</p>
+    <p class="kpi-value">{{ detail.install_count }}</p>
+    <p class="kpi-sub">across {{ detail.endpoints|length }} endpoint{{ "" if detail.endpoints|length == 1 else "s" }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Distinct versions</p>
+    <p class="kpi-value">{{ detail.version_breakdown|length }}</p>
+    <p class="kpi-sub">version-drift signal — fewer is better</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Most-common version</p>
+    {% if detail.version_breakdown %}
+    <p class="kpi-value" style="font-size:22px;line-height:1.1;">{{ detail.version_breakdown[0][0] }}</p>
+    <p class="kpi-sub">on {{ detail.version_breakdown[0][1] }} endpoint{{ "" if detail.version_breakdown[0][1] == 1 else "s" }}</p>
+    {% else %}
+    <p class="kpi-value">—</p>
+    {% endif %}
+  </div>
+</section>
+
+{% if detail.version_breakdown %}
+<section style="margin-top:16px;">
+  <div class="report-card">
+    <h3>Version distribution</h3>
+    <table class="data" style="max-width:520px;">
+      <thead><tr><th>Version</th><th>Endpoints</th></tr></thead>
+      <tbody>
+        {% for ver, cnt in detail.version_breakdown %}
+        <tr>
+          <td><code>{{ ver }}</code></td>
+          <td><strong>{{ cnt }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section style="margin-top:16px;">
+  <h2>Installed on</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Hostname</th>
+        <th>Version</th>
+        <th>Installed</th>
+        <th>Last seen</th>
+        <th>As reported</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in detail.endpoints %}
+      <tr>
+        <td><a href="/asset/{{ e.agent_id }}">{{ e.hostname }}</a></td>
+        <td><code>{{ e.version }}</code></td>
+        <td>{{ e.install_date }}</td>
+        <td>{% if e.last_seen_at %}{{ e.last_seen_at | ist }}{% else %}never{% endif %}</td>
+        <td style="color:var(--slate);font-size:12.5px;">{{ e.raw_name }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

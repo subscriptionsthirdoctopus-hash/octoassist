@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}New problem — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="meta" style="margin:0 0 4px;"><a href="/problems">← Problems</a></p>
+    <h1>Open a new problem</h1>
+    <p class="meta">Use this when an underlying issue may be causing multiple incidents — the platform supports root-cause investigation and Known-Error tracking.</p>
+  </div>
+</section>
+
+<form method="post" action="/problems/new" class="card form" style="max-width:760px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <label>Title <span class="meta">(one-line summary of the underlying issue)</span>
+    <input type="text" name="title" required maxlength="255" autofocus
+           placeholder="e.g. SAP GUI 7.70 fails TLS handshake against new S/4HANA server">
+  </label>
+
+  <label>Description <span class="meta">(what you've observed across multiple tickets · hypotheses · scope)</span>
+    <textarea name="description" rows="7"
+              placeholder="Observed:&#10;- Tickets INC-00012, INC-00018, INC-00021 all report 'connection refused' from SAP GUI to PRD server&#10;- Only affects users still on GUI 7.70&#10;&#10;Hypothesis:&#10;- TLS 1.2 enforcement on PRD breaks legacy GUI&#10;&#10;Scope:&#10;- ~40 design engineers across Mumbai + Pune offices."></textarea>
+  </label>
+
+  <label>Priority
+    <select name="priority">
+      <option value="low">Low — small recurring annoyance</option>
+      <option value="medium" selected>Medium — multiple users affected</option>
+      <option value="high">High — important business function impaired</option>
+      <option value="critical">Critical — production-down pattern</option>
+    </select>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Open problem</button>
+    <a href="/problems" class="link-button">Cancel</a>
+  </div>
+</form>
+{% endblock %}

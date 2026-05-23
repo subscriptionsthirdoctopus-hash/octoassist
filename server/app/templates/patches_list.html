@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}Patches — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Patch Management</h1>
+      <p class="meta">Endpoint patch posture across the fleet</p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/patches/bulk-deploy">↪ Bulk deploy ›</a>
+      <a class="button" href="/patches/aging">Aging report ›</a>
+      <a class="button" href="/patches/windows">Deployment windows ›</a>
+      <a class="button" href="/patches/export.csv">Export CSV</a>
+    </div>
+  </div>
+</section>
+
+<div class="card" style="background:#eff6ff;border-left:4px solid var(--accent,#2563eb);margin-bottom:18px;">
+  <p style="margin:0;font-size:13.5px;">
+    <strong>Windows updates on these endpoints are managed centrally by your organisation.</strong>
+    OctoAssist is a Windows-only platform. The agent applies registry policy on every check-in
+    so end users see <em>"Some settings are managed by your organisation"</em> on the Windows
+    Update page and cannot manually trigger updates locally. Quick-deploy a category below and
+    the agent installs via <code>Install-WindowsUpdate -MicrosoftUpdate</code> on the next
+    30-second poll. Non-Windows hosts cannot register — the server rejects them.
+  </p>
+</div>
+
+{# ────────── Quick-deploy cards (Intune / Zoho Endpoint Central-style one-click) ────────── #}
+{% if quick_deploy_options %}
+<section class="cards" style="margin-bottom:18px;">
+  <div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:end;margin-bottom:4px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 style="margin:0;">Quick deploy</h2>
+      <p class="meta" style="margin:2px 0 0;font-size:12.5px;">One click → window auto-created, packages auto-selected. Agents pick it up on the next 5-min poll (or at the time you schedule below).</p>
+    </div>
+    <label style="display:flex;flex-direction:column;font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">
+      Schedule for (IST, blank = now)
+      <input type="datetime-local" id="qd-scheduled-for" name="scheduled_for"
+             style="margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px;min-width:220px;">
+    </label>
+  </div>
+  {% for qd in quick_deploy_options %}
+  <div class="card" style="border-left:4px solid {{ qd.color }};">
+    <div class="row-between">
+      <h3 style="margin:0;font-size:15px;">{{ qd.title }}</h3>
+      <span class="prio prio-{{ qd.pill_class }}">{{ qd.count }}</span>
+    </div>
+    <p class="meta" style="margin:8px 0 12px;font-size:12.5px;">
+      {{ qd.subtitle }}
+    </p>
+    <form method="post" action="/patches/quick-deploy" class="qd-form"
+          onsubmit="return confirmQuickDeploy(this, '{{ qd.count }}', '{{ qd.title.lower() }}')">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      {% if qd.severity %}<input type="hidden" name="severity" value="{{ qd.severity }}">{% endif %}
+      {% if qd.vendor %}<input type="hidden" name="vendor" value="{{ qd.vendor }}">{% endif %}
+      {% if qd.all %}<input type="hidden" name="all" value="1">{% endif %}
+      <input type="hidden" name="scheduled_for" class="qd-when" value="">
+      <button type="submit" class="primary qd-btn" data-title="{{ qd.title.lower() }}" {% if qd.count == 0 %}disabled{% endif %}>
+        Deploy {{ qd.title.lower() }} now
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Fully Updated</p>
+    <p class="kpi-value">{{ kpi.compliant_endpoints }}<span class="kpi-unit">/{{ kpi.total_endpoints }}</span></p>
+    <p class="kpi-sub">
+      {{ kpi.compliance_pct }}% of Windows endpoints have <strong>0</strong> pending patches
+      {% if kpi.needs_refresh > 0 %}
+        <br><span style="color:var(--orange,#d97706);">({{ kpi.needs_refresh }} agent{{ "" if kpi.needs_refresh == 1 else "s" }} need a refresh)</span>
+      {% endif %}
+    </p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Critical patches outstanding</p>
+    <p class="kpi-value">{{ kpi.total_critical }}</p>
+    <p class="kpi-sub">across {{ kpi.non_compliant }} non-compliant endpoint{{ "" if kpi.non_compliant == 1 else "s" }}</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Total patches pending</p>
+    <p class="kpi-value">{{ kpi.total_patches }}</p>
+    <p class="kpi-sub">all severities, all Windows endpoints</p>
+  </div>
+</section>
+
+<section class="report-row two-col-charts">
+  <div class="report-card">
+    <h3>By severity</h3>
+    {{ chart_severity|safe }}
+  </div>
+  <div class="report-card">
+    <h3>Top missing packages (across all endpoints)</h3>
+    {{ chart_top|safe }}
+  </div>
+</section>
+
+<section class="report-row">
+  <div class="report-card">
+    <h3>By vendor / OEM</h3>
+    <p class="meta" style="margin:0 0 12px;">
+      Available updates grouped by publisher (derived from the winget Vendor.Product Id and Windows Update source).
+      Use this view to plan vendor-scoped patch waves — e.g. all Google updates in one window, all Microsoft in another.
+    </p>
+    {{ chart_vendors|safe }}
+    {% if vendors %}
+    <table class="data" style="margin-top:12px;max-width:760px;">
+      <thead>
+        <tr>
+          <th>Vendor / OEM</th>
+          <th>Critical</th>
+          <th>Important</th>
+          <th>Moderate</th>
+          <th>Low/unknown</th>
+          <th>Total patches</th>
+          <th>Distinct packages</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vendors %}
+        <tr>
+          <td><strong>{{ v.vendor }}</strong></td>
+          <td>{% if v.critical %}<span class="prio prio-critical">{{ v.critical }}</span>{% else %}—{% endif %}</td>
+          <td>{% if v.important %}<span class="prio prio-high">{{ v.important }}</span>{% else %}—{% endif %}</td>
+          <td>{{ v.moderate or "—" }}</td>
+          <td>{{ v.low_unknown or "—" }}</td>
+          <td><strong>{{ v.total }}</strong></td>
+          <td>{{ v.packages }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</section>
+
+<section>
+  <h2>Windows endpoint patch posture</h2>
+  <p class="meta" style="margin:0 0 12px;">
+    Per-machine view. Each endpoint reports back what Windows Update + winget see as pending.
+    <strong>Fully Updated</strong> means a successful scan with zero pending patches — that's the goal state.
+  </p>
+  <p class="meta" style="margin:0 0 12px;font-size:12px;">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;"></span> Online (≤2 min ago) — deploys land within 30 sec
+    &nbsp;·&nbsp;
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d97706;margin-right:4px;vertical-align:middle;"></span> Lagging (2-5 min)
+    &nbsp;·&nbsp;
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:4px;vertical-align:middle;"></span> Offline (powered off / no network) — deploys queue until it returns
+  </p>
+
+  <style>
+    .pf-search-wrap { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:14px 16px; margin-bottom:14px; box-shadow:var(--shadow-1); }
+    .pf-search { position:relative; }
+    .pf-search input[type=search] {
+      width:100%; padding:12px 14px 12px 44px; font-size:14.5px;
+      background:var(--surface-2); border:1px solid var(--line);
+      border-radius:var(--r-md); color:var(--text-1);
+      transition:border-color .12s, box-shadow .12s;
+    }
+    .pf-search input[type=search]::placeholder { color:var(--text-4); }
+    .pf-search input[type=search]:focus { border-color:var(--accent); box-shadow:var(--focus-ring); outline:none; }
+    .pf-search .glyph { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:17px; opacity:.65; pointer-events:none; }
+    .pf-search .submit { position:absolute; right:6px; top:50%; transform:translateY(-50%); padding:6px 14px; font-size:12.5px; min-height:0; }
+
+    .pf-chips-label { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.7px; margin:14px 0 8px; }
+    .pf-chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .pf-chip {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:5px 11px; border-radius:999px;
+      background:var(--surface-2); border:1px solid var(--line);
+      color:var(--text-2); font-size:12px; font-weight:500;
+      text-decoration:none; transition:all .12s; white-space:nowrap;
+    }
+    .pf-chip:hover { background:var(--hover); border-color:var(--line-strong); color:var(--text-1); text-decoration:none; }
+    .pf-chip.active { background:var(--accent); border-color:var(--accent); color:white; font-weight:600; }
+    .pf-chip .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+    .pf-chip .dot.online  { background:#22c55e; }
+    .pf-chip .dot.lagging { background:#f59e0b; }
+    .pf-chip .dot.offline { background:#ef4444; }
+
+    .pf-result-row { display:flex; align-items:center; gap:10px; margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
+    .pf-result-row .count { font-size:13px; color:var(--text-2); }
+    .pf-result-row .count strong { color:var(--text-1); font-weight:700; }
+    .pf-result-row .clear { font-size:12.5px; color:var(--accent); text-decoration:none; font-weight:500; }
+    .pf-result-row .clear:hover { text-decoration:underline; }
+  </style>
+
+  <div class="pf-search-wrap">
+    {# Primary search box — big, clear, dark-mode visible #}
+    <form method="get" action="/patches" class="pf-search">
+      <span class="glyph">🔍</span>
+      <input type="search" name="q" value="{{ q or '' }}" autocomplete="off"
+             placeholder="Search by hostname, assigned user, email, office, OS…">
+      <button type="submit" class="primary submit">Search</button>
+      {# Preserve other active filters when submitting #}
+      {% if filter_online %}<input type="hidden" name="online" value="{{ filter_online }}">{% endif %}
+      {% if filter_office %}<input type="hidden" name="office" value="{{ filter_office }}">{% endif %}
+      {% if filter_posture %}<input type="hidden" name="posture" value="{{ filter_posture }}">{% endif %}
+    </form>
+
+    {# Posture chips — by patch state #}
+    <p class="pf-chips-label">Patch posture</p>
+    <div class="pf-chips">
+      <a class="pf-chip {% if not filter_posture %}active{% endif %}"
+         href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_online %}online={{ filter_online }}&{% endif %}{% if filter_office %}office={{ filter_office|urlencode }}{% endif %}">All</a>
+      <a class="pf-chip {% if filter_posture == 'fully_updated' %}active{% endif %}"
+         href="/patches?posture=fully_updated{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">✓ Fully updated</a>
+      <a class="pf-chip {% if filter_posture == 'pending' %}active{% endif %}"
+         href="/patches?posture=pending{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">⏳ Has pending</a>
+      <a class="pf-chip {% if filter_posture == 'scan_failed' %}active{% endif %}"
+         href="/patches?posture=scan_failed{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">⚠ Scan failed</a>
+    </div>
+
+    {# Connectivity chips #}
+    <p class="pf-chips-label">Connectivity</p>
+    <div class="pf-chips">
+      <a class="pf-chip {% if not filter_online %}active{% endif %}"
+         href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_office %}office={{ filter_office|urlencode }}&{% endif %}{% if filter_posture %}posture={{ filter_posture }}{% endif %}">All</a>
+      <a class="pf-chip {% if filter_online == 'online' %}active{% endif %}"
+         href="/patches?online=online{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}"><span class="dot online"></span> Online</a>
+      <a class="pf-chip {% if filter_online == 'lagging' %}active{% endif %}"
+         href="/patches?online=lagging{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}"><span class="dot lagging"></span> Lagging</a>
+      <a class="pf-chip {% if filter_online == 'offline' %}active{% endif %}"
+         href="/patches?online=offline{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}"><span class="dot offline"></span> Offline</a>
+    </div>
+
+    {# Office chips — only render if there are offices in the data #}
+    {% if offices %}
+    <p class="pf-chips-label">Office</p>
+    <div class="pf-chips">
+      <a class="pf-chip {% if not filter_office %}active{% endif %}"
+         href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_online %}online={{ filter_online }}&{% endif %}{% if filter_posture %}posture={{ filter_posture }}{% endif %}">All offices</a>
+      {% for o in offices %}
+      <a class="pf-chip {% if filter_office == o %}active{% endif %}"
+         href="/patches?office={{ o|urlencode }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}">📍 {{ o }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="pf-result-row">
+      <span class="count">
+        <strong>{{ win_dash|length }}</strong> of {{ win_dash_total }} endpoint{{ "" if win_dash_total == 1 else "s" }} shown
+      </span>
+      {% if q or filter_online or filter_office or filter_posture %}
+      <a class="clear" href="/patches">Clear all filters ✕</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if win_dash %}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Hostname</th>
+        <th>Assigned to</th>
+        <th>Office</th>
+        <th>OS</th>
+        <th>Last scan</th>
+        <th>Pending</th>
+        <th>Critical</th>
+        <th>Important</th>
+        <th>Moderate</th>
+        <th>Compliance</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in win_dash %}
+      <tr>
+        <td>
+          {% if r.online == 'online' %}
+            <span title="Online — last seen within 2 minutes" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:6px;vertical-align:middle;"></span>
+          {% elif r.online == 'lagging' %}
+            <span title="Lagging — last seen within 5 minutes (waking up?)" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#d97706;margin-right:6px;vertical-align:middle;"></span>
+          {% else %}
+            <span title="Offline — not heard from in 5+ minutes (powered off or no network)" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:6px;vertical-align:middle;"></span>
+          {% endif %}
+          <a href="/patches/{{ r.agent_id }}">{{ r.hostname }}</a>
+        </td>
+        <td style="font-size:12.5px;">
+          {% if r.assigned_name %}
+            <strong style="color:var(--text-1);">{{ r.assigned_name }}</strong>
+            {% if r.assigned_email %}<br><span style="color:var(--text-3);font-size:11.5px;">{{ r.assigned_email }}</span>{% endif %}
+          {% elif r.logged_in_user %}
+            <span style="color:var(--text-2);">{{ r.logged_in_user }}</span>
+            <br><span style="color:var(--text-4);font-size:11px;font-style:italic;">(logged-in)</span>
+          {% else %}
+            <span style="color:var(--text-4);font-style:italic;">unassigned</span>
+          {% endif %}
+        </td>
+        <td style="font-size:12.5px;color:var(--text-2);">{{ r.location or "—" }}</td>
+        <td style="font-size:12.5px;color:var(--slate);">{{ r.os_caption }}</td>
+        <td>{% if r.last_scan_at %}{{ r.last_scan_at | ist }}{% else %}<span style="color:var(--slate);font-size:12px;">unknown</span>{% endif %}</td>
+        <td><strong>{{ r.pending_count }}</strong></td>
+        <td>{% if r.critical %}<span class="prio prio-critical">{{ r.critical }}</span>{% else %}0{% endif %}</td>
+        <td>{% if r.important %}<span class="prio prio-high">{{ r.important }}</span>{% else %}0{% endif %}</td>
+        <td>{% if r.moderate %}<span class="prio prio-medium">{{ r.moderate }}</span>{% else %}0{% endif %}</td>
+        <td>
+          {% if r.compliance_pct is none %}
+            <span style="color:var(--slate);font-size:12px;">—</span>
+          {% else %}
+            {% set pct = r.compliance_pct %}
+            <div style="display:flex;align-items:center;gap:6px;min-width:130px;">
+              <div style="flex:1;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 95 %}#16a34a{% elif pct >= 70 %}#d97706{% else %}#dc2626{% endif %};"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;">{{ pct }}%</span>
+            </div>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.fully_updated %}
+            <span class="status status-resolved">✓ Fully Updated</span>
+          {% elif r.needs_refresh %}
+            <form method="post" action="/asset/{{ r.agent_id }}/action" class="inline-form" style="display:inline;"
+                  onsubmit="return confirm('Trigger immediate check-in on {{ r.hostname|e }}?\n\nAgent re-scans within seconds. Runs silently as SYSTEM.');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="kind" value="force_refresh">
+              <button type="submit" class="status status-on_hold"
+                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">⟳ Refresh agent</button>
+            </form>
+          {% elif r.scan_failed %}
+            <form method="post" action="/asset/{{ r.agent_id }}/action" class="inline-form" style="display:inline;"
+                  onsubmit="return confirm('Retry the patch scan on {{ r.hostname|e }}?\n\nQueues a forced check-in; agent re-runs the scan within seconds.');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="kind" value="force_refresh">
+              <button type="submit" class="status status-cancelled"
+                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">⚠ Scan failed — retry</button>
+            </form>
+          {% elif r.critical > 0 %}
+            <span class="status status-cancelled">{{ r.pending_count }} pending</span>
+          {% else %}
+            <span class="status status-in_progress">{{ r.pending_count }} pending</span>
+          {% endif %}
+          {% if not r.psw_installed and not r.needs_refresh %}
+            <div style="margin-top:4px; display:flex; flex-direction:column; gap:3px;">
+              <span class="meta" style="font-size:11px;">PSWindowsUpdate missing</span>
+              <form method="post" action="/asset/{{ r.agent_id }}/fix-pswindowsupdate" style="margin:0;"
+                    onsubmit="return confirm('Queue PSWindowsUpdate self-repair on {{ r.hostname|e }}?\n\nRuns as SYSTEM. Re-scans on next slow cycle (5–10 min).');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+                <button type="submit" class="link-button" style="font-size:11px; color:var(--accent); padding:0;">🔧 Install module</button>
+              </form>
+            </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h2>No Windows endpoints reporting yet</h2>
+    <p>Install the agent on a Windows endpoint via <a href="/enrolment">/enrolment</a> — once it checks in, it appears here.</p>
+  </div>
+  {% endif %}
+</section>
+
+{# Refresh modal removed — '⟳ Refresh agent' and '⚠ Scan failed — retry'
+   buttons now POST a force_refresh remote action directly. Admins never
+   see PowerShell commands. #}
+
+<script>
+// --- Quick-deploy scheduling: copy the global datetime to each form's hidden field on submit ---
+function confirmQuickDeploy(form, count, title) {
+  var when = document.getElementById('qd-scheduled-for').value;
+  form.querySelector('input.qd-when').value = when || '';
+  if (when) {
+    return confirm('Schedule ' + count + ' ' + title + ' for ' + when.replace('T', ' ') + '?\n\nThe window stays in scheduled state until that time, then auto-promotes to in_progress and agents install on the next 5-min poll.');
+  }
+  return confirm('Deploy ' + count + ' ' + title + ' now?\n\nThe window goes to in_progress immediately; agents install on the next 5-min poll.');
+}
+
+// Update button labels when a schedule time is picked
+document.getElementById('qd-scheduled-for').addEventListener('input', function (e) {
+  var when = e.target.value;
+  document.querySelectorAll('.qd-btn').forEach(function (btn) {
+    var t = btn.dataset.title || '';
+    btn.innerText = when
+      ? 'Schedule ' + t + ' for ' + when.replace('T', ' ')
+      : 'Deploy ' + t + ' now';
+  });
+});
+</script>
+{% endblock %}

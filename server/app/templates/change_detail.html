@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% block title %}{{ change.change_number }} — {{ change.title }}{% endblock %}
+{% block content %}
+
+<style>
+  .ch-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+  .ch-head h1 { margin:0 0 4px; font-size:22px; }
+  .ch-num { color:var(--text-3); font-family:var(--font-mono); font-weight:600; font-size:14px; letter-spacing:.5px; margin-right:8px; }
+  .ch-sub { color:var(--text-3); font-size:12.5px; margin:0; }
+
+  /* Lifecycle ribbon */
+  .lifecycle { display:flex; align-items:center; gap:6px; margin:0 0 16px; font-size:12px; flex-wrap:wrap; }
+  .lifecycle .pip { padding:3px 10px; border-radius:11px; background:#e2e8f0; color:#475569; font-weight:600; text-transform:capitalize; }
+  .lifecycle .pip.done { background:#dcfce7; color:#166534; }
+  .lifecycle .pip.now  { background:var(--accent); color:white; }
+  .lifecycle .pip.err  { background:#fee2e2; color:#991b1b; }
+  .lifecycle .arrow { color:var(--text-4); }
+
+  .ch-grid { display:grid; grid-template-columns:1fr 320px; gap:18px; align-items:start; }
+  @media (max-width:1100px) { .ch-grid { grid-template-columns:1fr; } }
+
+  .side .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:14px 16px; margin-bottom:12px; box-shadow:var(--shadow-1); }
+  .side .panel h4 { margin:0 0 10px; font-size:11px; text-transform:uppercase; letter-spacing:.7px; color:var(--text-3); font-weight:700; }
+  .side dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:13px; }
+  .side dt { color:var(--text-3); }
+  .side dd { margin:0; color:var(--text-1); font-weight:500; }
+
+  /* Workflow action buttons in side panel */
+  .wf-btn {
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:100%; padding:10px 12px; border-radius:var(--r-sm); border:1px solid var(--line);
+    background:var(--surface); color:var(--text-1); font-weight:600; font-size:13px; cursor:pointer;
+    transition:background .12s, border-color .12s, transform .08s;
+  }
+  .wf-btn:hover { background:var(--hover); border-color:var(--line-strong); }
+  .wf-btn.primary { background:var(--accent); border-color:var(--accent); color:white; }
+  .wf-btn.primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+  .wf-btn.danger  { background:var(--surface); color:var(--red); border-color:#fecaca; }
+  .wf-btn.danger:hover { background:#fef2f2; border-color:#fca5a5; }
+  .wf-note textarea { margin-bottom:8px; min-height:50px; }
+
+  /* Change record cards on the main column */
+  .ch-section { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:14px 16px; margin-bottom:12px; box-shadow:var(--shadow-1); }
+  .ch-section h3 { margin:0 0 6px; font-size:14px; color:var(--text-1); display:flex; align-items:center; gap:8px; }
+  .ch-section h3 .badge { font-size:10px; padding:2px 7px; border-radius:999px; background:var(--bg); color:var(--text-3); font-weight:700; text-transform:uppercase; letter-spacing:.5px; border:1px solid var(--line); }
+  .ch-section h3 .badge.req { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+  .ch-section .meta-line { color:var(--text-3); font-size:12.5px; margin:0 0 10px; }
+  .ch-section .ro-body { white-space:pre-wrap; line-height:1.55; color:var(--text-2); font-size:13.5px; }
+
+  /* Pills used elsewhere (matches changes_list) */
+  .ctype { font-size:11px; font-weight:600; padding:2px 8px; border-radius:5px; text-transform:capitalize; letter-spacing:.2px; border:1px solid var(--line); }
+  .ctype.normal    { background:var(--bg); color:var(--text-2); }
+  .ctype.standard  { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+  .ctype.emergency { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+  .crisk { font-size:11px; font-weight:600; padding:2px 8px; border-radius:5px; text-transform:uppercase; letter-spacing:.5px; }
+  .crisk.low    { background:#dcfce7; color:#166534; }
+  .crisk.medium { background:#fef3c7; color:#92400e; }
+  .crisk.high   { background:#fee2e2; color:#991b1b; }
+  .cstatus { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid transparent; text-transform:capitalize; }
+  .cstatus::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
+  .cstatus.s-draft        { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+  .cstatus.s-under_review { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+  .cstatus.s-approved     { background:#dbeafe; color:#1e40af; border-color:#bfdbfe; }
+  .cstatus.s-rejected     { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+  .cstatus.s-in_progress  { background:#ede9fe; color:#5b21b6; border-color:#ddd6fe; }
+  .cstatus.s-completed    { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+  .cstatus.s-failed       { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+  .cstatus.s-cancelled    { background:#e2e8f0; color:#334155; border-color:#cbd5e1; }
+
+  /* Audit feed (matches ticket detail) */
+  .audit-feed { list-style:none; padding:0; margin:0; }
+  .audit-feed li { display:grid; grid-template-columns:130px 1fr; gap:14px; padding:9px 0; border-bottom:1px dashed var(--line); font-size:13px; align-items:start; }
+  .audit-feed li:last-child { border-bottom:0; }
+  .audit-feed .when { color:var(--text-3); font-size:11.5px; }
+  .audit-feed .desc { color:var(--text-2); }
+  .audit-feed .desc b { color:var(--text-1); }
+  .audit-feed .actor { color:var(--text-3); font-size:11px; margin-left:6px; }
+  .audit-feed .note { display:block; color:var(--text-3); font-size:12px; margin-top:3px; font-style:italic; }
+</style>
+
+<section class="ch-head">
+  <div>
+    <h1><span class="ch-num">{{ change.change_number }}</span>{{ change.title }}</h1>
+    <p class="ch-sub">
+      <span class="ctype {{ change.change_type.value }}">{{ change.change_type.value }}</span>
+      &nbsp;<span class="crisk {{ change.risk.value }}">{{ change.risk.value }} risk</span>
+      &nbsp; opened {{ change.created_at | ist }} by <strong>{{ change.requester.display_name }}</strong>
+    </p>
+  </div>
+  <div><a href="/changes" class="link-button">← Changes</a></div>
+</section>
+
+{# Lifecycle ribbon #}
+{% set cur = change.status.value %}
+{% set order = ["draft","under_review","approved","in_progress","completed"] %}
+<div class="lifecycle">
+  {% if cur in ("rejected","failed","cancelled") %}
+    {% set order = ["draft","under_review"] if cur == "rejected" else (["draft","under_review","approved","in_progress"] if cur == "failed" else ["draft","under_review"]) %}
+    {% for s in order %}
+      <span class="pip done">{{ s.replace("_"," ") }}</span>
+      <span class="arrow">›</span>
+    {% endfor %}
+    <span class="pip err">{{ cur.replace("_"," ") }}</span>
+  {% else %}
+    {% set ci = order.index(cur) if cur in order else 0 %}
+    {% for s in order %}
+      {% set i = loop.index0 %}
+      <span class="pip {% if i < ci %}done{% elif i == ci %}now{% endif %}">{{ s.replace("_"," ") }}</span>
+      {% if not loop.last %}<span class="arrow">›</span>{% endif %}
+    {% endfor %}
+  {% endif %}
+</div>
+
+<div class="ch-grid">
+
+  {# ===== MAIN ===== #}
+  <div class="main">
+
+    {% if change.status.value in ('draft', 'under_review') %}
+    {# Editable form #}
+    <form method="post" action="/changes/{{ change.id }}/edit" id="changeForm">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+
+      <div class="ch-section">
+        <h3>📋 Change record</h3>
+        <p class="meta-line">Editable until CAB makes a decision. After approval the record locks for audit.</p>
+
+        <label style="display:block;margin-bottom:10px;">
+          <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Title</span>
+          <input type="text" name="title" required value="{{ change.title }}">
+        </label>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+          <label>
+            <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Type</span>
+            <select name="change_type">
+              {% for t in types %}<option value="{{ t }}" {% if change.change_type.value == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>
+            <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Risk</span>
+            <select name="risk">
+              {% for r in risks %}<option value="{{ r }}" {% if change.risk.value == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="ch-section">
+        <h3>📝 Description</h3>
+        <p class="meta-line">What is changing, where, and WHY.</p>
+        <textarea name="description" rows="4">{{ change.description }}</textarea>
+      </div>
+
+      <div class="ch-section">
+        <h3>👥 Impact</h3>
+        <p class="meta-line">Who or what is affected · expected disruption window.</p>
+        <textarea name="impact" rows="3">{{ change.impact }}</textarea>
+      </div>
+
+      <div class="ch-section">
+        <h3>↩️ Rollback plan <span class="badge req">required</span></h3>
+        <p class="meta-line">THIS is what makes the change CAB-approvable. Be specific — steps to revert if it fails.</p>
+        <textarea name="rollback_plan" rows="5">{{ change.rollback_plan }}</textarea>
+      </div>
+
+      <div class="ch-section">
+        <h3>🗓 Planned window</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <label>
+            <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Start</span>
+            <input type="datetime-local" name="planned_start" value="{{ change.planned_start | ist_input if change.planned_start else '' }}">
+          </label>
+          <label>
+            <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">End</span>
+            <input type="datetime-local" name="planned_end" value="{{ change.planned_end | ist_input if change.planned_end else '' }}">
+          </label>
+        </div>
+      </div>
+
+      <div class="ch-section">
+        <h3>🛠 Implementer</h3>
+        <p class="meta-line">Technician who will physically make the change.</p>
+        <select name="implementer_id">
+          <option value="">— Unassigned —</option>
+          {% for s in staff %}
+          <option value="{{ s.id }}" {% if change.implementer_id == s.id %}selected{% endif %}>{{ s.display_name }} ({{ s.role.value }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-actions" style="margin-bottom:12px;">
+        <button type="submit" class="primary">Save change record</button>
+        <span class="meta" style="font-size:12px;">Lifecycle actions are on the right panel.</span>
+      </div>
+    </form>
+
+    {% else %}
+    {# Read-only after CAB decision #}
+    <div class="ch-section"><h3>📝 Description</h3>
+      <div class="ro-body">{{ change.description or "—" }}</div>
+    </div>
+    <div class="ch-section"><h3>👥 Impact</h3>
+      <div class="ro-body">{{ change.impact or "—" }}</div>
+    </div>
+    <div class="ch-section"><h3>↩️ Rollback plan</h3>
+      <div class="ro-body">{{ change.rollback_plan or "—" }}</div>
+    </div>
+    {% endif %}
+
+    <div class="ch-section">
+      <h3>📜 Audit log</h3>
+      <p class="meta-line">Append-only history of every decision and edit.</p>
+      {% if change.events %}
+      <ul class="audit-feed">
+        {% for e in change.events | reverse %}
+        <li>
+          <span class="when">{{ e.created_at | ist }}</span>
+          <span class="desc">{{ format_change_event(e) | safe }}
+            <span class="actor">by {{ e.actor.display_name if e.actor else "system" }}</span>
+            {% if e.note %}<span class="note">“{{ e.note }}”</span>{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="meta">No events yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ===== SIDE ===== #}
+  <aside class="side">
+
+    <div class="panel">
+      <h4>Current status</h4>
+      <div style="margin-bottom:10px;"><span class="cstatus s-{{ change.status.value }}">{{ change.status.value.replace("_"," ") }}</span></div>
+
+      {# Stage-specific actions #}
+      {% if change.status.value == 'draft' %}
+      <form method="post" action="/changes/{{ change.id }}/submit">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <button type="submit" class="wf-btn primary">Submit for CAB review →</button>
+      </form>
+
+      {% elif change.status.value == 'under_review' %}
+        {% if current_user.id != change.requester_id %}
+        <form method="post" action="/changes/{{ change.id }}/approve" class="wf-note" style="margin-bottom:10px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <textarea name="note" placeholder="Approval note (optional)"></textarea>
+          <button type="submit" class="wf-btn primary">✓ Approve</button>
+        </form>
+        <form method="post" action="/changes/{{ change.id }}/reject" class="wf-note">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <textarea name="note" placeholder="Reason for rejection"></textarea>
+          <button type="submit" class="wf-btn danger">✕ Reject</button>
+        </form>
+        {% else %}
+        <p class="meta" style="font-size:12.5px; margin:0;">⏳ Awaiting CAB. You can't approve your own change — another admin/agent must.</p>
+        {% endif %}
+
+      {% elif change.status.value == 'approved' %}
+      <form method="post" action="/changes/{{ change.id }}/start">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <button type="submit" class="wf-btn primary">▶ Start implementation</button>
+      </form>
+
+      {% elif change.status.value == 'in_progress' %}
+      <form method="post" action="/changes/{{ change.id }}/complete" class="wf-note" style="margin-bottom:10px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <textarea name="note" placeholder="Completion note"></textarea>
+        <button type="submit" class="wf-btn primary">✓ Mark completed</button>
+      </form>
+      <form method="post" action="/changes/{{ change.id }}/fail" class="wf-note">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <textarea name="note" placeholder="Failure reason / rollback notes"></textarea>
+        <button type="submit" class="wf-btn danger">⚠ Mark failed</button>
+      </form>
+      {% endif %}
+
+      {% if change.status.value not in ('completed','failed','cancelled','rejected') %}
+      <form method="post" action="/changes/{{ change.id }}/cancel" class="wf-note" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <textarea name="note" placeholder="Cancellation reason"></textarea>
+        <button type="submit" class="wf-btn danger">Cancel change</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if change.cab_decision_at %}
+    <div class="panel">
+      <h4>CAB decision</h4>
+      <dl>
+        <dt>By</dt><dd>{{ change.cab_approver.display_name if change.cab_approver else "—" }}</dd>
+        <dt>At</dt><dd>{{ change.cab_decision_at | ist }}</dd>
+        {% if change.cab_decision_note %}<dt>Note</dt><dd>“{{ change.cab_decision_note }}”</dd>{% endif %}
+      </dl>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <h4>People</h4>
+      <dl>
+        <dt>Requester</dt><dd>{{ change.requester.display_name }}</dd>
+        <dt>Implementer</dt><dd>{{ change.implementer.display_name if change.implementer else "—" }}</dd>
+        <dt>CAB approver</dt><dd>{{ change.cab_approver.display_name if change.cab_approver else "—" }}</dd>
+      </dl>
+    </div>
+
+    <div class="panel">
+      <h4>Window</h4>
+      <dl>
+        <dt>Planned start</dt><dd>{% if change.planned_start %}{{ change.planned_start | ist }}{% else %}—{% endif %}</dd>
+        <dt>Planned end</dt><dd>{% if change.planned_end %}{{ change.planned_end | ist }}{% else %}—{% endif %}</dd>
+        <dt>Actual start</dt><dd>{% if change.actual_start %}{{ change.actual_start | ist }}{% else %}—{% endif %}</dd>
+        <dt>Actual end</dt><dd>{% if change.actual_end %}{{ change.actual_end | ist }}{% else %}—{% endif %}</dd>
+      </dl>
+    </div>
+
+  </aside>
+</div>
+
+{% endblock %}

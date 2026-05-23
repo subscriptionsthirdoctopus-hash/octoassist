@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}KB Categories — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Knowledge Base · Categories</h1>
+  <p class="meta"><a href="/kb">← Back to KB</a></p>
+</section>
+
+<div class="card form" style="max-width:760px;">
+  <h3>Add a category</h3>
+  <form method="post" action="/kb/categories/new" class="row-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label>Name<input type="text" name="name" required></label>
+    <label>Description<input type="text" name="description"></label>
+    <label>Sort order<input type="number" name="sort_order" value="0" style="width:80px;"></label>
+    <button type="submit" class="primary">Add</button>
+  </form>
+</div>
+
+{% if rows %}
+<table class="data" style="margin-top:16px;max-width:960px;">
+  <thead><tr><th>Name</th><th>Description</th><th>Sort</th><th>Articles</th><th></th></tr></thead>
+  <tbody>
+    {% for c in rows %}
+    <tr>
+      <td><strong>{{ c.name }}</strong></td>
+      <td>{{ c.description or "—" }}</td>
+      <td>{{ c.sort_order }}</td>
+      <td>{{ c.articles|length }}</td>
+      <td>
+        <form method="post" action="/kb/categories/{{ c.id }}/delete" class="inline-form" onsubmit="return confirm('Delete this category? Articles in it will be uncategorised.');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <button type="submit" class="link-button" style="color:var(--red);">delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

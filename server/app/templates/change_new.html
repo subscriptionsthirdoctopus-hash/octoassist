@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}New Change — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>New Change Record</h1>
+  <p class="meta">
+    Every production-touching change is logged here. After you fill this in
+    and submit, the change becomes visible to the CAB (Change Advisory Board)
+    technicians for approval.
+  </p>
+</section>
+
+<!-- Workflow stepper — illustrative, no live data -->
+<section class="card" style="margin-bottom:18px;background:var(--surface-2);">
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;">
+    <span class="prio prio-low" style="font-weight:600;">1. Draft</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-medium" style="font-weight:600;">2. Submitted</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-high" style="font-weight:600;">3. CAB review</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-critical" style="font-weight:600;">4. Approved</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-medium" style="font-weight:600;">5. In progress</span>
+    <span style="color:var(--slate);">→</span>
+    <span class="prio prio-low" style="font-weight:600;">6. Completed</span>
+  </div>
+  <p class="meta" style="margin:10px 0 0;font-size:12px;">
+    <strong>Tip:</strong> tick <em>“Submit for CAB approval now”</em> below to
+    skip the draft stage and route directly to the technicians. Use draft if
+    you're still working with stakeholders to refine the rollback plan.
+  </p>
+</section>
+
+<form method="post" action="/changes/new" class="card form" style="max-width:880px;" id="changeForm">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+
+  <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:10px 14px;border-radius:6px;margin-bottom:6px;">
+    <label style="font-weight:600;color:#1e3a8a;display:block;margin-bottom:6px;">⚡ Quick-start scenario <span class="meta" style="font-weight:400;">— pick the closest match, then tweak the details below.</span></label>
+    <select id="scenarioPicker" style="width:100%;padding:8px 10px;border:1px solid #93c5fd;border-radius:6px;background:var(--surface);font-size:13px;">
+      <option value="">— start from scratch —</option>
+      <option value="patch">Server patching window</option>
+      <option value="firewall">Firewall rule change</option>
+      <option value="sap_gui">SAP GUI upgrade on workstations</option>
+      <option value="entra_app">Entra ID app registration / SSO config</option>
+      <option value="ad_gpo">AD group policy update</option>
+      <option value="m365_perm">Microsoft 365 permission / role change</option>
+      <option value="dns">DNS record change</option>
+      <option value="cert_renew">SSL/TLS certificate renewal</option>
+      <option value="db_schema">Database schema migration</option>
+      <option value="vpn">VPN / network appliance config</option>
+      <option value="endpoint_install">Bulk software install on endpoints</option>
+      <option value="emergency_rollback">Emergency rollback (post-impl review)</option>
+    </select>
+  </div>
+
+  <label>Title <span class="meta">(one-line summary — what is changing and where)</span>
+    <input type="text" name="title" id="fTitle" required maxlength="255"
+           placeholder="e.g. Upgrade SAP GUI from 7.70 to 8.00 on 12 design workstations">
+  </label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Type
+      <select name="change_type" id="fType">
+        <option value="normal" selected>normal — needs CAB approval</option>
+        <option value="standard">standard — pre-approved low-risk</option>
+        <option value="emergency">emergency — post-implementation review</option>
+      </select>
+    </label>
+    <label>Risk
+      <select name="risk" id="fRisk">
+        <option value="low">low — single user, no downtime</option>
+        <option value="medium" selected>medium — multiple users, off-hours possible</option>
+        <option value="high">high — production system / plant network</option>
+      </select>
+    </label>
+  </div>
+
+  <label>Description <span class="meta">(what is changing, where, and WHY)</span>
+    <textarea name="description" id="fDesc" rows="4"
+              placeholder="What:  Roll SAP GUI 8.00 patch 9 to 12 engineering workstations in Bldg-A.&#10;Where: Hostnames ENG-WS-01 to ENG-WS-12.&#10;Why:   SAP S/4HANA production server now enforces TLS 1.2; older GUI 7.70 fails handshake."></textarea>
+  </label>
+
+  <label>Impact <span class="meta">(who or what is affected; expected disruption window)</span>
+    <textarea name="impact" id="fImpact" rows="3"
+              placeholder="Affected users: 12 design engineers in Bldg-A.&#10;Downtime: ~10 min per workstation while installer runs.&#10;Window: 22:00–23:00, Saturday (off-shift, no SAP transactions expected)."></textarea>
+  </label>
+
+  <label>Rollback plan <span class="meta">(THIS is what makes the change CAB-approvable — be specific)</span>
+    <textarea name="rollback_plan" id="fRollback" rows="5"
+              placeholder="If install fails on a workstation:&#10;1. Uninstall SAP GUI 8.00 via Programs &amp; Features.&#10;2. Re-install SAP GUI 7.70 from \\fileserver\install$\sap-gui-7.70\setup.exe.&#10;3. Restart workstation, confirm user can log in to SAP-DEV (port 3200).&#10;4. If &gt;3 workstations fail, abort full rollout and reschedule."></textarea>
+  </label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <label>Planned start <span class="meta"></span>
+      <input type="datetime-local" name="planned_start">
+    </label>
+    <label>Planned end <span class="meta"></span>
+      <input type="datetime-local" name="planned_end">
+    </label>
+  </div>
+
+  <label class="checkbox" style="margin-top:8px;">
+    <input type="checkbox" name="submit_now" value="1" checked>
+    <strong>Submit for CAB approval now</strong>
+    <span class="meta" style="display:block;margin-left:24px;font-size:12.5px;">
+      Routes the change straight to the technicians' approval queue.
+      Untick to save as <em>Draft</em> for later refinement.
+    </span>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Save change</button>
+    <a href="/changes" class="link-button">Cancel</a>
+  </div>
+</form>
+
+<script>
+(function(){
+  // Pre-defined scenario library — sets type/risk and pre-fills the 4 main
+  // text fields with a sensible skeleton the user can edit. Picked from the
+  // dropdown above the form. All values are illustrative; user is expected
+  // to replace bracketed placeholders with real names/hostnames/dates.
+  var SCENARIOS = {
+    patch: {
+      type:"standard", risk:"medium",
+      title:"Monthly OS patch rollout — [Wave 1 servers]",
+      desc:"What:  Apply [YYYY-MM] cumulative OS security patches to [N] Windows servers.\nWhere: [Hostnames or AD group].\nWhy:   Stay current with Microsoft security baseline; close advisories [CVE-...].",
+      impact:"Affected: [N] servers, [services] consumers.\nDowntime: ~5–15 min reboot per host, rolling.\nWindow: [Sat 22:00–02:00].\nUser-visible: brief application slowdown during reboot of [service tier].",
+      rollback:"Per-host:\n1. If post-patch boot fails > 10 min, force reboot to last-known-good via iDRAC/iLO.\n2. Roll back patches via 'wusa /uninstall /kb:[KB#]' or 'DISM /Remove-Package'.\n3. Confirm core services start (IIS, SQL, etc.).\n4. If > 2 hosts fail to boot, pause wave and engage vendor support."
+    },
+    firewall: {
+      type:"normal", risk:"high",
+      title:"Firewall rule change on [device/zone]",
+      desc:"What:  [Allow/Deny] [src CIDR] → [dst CIDR] on [port/protocol].\nWhere: [Palo Alto/Fortinet/etc.] device [name] in [DC/branch].\nWhy:   [New application onboarding / vendor access / audit finding closure].",
+      impact:"Affected: [user group / app].\nDowntime: rule push is non-disruptive but increases attack surface — peer review required.\nWindow: business hours OK with rollback ready.",
+      rollback:"1. Keep original rule export (.xml/.json) before commit.\n2. If unexpected traffic flow observed, restore previous config via 'load config from [filename]' + commit.\n3. Verify reachability via tcpdump on [src host]: 'tcpdump host [dst] and port [n]'."
+    },
+    sap_gui: {
+      type:"normal", risk:"medium",
+      title:"Upgrade SAP GUI from [7.70] to [8.00] on [N] workstations",
+      desc:"What:  Push SAP GUI [8.00 patch N] silent installer to engineering workstations.\nWhere: [Hostnames or AD OU].\nWhy:   [TLS 1.2 enforcement / vendor end-of-support / new feature].",
+      impact:"Affected: [N] design engineers.\nDowntime: ~10 min per workstation, no reboot.\nWindow: 22:00–23:00, Saturday (off-shift).",
+      rollback:"Per-workstation:\n1. Uninstall SAP GUI 8.00 via Programs & Features.\n2. Re-install 7.70 from \\\\fileserver\\install$\\sap-gui-7.70\\setup.exe.\n3. Confirm login to [SAP-DEV] on port [3200].\n4. If > 3 workstations fail, abort wave and reschedule."
+    },
+    entra_app: {
+      type:"normal", risk:"medium",
+      title:"Update Entra ID app registration — [App name]",
+      desc:"What:  [Add redirect URI / add API permission / rotate client secret] on app reg [appId / display name].\nWhere: Entra ID tenant [tenant.onmicrosoft.com].\nWhy:   [New integration / secret expiry / scope expansion].",
+      impact:"Affected: users authenticating via this app.\nDowntime: nil if change is additive; up to [5 min] if secret rotation requires app restart.\nWindow: business hours acceptable.",
+      rollback:"1. Keep screenshot of original app reg config (Authentication, API permissions, Certificates & secrets).\n2. If sign-in failures spike post-change, remove the added permission / restore previous redirect URI.\n3. If secret rotated, revert by re-applying old secret value (stored in [vault path])."
+    },
+    ad_gpo: {
+      type:"normal", risk:"medium",
+      title:"AD Group Policy update — [GPO name]",
+      desc:"What:  Modify [setting path] under [Computer/User Config] in GPO [name] linked to [OU].\nWhere: AD domain [contoso.local].\nWhy:   [Security baseline / audit / hardening requirement].",
+      impact:"Affected: machines/users in [OU] (~[N]).\nDowntime: nil; applies on next 'gpupdate' cycle (~90 min).\nWindow: business hours acceptable.",
+      rollback:"1. Export GPO via 'Backup-GPO -Name [name] -Path [backup path]' BEFORE editing.\n2. If unintended effect: Restore-GPO from backup; run 'gpupdate /force' on affected hosts.\n3. Verify resultant set of policy on a canary host: 'gpresult /h [out].html'."
+    },
+    m365_perm: {
+      type:"normal", risk:"medium",
+      title:"M365 role / permission change — [role]",
+      desc:"What:  [Grant / revoke] [role name] on [user / group / mailbox].\nWhere: [Exchange Online / SharePoint / Teams admin center].\nWhy:   [Onboarding / offboarding / least-privilege review].",
+      impact:"Affected: [target user/group].\nDowntime: nil; effective immediately.\nWindow: business hours acceptable.",
+      rollback:"1. Record current role assignments (Get-MgUserRoleAssignment or admin center screenshot) BEFORE change.\n2. If incorrect, revert by removing the added role assignment / re-adding the removed one.\n3. Confirm user can perform expected actions."
+    },
+    dns: {
+      type:"normal", risk:"high",
+      title:"DNS record change — [hostname]",
+      desc:"What:  [Add / modify / delete] [A / CNAME / TXT / MX] record for [hostname.example.com].\nWhere: [Authoritative DNS — Cloudflare / Route53 / internal AD DNS].\nWhy:   [Service migration / cert validation / vendor onboarding].",
+      impact:"Affected: anyone resolving [hostname].\nDowntime: depends on TTL — drop TTL to 60s the day before.\nWindow: low-traffic period.",
+      rollback:"1. Export zone file / take screenshot of record BEFORE change.\n2. If wrong destination resolved, restore original record value.\n3. Verify via 'dig +short [hostname] @[ns]' from internal + external resolver.\n4. Restore higher TTL once stable."
+    },
+    cert_renew: {
+      type:"standard", risk:"medium",
+      title:"SSL/TLS certificate renewal — [hostname]",
+      desc:"What:  Replace certificate on [hostname] expiring [date].\nWhere: [Load balancer / IIS / nginx / Azure App Service].\nWhy:   Routine renewal — current cert expires [date].",
+      impact:"Affected: clients connecting to [hostname].\nDowntime: ~30 sec service restart (if applicable).\nWindow: low-traffic period.",
+      rollback:"1. Keep previous .pfx / .pem on disk BEFORE replacement.\n2. If TLS handshake errors observed, restore previous cert and reload service.\n3. Verify cert chain via 'openssl s_client -connect [host]:443 -showcerts'."
+    },
+    db_schema: {
+      type:"normal", risk:"high",
+      title:"Database schema migration — [database / table]",
+      desc:"What:  [Add column / index / migration] on [db.table].\nWhere: [Postgres / MSSQL / Oracle] instance [name].\nWhy:   [Feature X requires Y / index for performance / data backfill].",
+      impact:"Affected: applications reading/writing [table].\nDowntime: [seconds — minutes depending on table size and lock semantics].\nWindow: off-peak; take pre-change backup.",
+      rollback:"1. Take logical backup of affected tables BEFORE change: 'pg_dump -t [table] [db] > pre.sql'.\n2. If migration fails mid-way, restore table from backup.\n3. For additive changes (new column, new index): drop the addition.\n4. Verify app functions normally on canary instance first."
+    },
+    vpn: {
+      type:"normal", risk:"high",
+      title:"VPN / network appliance config — [device]",
+      desc:"What:  [Add tunnel / change route / update policy] on [Fortigate / Cisco ASA / etc.].\nWhere: [device name / DC].\nWhy:   [New site-to-site / vendor connectivity / route optimisation].",
+      impact:"Affected: users on [VPN gateway] or routes through [device].\nDowntime: brief if commit triggers session reset.\nWindow: off-hours required.",
+      rollback:"1. Save running-config BEFORE change: 'copy running-config startup-config-pre' (or vendor equivalent).\n2. If session/tunnel failures observed, 'copy startup-config-pre running-config' to revert.\n3. Verify via ping/traceroute from a known-good endpoint."
+    },
+    endpoint_install: {
+      type:"standard", risk:"low",
+      title:"Bulk software install — [package] on [target group]",
+      desc:"What:  Push [software name and version] to [N] endpoints via OctoAssist patch deploy.\nWhere: [Hostname pattern or hand-picked].\nWhy:   [License compliance / new tooling / vendor requirement].",
+      impact:"Affected: [N] endpoints, end-users may see installer briefly.\nDowntime: nil; install runs as SYSTEM in background.\nWindow: business hours acceptable for low-risk apps.",
+      rollback:"1. Per-endpoint: uninstall via Programs & Features or 'msiexec /x [productcode]'.\n2. For wide deploys, use OctoAssist remote PowerShell to remove silently.\n3. If installer corrupts user profile, restore from system restore point."
+    },
+    emergency_rollback: {
+      type:"emergency", risk:"high",
+      title:"Emergency rollback — [thing that broke]",
+      desc:"What:  Roll back [recent change] that is causing [impact].\nWhere: [system / endpoint group].\nWhy:   Production incident — [symptom].",
+      impact:"Affected: [users / services] currently experiencing [symptom].\nDowntime: already degraded; rollback restores service.\nWindow: NOW — bypassing CAB pre-approval per emergency policy.",
+      rollback:"This IS the rollback. Post-implementation review documents:\n1. What broke and why.\n2. Steps taken to restore service.\n3. Verification: [service] is responding normally.\n4. Follow-up action: root-cause within [5 business days]."
+    }
+  };
+
+  var picker = document.getElementById("scenarioPicker");
+  if (!picker) return;
+  function fields() {
+    return {
+      title:    document.getElementById("fTitle"),
+      type:     document.getElementById("fType"),
+      risk:     document.getElementById("fRisk"),
+      desc:     document.getElementById("fDesc"),
+      impact:   document.getElementById("fImpact"),
+      rollback: document.getElementById("fRollback")
+    };
+  }
+  function anyFilled(f) {
+    return (f.title.value && f.title.value.trim()) ||
+           (f.desc.value && f.desc.value.trim()) ||
+           (f.impact.value && f.impact.value.trim()) ||
+           (f.rollback.value && f.rollback.value.trim());
+  }
+  picker.addEventListener("change", function(){
+    var s = SCENARIOS[picker.value];
+    if (!s) return;
+    var f = fields();
+    if (anyFilled(f) && !confirm("Overwrite what you've typed with the '" + picker.options[picker.selectedIndex].text + "' template?")) {
+      picker.value = "";
+      return;
+    }
+    f.title.value = s.title;
+    f.type.value = s.type;
+    f.risk.value = s.risk;
+    f.desc.value = s.desc;
+    f.impact.value = s.impact;
+    f.rollback.value = s.rollback;
+    f.title.focus();
+    f.title.setSelectionRange(0, f.title.value.length);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,452 @@
+"""Agent install endpoints.
+
+Two paths:
+  - /agent/install.ps1  — one-shot PowerShell installer with enrolment
+                          key and server URL inlined. Public (the enrolment
+                          key is per-tenant and surfaced in the admin UI).
+  - /agent/files/*      — static downloads of the source script + docs.
+                          Staff-only (requires login).
+"""
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, PlainTextResponse
+from sqlalchemy.orm import Session
+
+from ..auth import require_staff
+from ..database import get_db
+from ..models import Tenant, User
+
+# Where the image bundles the agent files (Dockerfile copies agent-py → /srv/agent_py)
+AGENT_DIR = Path("/srv/agent_py")
+
+ALLOWED_FILES = {
+    "octoassist_agent.py":   "text/x-python",
+    "install-windows.ps1":   "text/x-powershell",
+    "README.md":             "text/markdown",
+    # Offline PSWindowsUpdate module — for endpoints whose firewall blocks
+    # powershellgallery.com but can still reach the OctoAssist server.
+    # ~230 KB, contains the PSWindowsUpdate/ folder structure ready to drop
+    # into $env:ProgramFiles\WindowsPowerShell\Modules\.
+    "pswindowsupdate.zip":   "application/zip",
+}
+
+router = APIRouter(tags=["agent-install"])
+
+
+# ---------- the one-liner installer ----------
+
+@router.get("/agent/install.ps1", response_class=PlainTextResponse)
+def install_ps1(request: Request, db: Session = Depends(get_db)):
+    """Self-contained PowerShell installer.
+
+    Usage on a Windows endpoint, in an elevated PowerShell:
+
+        iex (iwr -useb http://68.183.86.66:8088/agent/install.ps1).Content
+
+    Server URL and enrolment key are baked into the response from the
+    request's Host header + the tenant row, so the endpoint admin runs
+    the same one-liner regardless of where OctoAssist is deployed.
+    """
+    tenant = db.query(Tenant).first()
+    if tenant is None:
+        raise HTTPException(status_code=503, detail="No tenant configured")
+    server_url = str(request.base_url).rstrip("/")
+    enrol = tenant.enrolment_key
+
+    script = _PS1_TEMPLATE.format(server_url=server_url, enrolment_key=enrol)
+    return PlainTextResponse(content=script, media_type="text/plain")
+
+
+_PS1_TEMPLATE = r"""# OctoAssist agent — one-shot Windows installer.
+# Auto-generated; do not edit. Run in an elevated PowerShell:
+#   iex (iwr -useb {server_url}/agent/install.ps1).Content
+
+$ErrorActionPreference = "Stop"
+
+$SERVER_URL    = "{server_url}"
+$ENROLMENT_KEY = "{enrolment_key}"
+$INSTALL_DIR   = "$env:ProgramFiles\OctoAssist Agent"
+$DATA_DIR      = "$env:ProgramData\OctoAssist"
+$AGENT_SCRIPT  = Join-Path $INSTALL_DIR "octoassist_agent.py"
+$TASK_NAME     = "OctoAssist Agent"
+
+function Write-Step($msg) {{ Write-Host "==> $msg" -ForegroundColor Cyan }}
+function Write-Ok($msg)   {{ Write-Host "    OK $msg" -ForegroundColor Green }}
+function Write-Warn2($m)  {{ Write-Host "    !  $m" -ForegroundColor Yellow }}
+
+# 1. Elevation
+$id = [Security.Principal.WindowsIdentity]::GetCurrent()
+$pr = New-Object Security.Principal.WindowsPrincipal($id)
+if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {{
+    throw "Run this in an elevated PowerShell (Run as Administrator)."
+}}
+Write-Ok "Running as Administrator"
+
+# 2. Python — careful here: Windows 10/11 ships an "App Execution Alias"
+#    stub at %LOCALAPPDATA%\Microsoft\WindowsApps\python.exe that LOOKS like
+#    Python but just opens the Microsoft Store and exits 9009. We have to
+#    detect it and install the real thing.
+function Test-RealPython($path) {{
+    if (-not $path) {{ return $false }}
+    if ($path -match "\\Microsoft\\WindowsApps\\python(3)?\.exe$") {{ return $false }}
+    try {{
+        $out = & $path --version 2>&1
+        if ($LASTEXITCODE -ne 0) {{ return $false }}
+        return ($out -match "^Python \d+\.\d+")
+    }} catch {{ return $false }}
+}}
+
+# First try the official Python Launcher (py.exe) — always points at a real install.
+$pyExe = $null
+$launcher = Get-Command py -ErrorAction SilentlyContinue
+if ($launcher) {{
+    try {{
+        $candidate = (& $launcher.Path -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
+        if (Test-RealPython $candidate) {{ $pyExe = $candidate }}
+    }} catch {{}}
+}}
+# Else try `python` in PATH (skipping the Store stub)
+if (-not $pyExe) {{
+    foreach ($cand in (Get-Command python -All -ErrorAction SilentlyContinue)) {{
+        if (Test-RealPython $cand.Path) {{ $pyExe = $cand.Path; break }}
+    }}
+}}
+
+if (-not $pyExe) {{
+    Write-Step "Real Python not found (the Store alias doesn't count) — installing Python 3.12"
+
+    function Find-RealPythonPostInstall() {{
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        $search = @(
+            "$env:ProgramFiles\Python312\python.exe",
+            "$env:ProgramFiles\Python311\python.exe",
+            "$env:ProgramFiles\Python310\python.exe",
+            "${{env:ProgramFiles(x86)}}\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe"
+        )
+        foreach ($p in $search) {{
+            if ((Test-Path $p) -and (Test-RealPython $p)) {{ return $p }}
+        }}
+        $launcher = Get-Command py -ErrorAction SilentlyContinue
+        if ($launcher) {{
+            $candidate = (& $launcher.Path -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
+            if (Test-RealPython $candidate) {{ return $candidate }}
+        }}
+        return $null
+    }}
+
+    # Strategy 1: winget — fast and signed-source. But winget often breaks
+    # on machines where the msstore source needs terms acceptance or the
+    # winget source index is corrupted (0x8a15000f). We force --source winget
+    # to skip msstore, and treat any failure as a soft-fail then fall back.
+    $wingetOk = $false
+    if (Get-Command winget -ErrorAction SilentlyContinue) {{
+        try {{
+            winget install --id Python.Python.3.12 --source winget --silent --accept-package-agreements --accept-source-agreements --scope machine 2>&1 | Out-Host
+            if ($LASTEXITCODE -eq 0) {{ $wingetOk = $true }}
+        }} catch {{
+            Write-Warn2 "winget threw: $_"
+        }}
+        if (-not $wingetOk) {{ Write-Warn2 "winget install did not succeed; falling back to direct download from python.org" }}
+    }} else {{
+        Write-Warn2 "winget not available; falling back to direct download from python.org"
+    }}
+    $pyExe = Find-RealPythonPostInstall
+
+    # Strategy 2: direct download from python.org. No registry trust, just
+    # an authenticated TLS connection to python.org's CDN.
+    if (-not $pyExe) {{
+        $pyVer = "3.12.7"
+        $pyUrl = "https://www.python.org/ftp/python/$pyVer/python-$pyVer-amd64.exe"
+        $tmp   = Join-Path $env:TEMP ("python-" + $pyVer + "-amd64.exe")
+        Write-Step "Downloading Python $pyVer installer from python.org"
+        try {{
+            Invoke-WebRequest -UseBasicParsing -Uri $pyUrl -OutFile $tmp
+        }} catch {{
+            throw "Could not download Python from python.org: $_  Check outbound HTTPS / proxy settings."
+        }}
+        Write-Step "Running Python installer silently (machine scope, PATH on, py launcher on)"
+        $args = @("/quiet","InstallAllUsers=1","PrependPath=1","Include_test=0","Include_doc=0","Include_launcher=1")
+        $proc = Start-Process -FilePath $tmp -ArgumentList $args -Wait -PassThru
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+        if ($proc.ExitCode -ne 0) {{
+            throw "Python installer exited with code $($proc.ExitCode). Re-run the one-liner in a new elevated PowerShell."
+        }}
+        $pyExe = Find-RealPythonPostInstall
+    }}
+
+    if (-not $pyExe) {{
+        throw "Python install completed but no real python.exe found. Close this PowerShell, open a NEW elevated PowerShell, and re-run the one-liner."
+    }}
+}}
+Write-Ok ("Python at " + $pyExe)
+$pyCmd = [PSCustomObject]@{{ Path = $pyExe }}
+
+# 2b. PSWindowsUpdate — needed for Windows Update KB deployment. Installs
+#     into the AllUsers scope so SYSTEM (the Scheduled Task account) can
+#     import it. NuGet provider is required first.
+Write-Step "Ensuring PowerShell dependencies (NuGet provider + PSWindowsUpdate module)"
+try {{
+    if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {{
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers | Out-Null
+        Write-Ok "NuGet provider installed"
+    }} else {{
+        Write-Ok "NuGet provider present"
+    }}
+}} catch {{
+    Write-Warn2 "NuGet provider install failed: $_  — generic software patching will still work, only KB-based Windows Update is affected."
+}}
+try {{
+    if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue | Where-Object {{ $_.InstallationPolicy -eq 'Trusted' }})) {{
+        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+    }}
+    if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {{
+        Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop
+        Write-Ok "PSWindowsUpdate module installed"
+    }} else {{
+        Write-Ok "PSWindowsUpdate module already present"
+    }}
+}} catch {{
+    Write-Warn2 "PSWindowsUpdate install failed: $_  — winget-based software patching still works; KB-based Windows Update KBs won't be applied by this agent until the module is installed."
+}}
+
+# 3. Install dir + download agent script
+Write-Step "Installing agent script to $INSTALL_DIR"
+New-Item -ItemType Directory -Force $INSTALL_DIR | Out-Null
+New-Item -ItemType Directory -Force $DATA_DIR    | Out-Null
+$src = "$SERVER_URL/agent/files/octoassist_agent.py"
+Invoke-WebRequest -UseBasicParsing -Uri $src -OutFile $AGENT_SCRIPT
+Write-Ok ("Saved " + $AGENT_SCRIPT)
+
+# 4. Bootstrap config (writes $DATA_DIR\agent.json)
+Write-Step "Bootstrapping config (server + enrolment key)"
+& $pyCmd.Path $AGENT_SCRIPT --bootstrap --server-url=$SERVER_URL --enrolment-key=$ENROLMENT_KEY --interval-hours=6
+Write-Ok "Config written"
+
+# 5. Scheduled Task — SYSTEM, runs daemon at boot + every-15-min safety net.
+#    The daemon itself polls /api/v1/agent/deployments every 5 minutes; the
+#    safety-net trigger ensures the daemon comes back if it ever crashes or
+#    is killed by anti-malware. Multiple-instance-policy = IgnoreNew so the
+#    safety-net never starts a second copy if the first is still alive.
+Write-Step "Registering Scheduled Task '$TASK_NAME'"
+Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+
+# Prefer pythonw.exe (no console window, GUI subsystem) so even if any
+# subprocess code path forgets CREATE_NO_WINDOW, there's no console flash.
+$pyExeForTask = $pyExe -replace 'python\.exe$', 'pythonw.exe'
+if (-not (Test-Path $pyExeForTask)) {{ $pyExeForTask = $pyExe }}  # fall back if pythonw missing
+$action      = New-ScheduledTaskAction  -Execute $pyExeForTask -Argument ('"' + $AGENT_SCRIPT + '"')
+$bootTrig    = New-ScheduledTaskTrigger -AtStartup
+$repeatTrig  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
+                                        -RepetitionInterval (New-TimeSpan -Minutes 15) `
+                                        -RepetitionDuration ([System.TimeSpan]::FromDays(365 * 10))
+$principal   = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$settings    = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1) `
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit ([System.TimeSpan]::Zero)
+
+Register-ScheduledTask -TaskName $TASK_NAME `
+    -Action $action -Trigger @($bootTrig, $repeatTrig) `
+    -Principal $principal -Settings $settings `
+    -Description "OctoAssist asset agent (Python) — runs as SYSTEM; polls for patch deployments every 5 minutes, posts full inventory every 6 hours. End-users never see anything." | Out-Null
+Write-Ok "Scheduled Task registered (boot trigger + 15-min safety net)"
+
+# 6. First check-in NOW (verifies network + auth, registers in /assets)
+Write-Step "First check-in (one-shot, verifies end-to-end)"
+& $pyCmd.Path $AGENT_SCRIPT --once
+if ($LASTEXITCODE -ne 0) {{
+    Write-Warn2 "First check-in returned exit code $LASTEXITCODE — check $DATA_DIR\logs\agent.log"
+}} else {{
+    Write-Ok "First check-in succeeded"
+}}
+
+# 7. Start the scheduled task (so daemon mode is running)
+Start-ScheduledTask -TaskName $TASK_NAME
+Write-Ok "Task started — agent is live"
+
+Write-Host ""
+Write-Host "==============================================================" -ForegroundColor Cyan
+Write-Host "  OctoAssist agent installed."                                  -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Server:           $SERVER_URL"
+Write-Host "  Python:           $($pyCmd.Path)"
+$wuMod = Get-Module -ListAvailable PSWindowsUpdate | Select-Object -First 1
+if ($wuMod) {{
+    Write-Host "  PSWindowsUpdate:  $($wuMod.Version) (KB-based Windows Update enabled)"
+}} else {{
+    Write-Host "  PSWindowsUpdate:  not installed (KB-based Windows Update disabled — only winget software patching will work)"
+}}
+$wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+if ($wingetCmd) {{
+    Write-Host "  winget:           $($wingetCmd.Path) (generic-software patching enabled)"
+}} else {{
+    Write-Host "  winget:           NOT FOUND (generic-software patching disabled — update Windows App Installer from the Store)"
+}}
+Write-Host "  Config:           $DATA_DIR\agent.json"
+Write-Host "  Logs:             $DATA_DIR\logs\agent.log"
+Write-Host "  Task:             $TASK_NAME (Task Scheduler)"
+Write-Host "  Run on demand:    python `"$AGENT_SCRIPT`" --once"
+Write-Host "  Stop:             Stop-ScheduledTask -TaskName `"$TASK_NAME`""
+Write-Host "  Uninstall:        Unregister-ScheduledTask -TaskName `"$TASK_NAME`" -Confirm:`$false ;"
+Write-Host "                    Remove-Item -Recurse -Force `"$INSTALL_DIR`",`"$DATA_DIR`""
+Write-Host ""
+Write-Host "  This endpoint will appear in OctoAssist /assets within a minute."
+Write-Host "==============================================================" -ForegroundColor Cyan
+"""
+
+
+# ---------- the stable "refresh" one-liner ----------
+
+@router.get("/agent/refresh.ps1", response_class=PlainTextResponse)
+def refresh_ps1(request: Request, db: Session = Depends(get_db)):
+    """Self-contained PowerShell refresh script.
+
+    Stable entry point — the URL never changes. The CONTENTS evolve as
+    we improve the refresh flow (new dependencies, smarter Python detection,
+    extra diagnostics, etc.), but the admin always pastes the same:
+
+        iex (iwr -useb https://octoassist.thirdoctopus.com/agent/refresh.ps1).Content
+
+    Does everything install.ps1's "refresh path" does:
+      - Ensures NuGet + PSGallery trust + PSWindowsUpdate
+      - Smart-finds the real python.exe (any of the standard install dirs)
+      - Pulls the latest agent script
+      - Runs `--once` to apply WU lock-down + report patches immediately
+      - Tails the log so you can see it worked
+    """
+    server_url = str(request.base_url).rstrip("/")
+    script = _REFRESH_PS1_TEMPLATE.format(server_url=server_url)
+    return PlainTextResponse(content=script, media_type="text/plain")
+
+
+_REFRESH_PS1_TEMPLATE = r"""# OctoAssist agent — refresh / re-sync on a running endpoint.
+# Auto-generated; do not edit. Paste in an elevated PowerShell:
+#   iex (iwr -useb {server_url}/agent/refresh.ps1).Content
+#
+# Idempotent. Safe to run on healthy or stale endpoints.
+
+$ErrorActionPreference = "Stop"
+$SERVER_URL    = "{server_url}"
+$INSTALL_DIR   = "$env:ProgramFiles\OctoAssist Agent"
+$AGENT_SCRIPT  = Join-Path $INSTALL_DIR "octoassist_agent.py"
+$DATA_DIR      = "$env:ProgramData\OctoAssist"
+
+function Write-Step($m) {{ Write-Host "==> $m" -ForegroundColor Cyan }}
+function Write-Ok($m)   {{ Write-Host "    OK $m"   -ForegroundColor Green }}
+function Write-Warn2($m){{ Write-Host "    !  $m"   -ForegroundColor Yellow }}
+
+# 1. Elevation check
+$id = [Security.Principal.WindowsIdentity]::GetCurrent()
+$pr = New-Object Security.Principal.WindowsPrincipal($id)
+if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {{
+    throw "Run this in an elevated PowerShell (Run as Administrator)."
+}}
+Write-Ok "Running as Administrator"
+
+# 2. Ensure agent install dir exists (if missing, you need install.ps1 first)
+if (-not (Test-Path $AGENT_SCRIPT)) {{
+    throw "Agent script not found at $AGENT_SCRIPT — run install.ps1 first, then refresh."
+}}
+
+# 3. NuGet + PSGallery + PSWindowsUpdate
+Write-Step "Ensuring PowerShell dependencies"
+try {{
+    if (-not (Get-PackageProvider NuGet -ErrorAction SilentlyContinue)) {{
+        Install-PackageProvider -Name NuGet -Force -Scope AllUsers | Out-Null
+        Write-Ok "NuGet provider installed"
+    }} else {{ Write-Ok "NuGet provider present" }}
+}} catch {{ Write-Warn2 "NuGet install failed: $_" }}
+
+try {{
+    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+    if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {{
+        Install-Module PSWindowsUpdate -Scope AllUsers -Force -AllowClobber -ErrorAction Stop
+        Write-Ok "PSWindowsUpdate module installed"
+    }} else {{ Write-Ok "PSWindowsUpdate module present" }}
+}} catch {{ Write-Warn2 "PSWindowsUpdate install failed: $_  (winget-based patching still works)" }}
+
+# 4. Pull the latest agent script
+Write-Step "Pulling latest agent script from $SERVER_URL"
+Invoke-WebRequest -UseBasicParsing `
+    -Uri "$SERVER_URL/agent/files/octoassist_agent.py" `
+    -OutFile $AGENT_SCRIPT
+Write-Ok "Agent script updated at $AGENT_SCRIPT"
+
+# 5. Locate python.exe (any standard install path; the Microsoft Store stub is excluded by Test-RealPython)
+function Test-RealPython($p) {{
+    if (-not $p) {{ return $false }}
+    if ($p -match "\\Microsoft\\WindowsApps\\python(3)?\.exe$") {{ return $false }}
+    try {{
+        $v = & $p --version 2>&1
+        if ($LASTEXITCODE -ne 0) {{ return $false }}
+        return ($v -match "^Python \d+\.\d+")
+    }} catch {{ return $false }}
+}}
+
+$candidates = @(
+    "$env:ProgramFiles\Python312\python.exe",
+    "$env:ProgramFiles\Python311\python.exe",
+    "$env:ProgramFiles\Python310\python.exe",
+    "${{env:ProgramFiles(x86)}}\Python312\python.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+)
+$pyExe = $candidates | Where-Object {{ Test-RealPython $_ }} | Select-Object -First 1
+if (-not $pyExe) {{
+    $launcher = Get-Command py -ErrorAction SilentlyContinue
+    if ($launcher) {{
+        $candidate = (& $launcher.Path -3 -c "import sys; print(sys.executable)" 2>$null).Trim()
+        if (Test-RealPython $candidate) {{ $pyExe = $candidate }}
+    }}
+}}
+if (-not $pyExe) {{ throw "No real python.exe found. Run install.ps1 to install Python first." }}
+Write-Ok "Python at $pyExe"
+
+# 6. Force an immediate check-in (applies WU lock-down + reports patches)
+Write-Step "Running --once check-in"
+& $pyExe $AGENT_SCRIPT --once
+if ($LASTEXITCODE -ne 0) {{
+    Write-Warn2 "Check-in exit code $LASTEXITCODE — check $DATA_DIR\logs\agent.log"
+}} else {{
+    Write-Ok "Check-in succeeded"
+}}
+
+# 7. Tail the log so the admin can see what got reported
+Write-Host ""
+Write-Host "--- agent.log (last 25 lines) ---" -ForegroundColor Cyan
+$logPath = Join-Path $DATA_DIR "logs\agent.log"
+if (Test-Path $logPath) {{
+    Get-Content $logPath -Tail 25
+}} else {{
+    Write-Warn2 "Log file not found at $logPath"
+}}
+
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "  Refresh complete. Reload /patches in the OctoAssist UI."     -ForegroundColor Cyan
+Write-Host "  This row should flip to 'Fully Updated' or 'N pending'."     -ForegroundColor Cyan
+Write-Host "================================================================" -ForegroundColor Cyan
+"""
+
+
+# ---------- Static downloads (legacy / for inspection) ----------
+
+@router.get("/agent/files/{filename}")
+def agent_file(filename: str):
+    """Public — agent scripts. octoassist_agent.py is referenced by the
+    install.ps1 one-liner so this endpoint can't be staff-only.
+    """
+    if filename not in ALLOWED_FILES:
+        raise HTTPException(status_code=404)
+    path = AGENT_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{filename} not bundled with this image")
+    return FileResponse(
+        str(path),
+        media_type=ALLOWED_FILES[filename],
+        filename=filename,
+    )

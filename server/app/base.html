@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}OctoAssist{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="topbar">
+    <a href="/" class="brand brand-link" aria-label="OctoAssist home">
+      <span class="brand-mark">THIRD OCTOPUS</span>
+      <span class="brand-product">OctoAssist</span>
+    </a>
+    <nav>
+      {% if current_user %}
+        {% if current_user.role.value in ('admin', 'agent') %}
+          <a href="/reports">Dashboard</a>
+          <a href="/tickets">Tickets</a>
+          <a href="/problems">Problems</a>
+          <a href="/changes">Changes</a>
+          <a href="/kb">Knowledge Base</a>
+          <a href="/assets">Assets</a>
+          <a href="/software">Software</a>
+          <a href="/patches">Patches</a>
+          {% if current_user.role.value == 'admin' %}
+            <a href="/users">Users</a>
+            <a href="/settings">Settings</a>
+          {% endif %}
+        {% else %}
+          <a href="/portal">My Tickets</a>
+          <a href="/portal/kb">Knowledge Base</a>
+          <a href="/portal/new">New Request</a>
+        {% endif %}
+        <span class="who">{{ current_user.full_name or current_user.email }} <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>
+        <form method="post" action="/logout" class="inline-form">
+          <button type="submit" class="link-button">Sign out</button>
+        </form>
+      {% else %}
+        <a href="/login">Sign in</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <span>&copy; 2026 Third Octopus &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes</span>
+    <span><a href="https://thirdoctopus.com" target="_blank" rel="noopener">thirdoctopus.com</a></span>
+  </footer>
+</body>
+</html>
