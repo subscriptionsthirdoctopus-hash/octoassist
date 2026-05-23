@@ -154,6 +154,7 @@ def assign(db: Session, *, ticket: Ticket, actor: User, assignee: User | None) -
     ticket.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(ticket)
+    notifications.ticket_assigned(db, ticket, old_id)
     return ticket
 
 
@@ -167,4 +168,5 @@ def update_priority(db: Session, *, ticket: Ticket, actor: User, new_priority: T
     ticket.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(ticket)
+    notifications.ticket_priority_changed(db, ticket, old.value)
     return ticket

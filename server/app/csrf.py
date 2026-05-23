@@ -12,10 +12,8 @@ unauthenticated) is also exempt because no session exists yet.
 import secrets
 
 from fastapi.responses import HTMLResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.types import ASGIApp
-
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 CSRF_FIELD = "csrf"
 CSRF_HEADER = "X-CSRF-Token"
@@ -32,7 +30,7 @@ def get_or_create_token(request: Request) -> str:
     return token
 
 
-class CsrfMiddleware(BaseHTTPMiddleware):
+class CsrfMiddleware:
     """Reject state-changing requests whose CSRF token doesn't match."""
 
     EXEMPT_PREFIXES: tuple[str, ...] = (
@@ -41,21 +39,45 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         "/contact",       # public landing-page demo request, no session yet
     )
 
-    async def dispatch(self, request: Request, call_next):
-        if request.method in SAFE_METHODS:
-            return await call_next(request)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-        path = request.url.path
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET")
+        if method in SAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
         if any(path == p or path.startswith(p) for p in self.EXEMPT_PREFIXES):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
-        # Login form is special — the user has no session yet on first POST.
-        # We allow the first POST to /login, set the cookie, and require CSRF
-        # on later POSTs. Same for the SessionMiddleware's first interaction.
-        if path == "/login":
-            return await call_next(request)
-        if path == "/logout":
-            return await call_next(request)
+        # Login and logout forms are special — we allow the first POST to /login
+        # where the user has no session yet, and require CSRF on later POSTs.
+        if path in ("/login", "/logout"):
+            await self.app(scope, receive, send)
+            return
+
+        # Read the incoming body stream completely to avoid exhausting it
+        # for downstream route handlers.
+        body = b""
+        more_body = True
+        while more_body:
+            message = await receive()
+            body += message.get("body", b"")
+            more_body = message.get("more_body", False)
+
+        # Reconstruct a custom receive channel that replays the accumulated body
+        async def mock_receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        # Create a transient Request object to parse the form/headers safely
+        request = Request(scope, receive=mock_receive)
 
         # Read body's csrf field (form-urlencoded) or X-CSRF-Token header
         submitted = request.headers.get(CSRF_HEADER, "").strip()
@@ -69,21 +91,18 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         expected = request.session.get("csrf", "") if hasattr(request, "session") else ""
 
         if not expected or not submitted or not secrets.compare_digest(submitted, expected):
-            return HTMLResponse(
+            response = HTMLResponse(
                 "<h1>403 — CSRF check failed</h1>"
                 "<p>Your form submission could not be verified. Please reload the page and try again.</p>",
                 status_code=403,
             )
+            await response(scope, receive, send)
+            return
 
-        return await call_next(request)
+        # Hand over request to FastAPI using the cached body stream replayer!
+        await self.app(scope, mock_receive, send)
 
 
 def csrf_context(request: Request) -> dict:
-    """Helper to inject csrf_token into Jinja contexts.
-
-    Usage in views (one line addition):
-        context={..., "csrf_token": get_or_create_token(request)}
-    Or template-level (preferred): a global so every template can do
-        <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    """
+    """Helper to inject csrf_token into Jinja contexts."""
     return {"csrf_token": get_or_create_token(request)}

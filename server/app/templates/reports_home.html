@@ -97,6 +97,62 @@
   </div>
 </section>
 
+<!-- DYNAMIC FILTER BAR -->
+<section class="filter-section" style="margin-bottom: 24px;">
+  <form method="get" action="/reports" class="card" style="padding: 16px 20px; background: rgba(255, 255, 255, 0.02) !important; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--line) !important; border-radius: var(--r-md) !important; display: flex; flex-wrap: wrap; gap: 20px; align-items: center;">
+    
+    <!-- Timeframe Filter -->
+    <div style="display: flex; flex-direction: column; gap: 4px; min-width: 150px; flex: 1 1 150px;">
+      <label style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-3); letter-spacing: 0.5px;">Timeframe</label>
+      <select name="days" onchange="this.form.submit()" style="width: 100%; padding: 8px 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text-1); font-size: 13px; font-weight: 500; cursor: pointer; transition: border-color 0.15s ease;">
+        <option value="7" {% if active_days == 7 %}selected{% endif %}>Last 7 Days</option>
+        <option value="15" {% if active_days == 15 %}selected{% endif %}>Last 15 Days</option>
+        <option value="30" {% if active_days == 30 %}selected{% endif %}>Last 30 Days</option>
+        <option value="90" {% if active_days == 90 %}selected{% endif %}>Last 90 Days</option>
+        <option value="180" {% if active_days == 180 %}selected{% endif %}>Last 180 Days</option>
+      </select>
+    </div>
+
+    <!-- Category Filter -->
+    <div style="display: flex; flex-direction: column; gap: 4px; min-width: 200px; flex: 1 1 200px;">
+      <label style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-3); letter-spacing: 0.5px;">Category</label>
+      <select name="category_id" onchange="this.form.submit()" style="width: 100%; padding: 8px 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text-1); font-size: 13px; font-weight: 500; cursor: pointer; transition: border-color 0.15s ease;">
+        <option value="0">All Categories</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if active_category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Priority Filter -->
+    <div style="display: flex; flex-direction: column; gap: 4px; min-width: 160px; flex: 1 1 160px;">
+      <label style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-3); letter-spacing: 0.5px;">Priority</label>
+      <select name="priority" onchange="this.form.submit()" style="width: 100%; padding: 8px 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text-1); font-size: 13px; font-weight: 500; cursor: pointer; transition: border-color 0.15s ease;">
+        <option value="">All Priorities</option>
+        <option value="low" {% if active_priority == "low" %}selected{% endif %}>Low</option>
+        <option value="medium" {% if active_priority == "medium" %}selected{% endif %}>Medium</option>
+        <option value="high" {% if active_priority == "high" %}selected{% endif %}>High</option>
+        <option value="critical" {% if active_priority == "critical" %}selected{% endif %}>Critical</option>
+      </select>
+    </div>
+
+    <!-- Reset / Status indicator -->
+    <div style="display: flex; align-items: flex-end; margin-top: auto; padding-bottom: 2px;">
+      {% if active_priority or active_category_id != 0 or active_days != 30 %}
+        <a href="/reports" style="font-size: 12px; font-weight: 600; color: var(--red); text-decoration: none; display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-radius: var(--r-sm); background: rgba(239, 68, 68, 0.05); border: 1px dashed rgba(239, 68, 68, 0.2); transition: all 0.2s ease;">
+          ✕ Reset Filters
+        </a>
+      {% else %}
+        <span style="font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px;">
+          <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: pulse 1.5s infinite;"></span>
+          Live Aggregated Data
+        </span>
+      {% endif %}
+    </div>
+
+  </form>
+</section>
+
 <section class="kpi-grid">
   <div class="kpi-card" data-kpi="tickets_open">
     <p class="kpi-label">Open tickets</p>
@@ -105,12 +161,12 @@
     <div class="kpi-spark">{{ spark_tickets|safe }}</div>
   </div>
   <div class="kpi-card" data-kpi="tickets_resolved_7d">
-    <p class="kpi-label">Resolved (last 7d)</p>
+    <p class="kpi-label">Resolved (last {{ active_days }}d)</p>
     <p class="kpi-value">{{ kpi.tickets_resolved_7d }}</p>
     <p class="kpi-sub">across all priorities</p>
   </div>
   <div class="kpi-card">
-    <p class="kpi-label">MTTR (last 30d)</p>
+    <p class="kpi-label">MTTR (last {{ active_days }}d)</p>
     <p class="kpi-value">{{ kpi.mttr_human }}</p>
     <p class="kpi-sub">mean time to resolution</p>
   </div>
@@ -181,7 +237,7 @@
 
 <section class="report-row">
   <div class="report-card">
-    <h3>Tickets created — last 30 days</h3>
+    <h3>Tickets created — last {{ active_days }} days</h3>
     {{ chart_per_day|safe }}
   </div>
 </section>
@@ -199,7 +255,7 @@
 
 <section class="report-row two-col-charts">
   <div class="report-card">
-    <h3>Top categories (last 30d)</h3>
+    <h3>Top categories (last {{ active_days }}d)</h3>
     {{ chart_category|safe }}
   </div>
   <div class="report-card">
@@ -511,6 +567,11 @@
 <style>
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 </style>
 

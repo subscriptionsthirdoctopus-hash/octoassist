@@ -33,36 +33,55 @@ def _now() -> datetime:
 
 # ----------  KPI summary ----------
 
-def kpi_summary(db: Session, tenant_id: int) -> dict:
+def kpi_summary(db: Session, tenant_id: int, *, days: int = 30, priority: str | None = None, category_id: int | None = None) -> dict:
     """Top-level numbers for the dashboard."""
     now = _now()
-    tickets_open = (db.query(func.count(Ticket.id))
-                      .filter(Ticket.tenant_id == tenant_id,
-                              Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
-                      .scalar() or 0)
+    cutoff_date = now - timedelta(days=days)
 
-    tickets_at_risk = (db.query(func.count(Ticket.id))
-                         .filter(Ticket.tenant_id == tenant_id,
-                                 Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]),
-                                 Ticket.due_resolution_at.isnot(None),
-                                 Ticket.due_resolution_at < now)
-                         .scalar() or 0)
+    q_open = db.query(func.count(Ticket.id)).filter(
+        Ticket.tenant_id == tenant_id,
+        Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold])
+    )
+    if priority:
+        q_open = q_open.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q_open = q_open.filter(Ticket.category_id == category_id)
+    tickets_open = q_open.scalar() or 0
 
-    seven_days_ago = now - timedelta(days=7)
-    tickets_resolved_7d = (db.query(func.count(Ticket.id))
-                             .filter(Ticket.tenant_id == tenant_id,
-                                     Ticket.resolved_at.isnot(None),
-                                     Ticket.resolved_at >= seven_days_ago)
-                             .scalar() or 0)
+    q_risk = db.query(func.count(Ticket.id)).filter(
+        Ticket.tenant_id == tenant_id,
+        Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]),
+        Ticket.due_resolution_at.isnot(None),
+        Ticket.due_resolution_at < now
+    )
+    if priority:
+        q_risk = q_risk.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q_risk = q_risk.filter(Ticket.category_id == category_id)
+    tickets_at_risk = q_risk.scalar() or 0
 
-    thirty_days_ago = now - timedelta(days=30)
+    q_res = db.query(func.count(Ticket.id)).filter(
+        Ticket.tenant_id == tenant_id,
+        Ticket.resolved_at.isnot(None),
+        Ticket.resolved_at >= cutoff_date
+    )
+    if priority:
+        q_res = q_res.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q_res = q_res.filter(Ticket.category_id == category_id)
+    tickets_resolved_7d = q_res.scalar() or 0
 
-    # Mean time to resolution (minutes) for tickets resolved in last 30 days
-    mttr_seconds = (db.query(func.avg(func.extract("epoch", Ticket.resolved_at - Ticket.created_at)))
-                      .filter(Ticket.tenant_id == tenant_id,
-                              Ticket.resolved_at.isnot(None),
-                              Ticket.resolved_at >= thirty_days_ago)
-                      .scalar())
+    # Mean time to resolution (minutes) for tickets resolved in dynamic period
+    q_mttr = db.query(func.avg(func.extract("epoch", Ticket.resolved_at - Ticket.created_at))).filter(
+        Ticket.tenant_id == tenant_id,
+        Ticket.resolved_at.isnot(None),
+        Ticket.resolved_at >= cutoff_date
+    )
+    if priority:
+        q_mttr = q_mttr.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q_mttr = q_mttr.filter(Ticket.category_id == category_id)
+    mttr_seconds = q_mttr.scalar()
     mttr_minutes = round((mttr_seconds or 0) / 60)
 
     changes_in_flight = (db.query(func.count(Change.id))
@@ -115,17 +134,30 @@ def _humanize_minutes(m: int) -> str:
 
 # ----------  Ticket breakdowns ----------
 
-def tickets_by_status(db: Session, tenant_id: int) -> list[tuple[str, int]]:
-    rows = (db.query(Ticket.status, func.count(Ticket.id))
-              .filter(Ticket.tenant_id == tenant_id)
-              .group_by(Ticket.status).all())
+def tickets_by_status(db: Session, tenant_id: int, *, days: int | None = None, priority: str | None = None, category_id: int | None = None) -> list[tuple[str, int]]:
+    q = db.query(Ticket.status, func.count(Ticket.id)).filter(Ticket.tenant_id == tenant_id)
+    if days:
+        cutoff = _now() - timedelta(days=days)
+        q = q.filter(Ticket.created_at >= cutoff)
+    if priority:
+        q = q.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q = q.filter(Ticket.category_id == category_id)
+    rows = q.group_by(Ticket.status).all()
     return [(r[0].value, r[1]) for r in rows]
 
 
-def tickets_by_priority(db: Session, tenant_id: int, *, only_open: bool = True) -> list[tuple[str, int]]:
+def tickets_by_priority(db: Session, tenant_id: int, *, only_open: bool = True, days: int | None = None, priority: str | None = None, category_id: int | None = None) -> list[tuple[str, int]]:
     q = db.query(Ticket.priority, func.count(Ticket.id)).filter(Ticket.tenant_id == tenant_id)
     if only_open:
         q = q.filter(Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
+    if days:
+        cutoff = _now() - timedelta(days=days)
+        q = q.filter(Ticket.created_at >= cutoff)
+    if priority:
+        q = q.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q = q.filter(Ticket.category_id == category_id)
     q = q.group_by(Ticket.priority)
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     rows = [(r[0].value, r[1]) for r in q.all()]
@@ -139,24 +171,32 @@ def tickets_by_kind(db: Session, tenant_id: int) -> list[tuple[str, int]]:
     return [(r[0].value.replace("_", " "), r[1]) for r in rows]
 
 
-def tickets_by_category(db: Session, tenant_id: int, *, days: int = 30, top: int = 10) -> list[tuple[str, int]]:
+def tickets_by_category(db: Session, tenant_id: int, *, days: int = 30, top: int = 10, priority: str | None = None, category_id: int | None = None) -> list[tuple[str, int]]:
     cutoff = _now() - timedelta(days=days)
-    rows = (db.query(Category.name, func.count(Ticket.id))
+    q = (db.query(Category.name, func.count(Ticket.id))
               .join(Ticket, Ticket.category_id == Category.id)
-              .filter(Ticket.tenant_id == tenant_id, Ticket.created_at >= cutoff)
-              .group_by(Category.name)
+              .filter(Ticket.tenant_id == tenant_id, Ticket.created_at >= cutoff))
+    if priority:
+        q = q.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q = q.filter(Ticket.category_id == category_id)
+    rows = (q.group_by(Category.name)
               .order_by(func.count(Ticket.id).desc())
               .limit(top).all())
     return [(r[0], r[1]) for r in rows]
 
 
-def tickets_per_day(db: Session, tenant_id: int, *, days: int = 30) -> list[tuple[str, int]]:
+def tickets_per_day(db: Session, tenant_id: int, *, days: int = 30, priority: str | None = None, category_id: int | None = None) -> list[tuple[str, int]]:
     """Return one entry per day for the last `days` days, even if 0."""
     cutoff_date = (_now() - timedelta(days=days - 1)).date()
-    rows = (db.query(func.date_trunc("day", Ticket.created_at).label("d"),
+    q = (db.query(func.date_trunc("day", Ticket.created_at).label("d"),
                      func.count(Ticket.id))
-              .filter(Ticket.tenant_id == tenant_id, Ticket.created_at >= cutoff_date)
-              .group_by("d").order_by("d").all())
+              .filter(Ticket.tenant_id == tenant_id, Ticket.created_at >= cutoff_date))
+    if priority:
+        q = q.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q = q.filter(Ticket.category_id == category_id)
+    rows = q.group_by("d").order_by("d").all()
     bucket: dict[date, int] = {}
     for d, c in rows:
         if d is not None:
@@ -168,12 +208,19 @@ def tickets_per_day(db: Session, tenant_id: int, *, days: int = 30) -> list[tupl
     return out
 
 
-def workload_by_assignee(db: Session, tenant_id: int, *, top: int = 10) -> list[tuple[str, int]]:
-    rows = (db.query(User.full_name, User.email, func.count(Ticket.id))
+def workload_by_assignee(db: Session, tenant_id: int, *, top: int = 10, days: int | None = None, priority: str | None = None, category_id: int | None = None) -> list[tuple[str, int]]:
+    q = (db.query(User.full_name, User.email, func.count(Ticket.id))
               .join(Ticket, Ticket.assignee_id == User.id)
               .filter(Ticket.tenant_id == tenant_id,
-                      Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold]))
-              .group_by(User.id, User.full_name, User.email)
+                      Ticket.status.in_([TicketStatus.open, TicketStatus.in_progress, TicketStatus.on_hold])))
+    if days:
+        cutoff = _now() - timedelta(days=days)
+        q = q.filter(Ticket.created_at >= cutoff)
+    if priority:
+        q = q.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q = q.filter(Ticket.category_id == category_id)
+    rows = (q.group_by(User.id, User.full_name, User.email)
               .order_by(func.count(Ticket.id).desc())
               .limit(top).all())
     return [(r[0] or r[1], r[2]) for r in rows]
@@ -192,10 +239,10 @@ def top_reporters(db: Session, tenant_id: int, *, days: int = 30, top: int = 10)
 
 # ----------  SLA ----------
 
-def sla_compliance(db: Session, tenant_id: int, *, days: int = 30) -> dict:
+def sla_compliance(db: Session, tenant_id: int, *, days: int = 30, priority: str | None = None, category_id: int | None = None) -> dict:
     """% of tickets resolved within their resolution SLA in the last N days."""
     cutoff = _now() - timedelta(days=days)
-    row = (db.query(
+    q = (db.query(
                 func.count(Ticket.id).label("total"),
                 func.sum(case((Ticket.resolved_at <= Ticket.due_resolution_at, 1), else_=0)).label("within"),
                 func.sum(case((Ticket.first_response_at <= Ticket.due_response_at, 1), else_=0)).label("response_within"),
@@ -204,14 +251,19 @@ def sla_compliance(db: Session, tenant_id: int, *, days: int = 30) -> dict:
             .filter(Ticket.tenant_id == tenant_id,
                     Ticket.resolved_at.isnot(None),
                     Ticket.resolved_at >= cutoff,
-                    Ticket.due_resolution_at.isnot(None))
-            .one())
+                    Ticket.due_resolution_at.isnot(None)))
+    if priority:
+        q = q.filter(Ticket.priority == TicketPriority(priority))
+    if category_id:
+        q = q.filter(Ticket.category_id == category_id)
+    row = q.one()
     total = int(row.total or 0)
     within = int(row.within or 0)
     resp_total = int(row.response_total or 0)
     resp_within = int(row.response_within or 0)
     return {
         "total_resolved": total,
+        "within": within,
         "resolution_within": within,
         "resolution_pct": (round(100 * within / total) if total else 0),
         "response_total": resp_total,

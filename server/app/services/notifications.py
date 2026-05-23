@@ -73,6 +73,8 @@ def _cab_emails(db: Session, tenant_id: int, exclude: set[str] | None = None) ->
 
 # ---------- Tickets ----------
 
+# ---------- Tickets ----------
+
 def ticket_created(db: Session, ticket: Ticket) -> None:
     tenant = ticket.tenant
     if tenant is None or not _mail_configured(tenant):
@@ -84,19 +86,25 @@ def ticket_created(db: Session, ticket: Ticket) -> None:
         f"Title:   {ticket.title}\n"
         f"Type:    {ticket.kind.value}\n"
         f"Priority: {ticket.priority.value}\n"
+        f"Category: {ticket.category.name if ticket.category else 'Others'}\n"
         f"Reporter: {ticket.reporter.display_name if ticket.reporter else '—'}\n"
+        f"Location: {ticket.location or 'Not Specified'}\n"
         f"\n{ticket.description or '(no description)'}\n"
     )
     sent: set[str] = set()
     if ticket.reporter and ticket.reporter.email:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.reporter.role == UserRole.requester else "/tickets"
         _fire(tenant, ticket.reporter.email,
               f"[OctoAssist] {ticket.ticket_number} — created",
-              body + f"\n— You are the reporter on this ticket.\nView ticket: {base_url}/tickets/{ticket.id}\n")
+              body + f"\n— You are the reporter on this ticket.\nView ticket: {base_url}{path}/{ticket.id}\n")
         sent.add(ticket.reporter.email)
     if ticket.assignee and ticket.assignee.email and ticket.assignee_id != ticket.reporter_id:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.assignee.role == UserRole.requester else "/tickets"
         _fire(tenant, ticket.assignee.email,
               f"[OctoAssist] {ticket.ticket_number} — assigned to you",
-              body + f"\n— You have been assigned this ticket.\nView ticket: {base_url}/tickets/{ticket.id}\n")
+              body + f"\n— You have been assigned this ticket.\nView ticket: {base_url}{path}/{ticket.id}\n")
         sent.add(ticket.assignee.email)
     # Phase J: CAB members get FYI on every new ticket
     for cab_email in _cab_emails(db, ticket.tenant_id, exclude=sent):
@@ -111,14 +119,17 @@ def ticket_status_changed(db: Session, ticket: Ticket, old_status: str) -> None:
         return
     from ..config import settings
     base_url = settings.base_url.rstrip("/")
-    body = (
-        f"{ticket.ticket_number}: {old_status} → {ticket.status.value}\n"
-        f"Title: {ticket.title}\n"
-        f"\nView updated ticket: {base_url}/tickets/{ticket.id}\n"
-    )
     if ticket.reporter and ticket.reporter.email:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.reporter.role == UserRole.requester else "/tickets"
+        body = (
+            f"Ticket {ticket.ticket_number} status has been updated.\n"
+            f"Title: {ticket.title}\n"
+            f"Change: {old_status.replace('_',' ').upper()} → {ticket.status.value.replace('_',' ').upper()}\n"
+            f"\nView updated ticket: {base_url}{path}/{ticket.id}\n"
+        )
         _fire(tenant, ticket.reporter.email,
-              f"[OctoAssist] {ticket.ticket_number} — {ticket.status.value.replace('_',' ')}",
+              f"[OctoAssist] {ticket.ticket_number} — Status Updated to {ticket.status.value.replace('_',' ').title()}",
               body)
 
 
@@ -131,23 +142,95 @@ def ticket_comment(db: Session, ticket: Ticket, comment: TicketComment) -> None:
     from ..config import settings
     base_url = settings.base_url.rstrip("/")
     author_email = comment.author.email if comment.author else ""
-    body = (
-        f"{ticket.ticket_number}: new comment\n"
-        f"Title:  {ticket.title}\n"
-        f"Author: {comment.author.display_name if comment.author else '—'}\n"
-        f"\n{comment.body}\n"
-        f"\nView ticket and reply: {base_url}/tickets/{ticket.id}\n"
-    )
+    
     # Notify the OTHER party (so the author doesn't get an email of their own comment).
-    recipients = []
     if ticket.reporter and ticket.reporter.email and ticket.reporter.email != author_email:
-        recipients.append(ticket.reporter.email)
-    if ticket.assignee and ticket.assignee.email and ticket.assignee.email != author_email \
-            and (ticket.assignee.email not in recipients):
-        recipients.append(ticket.assignee.email)
-    for to in recipients:
-        _fire(tenant, to,
-              f"[OctoAssist] {ticket.ticket_number} — new comment",
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.reporter.role == UserRole.requester else "/tickets"
+        body = (
+            f"New comment on ticket {ticket.ticket_number}:\n"
+            f"Title:  {ticket.title}\n"
+            f"Author: {comment.author.display_name if comment.author else '—'}\n"
+            f"\n{comment.body}\n"
+            f"\nView ticket and reply: {base_url}{path}/{ticket.id}\n"
+        )
+        _fire(tenant, ticket.reporter.email,
+              f"[OctoAssist] {ticket.ticket_number} — New comment posted",
+              body)
+
+    if ticket.assignee and ticket.assignee.email and ticket.assignee.email != author_email:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.assignee.role == UserRole.requester else "/tickets"
+        body = (
+            f"New comment on ticket {ticket.ticket_number}:\n"
+            f"Title:  {ticket.title}\n"
+            f"Author: {comment.author.display_name if comment.author else '—'}\n"
+            f"\n{comment.body}\n"
+            f"\nView ticket and reply: {base_url}{path}/{ticket.id}\n"
+        )
+        _fire(tenant, ticket.assignee.email,
+              f"[OctoAssist] {ticket.ticket_number} — New comment posted",
+              body)
+
+
+def ticket_assigned(db: Session, ticket: Ticket, old_assignee_id: int | None) -> None:
+    tenant = ticket.tenant
+    if tenant is None or not _mail_configured(tenant):
+        return
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+    
+    # Notify reporter
+    if ticket.reporter and ticket.reporter.email:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.reporter.role == UserRole.requester else "/tickets"
+        assignee_name = ticket.assignee.display_name if ticket.assignee else "Unassigned"
+        body = (
+            f"Ticket {ticket.ticket_number} has been assigned to a technician.\n"
+            f"Title: {ticket.title}\n"
+            f"Technician: {assignee_name}\n"
+            f"\nView ticket details: {base_url}{path}/{ticket.id}\n"
+        )
+        _fire(tenant, ticket.reporter.email,
+              f"[OctoAssist] {ticket.ticket_number} — Assigned to Technician",
+              body)
+
+    # Notify new assignee
+    if ticket.assignee and ticket.assignee.email and ticket.assignee_id != ticket.reporter_id:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.assignee.role == UserRole.requester else "/tickets"
+        body = (
+            f"Ticket {ticket.ticket_number} has been assigned to you.\n"
+            f"Title: {ticket.title}\n"
+            f"Priority: {ticket.priority.value}\n"
+            f"Reporter: {ticket.reporter.display_name if ticket.reporter else '—'}\n"
+            f"\n{ticket.description or '(no description)'}\n"
+            f"\nView ticket details: {base_url}{path}/{ticket.id}\n"
+        )
+        _fire(tenant, ticket.assignee.email,
+              f"[OctoAssist] {ticket.ticket_number} — assigned to you",
+              body)
+
+
+def ticket_priority_changed(db: Session, ticket: Ticket, old_priority: str) -> None:
+    tenant = ticket.tenant
+    if tenant is None or not _mail_configured(tenant):
+        return
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+    
+    # Notify reporter
+    if ticket.reporter and ticket.reporter.email:
+        from ..models import UserRole
+        path = "/portal/ticket" if ticket.reporter.role == UserRole.requester else "/tickets"
+        body = (
+            f"Ticket {ticket.ticket_number} priority has been updated.\n"
+            f"Title: {ticket.title}\n"
+            f"Change: {old_priority.upper()} → {ticket.priority.value.upper()}\n"
+            f"\nView ticket details: {base_url}{path}/{ticket.id}\n"
+        )
+        _fire(tenant, ticket.reporter.email,
+              f"[OctoAssist] {ticket.ticket_number} — Priority Updated to {ticket.priority.value.title()}",
               body)
 
 

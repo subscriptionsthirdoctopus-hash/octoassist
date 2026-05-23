@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from ..auth import require_staff
 from ..database import get_db
 from ..models import (
-    Agent, AssetSnapshot, Change, ChangeEvent, ChangeStatus, ChangeType,
+    Agent, AssetSnapshot, Category, Change, ChangeEvent, ChangeStatus, ChangeType,
     KbArticle, PatchObservation, PatchSeverity, Problem, ProblemStatus,
     RemoteAction, RemoteActionKind, RemoteActionStatus,
     Tenant, Ticket, TicketEvent, TicketKind, TicketStatus, User, UserRole,
@@ -55,17 +55,32 @@ def _ctx(user: User, db: Session, **extra) -> dict:
 @router.get("/reports", response_class=HTMLResponse)
 def reports_home(
     request: Request,
+    days: int = 30,
+    priority: str | None = None,
+    category_id: int | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    if priority == "":
+        priority = None
+    if category_id == 0 or category_id == "0":
+        category_id = None
+    elif category_id is not None:
+        try:
+            category_id = int(category_id)
+        except ValueError:
+            category_id = None
+
     tenant_id = user.tenant_id
-    kpi = reporting.kpi_summary(db, tenant_id)
-    by_status = reporting.tickets_by_status(db, tenant_id)
-    by_priority = reporting.tickets_by_priority(db, tenant_id, only_open=True)
-    per_day = reporting.tickets_per_day(db, tenant_id, days=30)
-    by_category = reporting.tickets_by_category(db, tenant_id, days=30, top=8)
-    sla = reporting.sla_compliance(db, tenant_id, days=30)
-    workload = reporting.workload_by_assignee(db, tenant_id, top=8)
+    categories = db.query(Category).order_by(Category.name).all()
+
+    kpi = reporting.kpi_summary(db, tenant_id, days=days, priority=priority, category_id=category_id)
+    by_status = reporting.tickets_by_status(db, tenant_id, days=days, priority=priority, category_id=category_id)
+    by_priority = reporting.tickets_by_priority(db, tenant_id, only_open=True, days=days, priority=priority, category_id=category_id)
+    per_day = reporting.tickets_per_day(db, tenant_id, days=days, priority=priority, category_id=category_id)
+    by_category = reporting.tickets_by_category(db, tenant_id, days=days, top=8, priority=priority, category_id=category_id)
+    sla = reporting.sla_compliance(db, tenant_id, days=days, priority=priority, category_id=category_id)
+    workload = reporting.workload_by_assignee(db, tenant_id, top=8, days=days, priority=priority, category_id=category_id)
     patch_kpi = patches_svc.patch_kpis(db, tenant_id)
 
     sparkline_values = [v for _, v in per_day]
@@ -81,7 +96,11 @@ def reports_home(
                      chart_per_day=charts.line_series(per_day, height=220),
                      chart_category=charts.bars_h(by_category, width=520, label_w=180),
                      chart_workload=charts.bars_h(workload, width=520, label_w=200),
-                     sla=sla),
+                     sla=sla,
+                     categories=categories,
+                     active_days=days,
+                     active_priority=priority or "",
+                     active_category_id=category_id or 0),
     )
 
 
