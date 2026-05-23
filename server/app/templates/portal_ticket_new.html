@@ -25,44 +25,92 @@
 
 <form method="post" action="/portal/new" class="card form" enctype="multipart/form-data" id="ticketForm">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-  <label>Subject
-    <input type="text" name="title" required maxlength="255" placeholder="One-line summary" autofocus>
-  </label>
 
-  <label>Category</label>
-  {% if categories %}
-  <div class="cat-grid" id="catGrid">
-    {% for c in categories %}
-    <label class="cat-card" data-cat-id="{{ c.id }}">
-      <input type="radio" name="category_id" value="{{ c.id }}" required {% if loop.first %}checked{% endif %}>
-      <span class="icon">{{ icon_for(c) }}</span>
-      <span class="name">{{ c.name }}</span>
-      {% if c.requires_approval %}<span class="sub">approval required</span>{% endif %}
+  {% if catalog_item %}
+    <input type="hidden" name="catalog_item_id" value="{{ catalog_item.id }}">
+    <input type="hidden" name="category_id" value="{{ catalog_item.category_id }}">
+    
+    <div style="background: rgba(37, 99, 235, 0.04); border-left: 4px solid var(--accent, #2563eb); padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+      <h3 style="margin: 0 0 6px 0; font-size: 14.5px; font-weight: 700; color: var(--text);">Selected Template: {{ catalog_item.name }}</h3>
+      <p style="margin: 0; font-size: 13.5px; color: var(--slate, #64748b);">{{ catalog_item.description }}</p>
+    </div>
+
+    <label>Subject
+      <input type="text" name="title" required maxlength="255" value="Request: {{ catalog_item.name }}" readonly>
     </label>
-    {% endfor %}
-  </div>
+
+    <div class="custom-fields-container" style="display: flex; flex-direction: column; gap: 16px; margin: 20px 0;">
+      <h3 style="font-size: 14.5px; font-weight: 700; margin: 0; border-bottom: 1px solid var(--line, #e2e8f0); padding-bottom: 8px; color: var(--text);">Required Request Information</h3>
+      {% for f in catalog_item.fields %}
+      <label style="display: block; font-weight: 600; font-size: 13px; margin: 0; color: var(--text);">
+        {{ f.label }}{% if f.is_required %} <span style="color: #dc2626;">*</span>{% endif %}
+        
+        {% if f.type == 'select' %}
+          <select name="custom_{{ f.name }}" {% if f.is_required %}required{% endif %} style="width: 100%; margin-top: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background: var(--surface);">
+            <option value="">-- Choose Option --</option>
+            {% for c in f.choices %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+          </select>
+        {% elif f.type == 'text' %}
+          <textarea name="custom_{{ f.name }}" {% if f.is_required %}required{% endif %} rows="3" placeholder="Enter details..." style="width: 100%; margin-top: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background: var(--surface); font-family: inherit; resize: vertical;"></textarea>
+        {% elif f.type == 'date' %}
+          <input type="date" name="custom_{{ f.name }}" {% if f.is_required %}required{% endif %} style="width: 100%; margin-top: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background: var(--surface);">
+        {% else %}
+          <input type="text" name="custom_{{ f.name }}" {% if f.is_required %}required{% endif %} placeholder="Enter details..." style="width: 100%; margin-top: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background: var(--surface);">
+        {% endif %}
+      </label>
+      {% endfor %}
+    </div>
   {% else %}
-  <p class="meta" style="color:#dc2626;">No categories available. Ask an admin to add some under Settings → SLA.</p>
+    <label>Subject
+      <input type="text" name="title" required maxlength="255" placeholder="One-line summary" autofocus>
+    </label>
+
+    <label>Category</label>
+    {% if categories %}
+    <div class="cat-grid" id="catGrid">
+      {% for c in categories %}
+      <label class="cat-card" data-cat-id="{{ c.id }}">
+        <input type="radio" name="category_id" value="{{ c.id }}" required {% if loop.first %}checked{% endif %}>
+        <span class="icon">{{ icon_for(c) }}</span>
+        <span class="name">{{ c.name }}</span>
+        {% if c.requires_approval %}<span class="sub">approval required</span>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="meta" style="color: #dc2626;">No categories available. Ask an admin to add some under Settings → SLA.</p>
+    {% endif %}
   {% endif %}
 
   {% if kb_hints %}
-  <div id="kbHintBox" style="display:none;background:#f0f9ff;border-left:4px solid #0284c7;padding:12px 14px;border-radius:6px;margin-top:4px;">
-    <p style="margin:0 0 6px;font-size:12.5px;font-weight:700;color:#075985;">💡 Might solve your issue without a ticket</p>
-    <ul id="kbHintList" style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;"></ul>
+  <div id="kbHintBox" style="display: none; background: #f0f9ff; border-left: 4px solid #0284c7; padding: 12px 14px; border-radius: 6px; margin-top: 4px;">
+    <p style="margin: 0 0 6px; font-size: 12.5px; font-weight: 700; color: #075985;">💡 Might solve your issue without a ticket</p>
+    <ul id="kbHintList" style="margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6;"></ul>
   </div>
   <script id="kbHintData" type="application/json">{{ kb_hints | tojson }}</script>
   {% endif %}
 
-  <label>Details
-    <textarea name="description" rows="6" placeholder="The more context you give us, the faster we can help."></textarea>
+  <label>Details / Description
+    <textarea name="description" rows="6" placeholder="Please provide a detailed description."></textarea>
   </label>
 
-  <label>Attachments <span class="meta" style="font-weight:normal;">(optional — screenshots, logs, docs · <strong>max 2 MB per file</strong>)</span>
+  <label style="margin: 20px 0; display: block; font-weight: 600; font-size: 13px; color: var(--text);">Affected Workstation / Asset <span class="meta" style="font-weight: normal; font-size: 11px;">(optional)</span>
+    <select name="asset_id" style="width: 100%; margin-top: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background: var(--surface); color: var(--text);">
+      <option value="">-- No Workstation Linked --</option>
+      {% for asset in assets %}
+      <option value="{{ asset.id }}">{{ asset.hostname }} (IP: {{ asset.ip_address or "—" }} · OS: {{ asset.os_name or "Windows" }})</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Attachments <span class="meta" style="font-weight: normal;">(optional — screenshots, logs, docs · <strong>max 2 MB per file</strong>)</span>
     <div class="attach-zone">
       Drop files here or
       <input type="file" name="attachments" multiple data-max-bytes="2097152">
       <div class="attach-list" id="attachList"></div>
-      <div id="attachErr" style="color:#dc2626;font-size:12px;margin-top:6px;display:none;"></div>
+      <div id="attachErr" style="color: #dc2626; font-size: 12px; margin-top: 6px; display: none;"></div>
     </div>
   </label>
 
@@ -71,7 +119,6 @@
     <a href="/portal" class="link-button">Cancel</a>
   </div>
 </form>
-
 <script>
 (function(){
   // Category card selection visual + KB hints

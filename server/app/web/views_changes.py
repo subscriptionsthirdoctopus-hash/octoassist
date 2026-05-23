@@ -200,12 +200,69 @@ def change_detail(
                .filter(User.tenant_id == user.tenant_id, User.is_active == True,  # noqa: E712
                        User.role.in_([UserRole.admin, UserRole.agent]))
                .order_by(User.full_name, User.email).all())
+
+    # Retrieve CAB votes for the change
+    from ..models import CabVote
+    cab_votes = db.query(CabVote).filter(CabVote.change_id == c.id).all()
+    user_vote = next((v for v in cab_votes if v.user_id == user.id), None)
+
     return templates.TemplateResponse(
         request=request, name="change_detail.html",
         context=_ctx(user, db, change=c, staff=staff,
+                     cab_votes=cab_votes, user_vote=user_vote,
                      types=[t.value for t in ChangeType],
                      risks=[r.value for r in ChangeRisk]),
     )
+
+
+@router.post("/changes/{change_id}/vote")
+def change_vote(
+    change_id: int,
+    approve: str = Form(...),
+    comment: str = Form(""),
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from ..models import CabVote, ChangeStatus, UserRole
+    c = db.get(Change, change_id)
+    if c is None or c.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    if c.status != ChangeStatus.under_review:
+        raise HTTPException(status_code=400, detail="Change is not under review")
+
+    vote = db.query(CabVote).filter(CabVote.change_id == c.id, CabVote.user_id == user.id).first()
+    if not vote:
+        if user.role != UserRole.admin:
+            raise HTTPException(status_code=403, detail="You are not authorized to vote on this change")
+        vote = CabVote(change_id=c.id, user_id=user.id)
+        db.add(vote)
+
+    vote.approve = (approve == "1")
+    vote.comment = comment.strip() or None
+    vote.voted_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Recalculate quorum
+    votes = db.query(CabVote).filter(CabVote.change_id == c.id).all()
+    total_possible = len(votes)
+    cast_votes = [v for v in votes if v.approve is not None]
+    cast_count = len(cast_votes)
+    approve_count = sum(1 for v in cast_votes if v.approve is True)
+    reject_count = sum(1 for v in cast_votes if v.approve is False)
+
+    # Quorum: if majority has voted
+    if total_possible > 0 and cast_count >= (total_possible / 2.0):
+        if approve_count > (total_possible / 2.0):
+            change_svc.approve(db, change=c, actor=user, note=f"Auto-approved by CAB majority ({approve_count}/{total_possible} approved).")
+        elif reject_count > (total_possible / 2.0):
+            change_svc.reject(db, change=c, actor=user, note=f"Auto-rejected by CAB majority ({reject_count}/{total_possible} rejected).")
+        elif cast_count == total_possible:
+            if approve_count > reject_count:
+                change_svc.approve(db, change=c, actor=user, note="Auto-approved by CAB majority vote.")
+            else:
+                change_svc.reject(db, change=c, actor=user, note="Auto-rejected by CAB majority vote.")
+
+    return RedirectResponse(url=f"/changes/{change_id}", status_code=303)
 
 
 @router.post("/changes/{change_id}/edit")

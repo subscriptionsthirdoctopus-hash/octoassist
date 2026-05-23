@@ -48,11 +48,30 @@ def search(
         qy = qy.filter(KbArticle.category_id == category_id)
     if q:
         like = f"%{q.strip()}%"
-        qy = qy.filter(or_(
+        stop_words = {"the", "and", "for", "you", "not", "but", "with", "this", "that", "your", "have", "are", "our", "out", "from", "how", "can", "please", "help", "new", "now", "was", "were", "has", "had", "been", "will", "would", "should", "could", "about", "above", "after", "again", "against", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "than", "too", "very", "just", "like", "into", "over", "under", "down", "once", "here", "there", "when", "where", "why", "who", "whom"}
+        words = [w.strip() for w in q.split() if w.strip() and w.strip().lower() not in stop_words]
+        if not words:
+            words = [w.strip() for w in q.split() if w.strip()]
+            
+        exact_match_filter = or_(
             KbArticle.title.ilike(like),
             KbArticle.summary.ilike(like),
             KbArticle.body.ilike(like),
-        ))
+        )
+        
+        word_filters = []
+        for w in words[:5]:
+            w_like = f"%{w.lower()}%"
+            word_filters.append(or_(
+                KbArticle.title.ilike(w_like),
+                KbArticle.summary.ilike(w_like),
+                KbArticle.body.ilike(w_like),
+            ))
+            
+        if word_filters:
+            qy = qy.filter(or_(exact_match_filter, *word_filters))
+        else:
+            qy = qy.filter(exact_match_filter)
     return qy.order_by(KbArticle.published_at.desc().nullslast(),
                        KbArticle.updated_at.desc()).limit(limit).all()
 

@@ -161,6 +161,18 @@
       <div class="desc-body">{{ ticket.description or "(no description provided)" }}</div>
     </div>
 
+    {% if ticket.custom_fields %}
+    <div class="desc-card" style="margin-top: 14px; border-left: 4px solid var(--accent, #2563eb); background: rgba(37,99,235,0.02);">
+      <div class="desc-meta" style="font-weight: 700; color: var(--accent, #2563eb);">📋 Service Request Specifications</div>
+      <dl style="display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 8px 0 0 0; font-size: 13px;">
+        {% for k, v in ticket.custom_fields.items() %}
+        <dt style="font-weight: 600; color: var(--slate, #64748b);">{{ k.replace('_', ' ') | capitalize }}:</dt>
+        <dd style="margin: 0; font-weight: 500; color: var(--text);">{{ v }}</dd>
+        {% endfor %}
+      </dl>
+    </div>
+    {% endif %}
+
     {% if attachments %}
     <h3 class="section">📎 Attachments <span style="color:var(--slate,#64748b);font-weight:400;">({{ attachments|length }})</span></h3>
     <ul class="att-list">
@@ -305,6 +317,49 @@
       <p class="meta" style="margin:0;font-size:12.5px;">Reporter deleted</p>
       {% endif %}
     </div>
+
+    {# LINKED WORKSTATION #}
+    {% if ticket.asset %}
+    <div class="panel" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.02);">
+      <h4>🖥️ Linked Workstation</h4>
+      <dl>
+        <dt>Hostname</dt>
+        <dd><strong>{{ ticket.asset.hostname }}</strong></dd>
+        
+        {% if asset_snapshot %}
+          {% set snap = asset_snapshot %}
+          {% if snap.os and snap.os.caption %}
+            <dt>OS</dt><dd style="font-size:11.5px;">{{ snap.os.caption }}</dd>
+          {% endif %}
+          {% if snap.bios and snap.bios.serial %}
+            <dt>Serial #</dt><dd><code>{{ snap.bios.serial }}</code></dd>
+          {% endif %}
+          {% if snap.memory and snap.memory.total_gb %}
+            <dt>RAM</dt><dd>{{ "%.1f"|format(snap.memory.total_gb) }} GB</dd>
+          {% endif %}
+        {% else %}
+          <dt>Status</dt><dd class="meta" style="font-size:11px;">No telemetry snapshots received yet</dd>
+        {% endif %}
+        
+        <dt>Patches</dt>
+        <dd>
+          {% if pending_patches_count > 0 %}
+            <span class="status status-cancelled" style="padding: 1px 6px; font-size: 11px;">{{ pending_patches_count }} Missing</span>
+          {% else %}
+            <span class="status status-resolved" style="padding: 1px 6px; font-size: 11px;">Fully Patched</span>
+          {% endif %}
+        </dd>
+        
+        {% if ticket.asset.last_seen_at %}
+          <dt>Last Seen</dt>
+          <dd style="font-size:11.5px;">{{ ticket.asset.last_seen_at | ist }}</dd>
+        {% endif %}
+      </dl>
+      <a href="/asset/{{ ticket.asset.id }}" style="display: block; margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--accent, #2563eb); text-decoration: none;">
+        ⚡ Access RMM Remote Actions →
+      </a>
+    </div>
+    {% endif %}
 
     {# SLA #}
     <div class="panel">

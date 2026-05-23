@@ -91,6 +91,43 @@ def run(db: Session) -> None:
         db.commit()
         log.info("Seeded %d default categories", len(DEFAULT_CATEGORIES))
 
+    # Seed default ServiceCatalogItems if none exist
+    from .models import ServiceCatalogItem
+    existing_items = db.query(ServiceCatalogItem).filter(ServiceCatalogItem.tenant_id == tenant.id).count()
+    if existing_items == 0:
+        laptop_cat = db.query(Category).filter(Category.tenant_id == tenant.id, Category.name == "New Laptop").first()
+        vpn_cat = db.query(Category).filter(Category.tenant_id == tenant.id, Category.name == "VPN Access").first()
+        
+        if laptop_cat:
+            db.add(ServiceCatalogItem(
+                tenant_id=tenant.id,
+                name="Request Premium Laptop",
+                description="Request a brand new high-performance laptop for development, design, or office work.",
+                category_id=laptop_cat.id,
+                fields=[
+                    {"name": "laptop_model", "label": "Laptop Model", "type": "select", "choices": ["ThinkPad T14 (Intel i7, 16GB RAM)", "MacBook Pro 14 (M3 Pro, 18GB RAM)", "Dell Latitude 5440 (Intel i5, 16GB RAM)"], "is_required": True},
+                    {"name": "ram_required_gb", "label": "RAM Upgrade Required (GB)", "type": "select", "choices": ["No Upgrade", "32 GB", "64 GB"], "is_required": False},
+                    {"name": "department", "label": "Department", "type": "select", "choices": ["Engineering", "Product", "Sales", "HR", "Finance"], "is_required": True},
+                    {"name": "justification", "label": "Business Justification", "type": "text", "is_required": True}
+                ]
+            ))
+        if vpn_cat:
+            db.add(ServiceCatalogItem(
+                tenant_id=tenant.id,
+                name="Request VPN Access",
+                description="Request secure remote access to enterprise networks, production servers, or development databases.",
+                category_id=vpn_cat.id,
+                fields=[
+                    {"name": "access_level", "label": "Access Level Required", "type": "select", "choices": ["Standard User VPN", "Production DB/Admin VPN", "Vendor Partner VPN"], "is_required": True},
+                    {"name": "environments", "label": "Target Servers / Databases / Environments", "type": "text", "is_required": True},
+                    {"name": "duration", "label": "Access Duration", "type": "select", "choices": ["Temporary (1 Month)", "Temporary (6 Months)", "Permanent"], "is_required": True},
+                    {"name": "justification", "label": "Business Justification", "type": "text", "is_required": True}
+                ]
+            ))
+        db.commit()
+        log.info("Seeded default Service Catalog Items")
+
+
     # Seed 4 technician (agent) licences. Idempotent — only creates if the
     # email isn't already present. Initial password follows a predictable
     # pattern so the admin can communicate it to each tech for first login;

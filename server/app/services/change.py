@@ -75,6 +75,15 @@ def submit_for_review(db: Session, *, change: Change, actor: User) -> Change:
     change.status = ChangeStatus.under_review
     change.updated_at = datetime.now(timezone.utc)
     _record(db, change=change, actor=actor, kind=ChangeEventKind.submitted_for_review)
+    
+    # Auto-create pending CAB votes for all active administrators
+    from ..models import CabVote, UserRole
+    admins = db.query(User).filter(User.tenant_id == change.tenant_id, User.role == UserRole.admin, User.is_active == True).all()
+    # Clear existing votes first (for safety/idempotency)
+    db.query(CabVote).filter(CabVote.change_id == change.id).delete()
+    for admin in admins:
+        db.add(CabVote(change_id=change.id, user_id=admin.id, approve=None))
+        
     db.commit()
     db.refresh(change)
     notifications.change_submitted(db, change)

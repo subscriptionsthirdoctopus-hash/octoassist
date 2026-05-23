@@ -30,6 +30,10 @@
     <p class="meta" style="font-size:12px;margin:0;">
       {% if a.category %}{{ a.category.name }} · {% endif %}
       {{ a.view_count }} view{{ "" if a.view_count == 1 else "s" }}
+      {% set total_votes = a.helpful_yes_count + a.helpful_no_count %}
+      {% if total_votes > 0 %}
+        · 👍 {{ (a.helpful_yes_count / total_votes * 100) | round | int }}% helpful ({{ a.helpful_yes_count }} votes)
+      {% endif %}
       {% if a.published_at %} · {{ a.published_at | istdate }}{% endif %}
     </p>
   </a>

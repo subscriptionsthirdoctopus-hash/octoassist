@@ -195,13 +195,35 @@ def my_tickets(
     )
 
 
+@router.get("/portal/catalog", response_class=HTMLResponse)
+def view_catalog(
+    request: Request,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    from ..models import ServiceCatalogItem
+    items = db.query(ServiceCatalogItem).filter(ServiceCatalogItem.tenant_id == user.tenant_id, ServiceCatalogItem.is_active == True).all()
+    return templates.TemplateResponse(
+        request=request, name="portal_catalog.html",
+        context=_ctx(user, db, items=items),
+    )
+
+
 @router.get("/portal/new", response_class=HTMLResponse)
 def new_ticket_form(
     request: Request,
     kind: str = "incident",
+    catalog_item_id: int | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    from ..models import ServiceCatalogItem, Agent
+    catalog_item = None
+    if catalog_item_id:
+        catalog_item = db.get(ServiceCatalogItem, catalog_item_id)
+        if catalog_item and catalog_item.tenant_id != user.tenant_id:
+            catalog_item = None
+
     try:
         ticket_kind = TicketKind(kind)
     except ValueError:
@@ -224,11 +246,17 @@ def new_ticket_form(
                 {"slug": a.slug, "title": a.title, "summary": (a.summary or "")[:120]}
                 for a in arts
             ]
+
+    # Get workstations/assets for user selection
+    assets = db.query(Agent).filter(Agent.tenant_id == user.tenant_id).order_by(Agent.hostname).all()
+
     return templates.TemplateResponse(
         request=request, name="portal_ticket_new.html",
         context=_ctx(user, db,
                      ticket_kind=ticket_kind.value,
-                     categories=cats, kb_hints=kb_hints),
+                     categories=cats, kb_hints=kb_hints,
+                     catalog_item=catalog_item,
+                     assets=assets),
     )
 
 
@@ -241,6 +269,30 @@ async def new_ticket_submit(
     form = await request.form()
     title = (form.get("title") or "").strip()
     description = (form.get("description") or "").strip()
+    catalog_item_id_str = form.get("catalog_item_id")
+    asset_id_str = form.get("asset_id")
+
+    catalog_item = None
+    custom_fields = {}
+    if catalog_item_id_str:
+        from ..models import ServiceCatalogItem
+        catalog_item = db.get(ServiceCatalogItem, int(catalog_item_id_str))
+        if catalog_item and catalog_item.tenant_id == user.tenant_id:
+            # Parse custom fields
+            for fld in catalog_item.fields:
+                name = fld["name"]
+                val = form.get(f"custom_{name}")
+                if fld.get("is_required") and not val:
+                    raise HTTPException(status_code=400, detail=f"{fld.get('label')} is required")
+                custom_fields[name] = val or ""
+
+    asset_id = None
+    if asset_id_str:
+        try:
+            asset_id = int(asset_id_str)
+        except ValueError:
+            pass
+
     try:
         category_id = int(form.get("category_id") or 0)
     except ValueError:
@@ -250,10 +302,19 @@ async def new_ticket_submit(
         raise HTTPException(status_code=400, detail="Invalid category")
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
+
     ticket = ticketing.create_ticket(
         db, tenant_id=user.tenant_id, reporter=user, category=cat,
         title=title, description=description,
     )
+
+    # Set catalog and asset linkage details
+    if catalog_item:
+        ticket.catalog_item_id = catalog_item.id
+        ticket.custom_fields = custom_fields
+    if asset_id:
+        ticket.asset_id = asset_id
+
     # Attach any uploaded files
     _, rejected = await _attach_uploaded_files(db, request=request, ticket=ticket, user=user, field_name="attachments")
     url = f"/portal/ticket/{ticket.id}"
@@ -261,6 +322,7 @@ async def new_ticket_submit(
         from urllib.parse import quote
         url += f"?attach_error={quote('Too large (max 2 MB): ' + ', '.join(rejected))}"
     return RedirectResponse(url=url, status_code=303)
+
 
 
 @router.get("/portal/ticket/{ticket_id}", response_class=HTMLResponse)

@@ -38,9 +38,13 @@ def send_email(
     if not to:
         raise EmailError("Recipient empty")
     provider = (tenant.mail_provider or "smtp").lower()
-    if provider == "graph":
-        return _send_graph(tenant=tenant, to=to, subject=subject,
-                           body_text=body_text, body_html=body_html)
+    if provider == "graph" and tenant.graph_tenant_id and tenant.graph_client_id and tenant.graph_client_secret:
+        try:
+            return _send_graph(tenant=tenant, to=to, subject=subject,
+                               body_text=body_text, body_html=body_html)
+        except Exception as e:
+            log.warning("Graph email sending failed: %s. Falling back to SMTP.", e)
+    
     return _send_smtp(tenant=tenant, to=to, subject=subject,
                       body_text=body_text, body_html=body_html)
 

@@ -1,45 +1,675 @@
 {% extends "base.html" %}
 {% block title %}New {{ "Incident" if ticket_kind == "incident" else "Service Request" }} — OctoAssist{% endblock %}
 {% block content %}
-<section class="page-head">
-  <h1>New {{ "Incident" if ticket_kind == "incident" else "Service Request" }}</h1>
-  <p class="meta">Choose a category — it sets the default priority and SLA.</p>
-</section>
 
-<form method="post" action="{% if portal %}/portal/new{% else %}/tickets/new{% endif %}" class="card form">
-  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-  <label>Title
-    <input type="text" name="title" required maxlength="255" placeholder="One-line summary">
-  </label>
+<!-- Custom Layout Styling Overrides specifically for this page to create a MASSIVE wow factor -->
+<style>
+  .ticket-creation-container {
+    display: grid;
+    grid-template-columns: 1.8fr 1fr;
+    gap: 28px;
+    align-items: start;
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  
+  @media (max-width: 1024px) {
+    .ticket-creation-container {
+      grid-template-columns: 1fr;
+    }
+  }
 
-  <label>Category
-    <select name="category_id" required>
-      <option value="">Choose a category…</option>
-      {% for c in categories %}
-      <option value="{{ c.id }}" data-default-priority="{{ c.default_priority.value }}">
-        {{ c.name }}{% if c.requires_approval %} (approval required){% endif %}
-      </option>
-      {% endfor %}
-    </select>
-  </label>
+  /* Form enhancements */
+  .creation-form-card {
+    background: var(--surface) !important;
+    backdrop-filter: blur(24px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: var(--r-lg) !important;
+    padding: 32px !important;
+    box-shadow: var(--shadow-2) !important;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
 
-  {% if not portal %}
-  <label>Priority
-    <select name="priority">
-      {% for p in priorities %}
-      <option value="{{ p }}" {% if p == "medium" %}selected{% endif %}>{{ p }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% endif %}
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 
-  <label>Description
-    <textarea name="description" rows="6" placeholder="What's happening? Steps to reproduce, error messages, what you've already tried."></textarea>
-  </label>
+  .form-group label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-1);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
 
-  <div class="form-actions">
-    <button type="submit" class="primary">Create</button>
-    <a href="{% if portal %}/portal{% else %}/tickets{% endif %}" class="link-button">Cancel</a>
+  .form-group label .hint {
+    font-size: 11px;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-3);
+  }
+
+  /* Sidebar styling */
+  .intelligence-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .intel-card {
+    background: var(--surface) !important;
+    backdrop-filter: blur(24px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: var(--r-md) !important;
+    padding: 20px !important;
+    box-shadow: var(--shadow-1) !important;
+    transition: all 0.3s ease;
+  }
+
+  .intel-card:hover {
+    border-color: rgba(59, 130, 246, 0.2);
+    box-shadow: var(--shadow-2);
+  }
+
+  .intel-card h3 {
+    margin: 0 0 12px 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* SLA info list */
+  .sla-info-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sla-info-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+  .sla-info-item strong {
+    color: var(--text-1);
+  }
+
+  /* Attachment Drag Zone */
+  .attach-zone {
+    border: 2px dashed var(--line);
+    border-radius: var(--r-sm);
+    padding: 24px;
+    text-align: center;
+    color: var(--text-3);
+    background: rgba(255, 255, 255, 0.01);
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  .attach-zone:hover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.02);
+    color: var(--text-2);
+  }
+  .attach-zone input {
+    display: none;
+  }
+  .attach-list {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .attach-file-item {
+    background: var(--surface-2);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Knowledge base dynamic suggestions list */
+  .kb-suggestions {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .kb-sugg-item {
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.2s ease;
+  }
+  .kb-sugg-item:hover {
+    transform: translateX(4px);
+    border-color: var(--accent-border);
+  }
+  .kb-sugg-link {
+    color: var(--text-1);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .kb-sugg-link:hover {
+    color: var(--accent);
+  }
+
+  .apply-template-btn {
+    align-self: flex-start;
+    background: var(--accent-soft) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--accent-border) !important;
+    padding: 4px 10px !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    border-radius: 4px !important;
+    cursor: pointer;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    transition: all 0.15s ease !important;
+  }
+  .apply-template-btn:hover {
+    background: var(--accent) !important;
+    color: #ffffff !important;
+  }
+
+</style>
+
+<div class="page-head" style="margin-bottom: 24px;">
+  <h1 style="font-size: 32px;">New {{ "Incident" if ticket_kind == "incident" else "Service Request" }}</h1>
+  <p class="meta">Submit an enterprise ticket to the IT Service Management queue. The real-time SLA engine automatically assesses business impact and urgency matrix values, computes response deadlines, and maps relevant solutions from the Knowledge Base.</p>
+</div>
+
+<div class="ticket-creation-container">
+  
+  <!-- Left Side: Main Form Card -->
+  <form method="post" action="{% if portal %}/portal/new{% else %}/tickets/new{% endif %}" class="creation-form-card" enctype="multipart/form-data" id="ticketForm">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="kind" value="{{ ticket_kind }}">
+    
+    <div class="form-group">
+      <label>Title <span class="hint">Short summary of the event</span></label>
+      <input type="text" name="title" id="ticketTitle" required maxlength="255" placeholder="e.g. Printer in HQ Finance is offline" autofocus>
+    </div>
+
+    <!-- Category selector (with fallback "Others") -->
+    <div class="form-group">
+      <label>Category <span class="hint">Sets default SLA thresholds</span></label>
+      <select name="category_id" id="ticketCategory" required>
+        <option value="">Choose a category…</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}" data-default-priority="{{ c.default_priority.value }}" data-requires-approval="{{ 'yes' if c.requires_approval else 'no' }}">
+          {{ c.name }}{% if c.requires_approval %} (Requires CAB Approval){% endif %}
+        </option>
+        {% endfor %}
+        <option value="others" data-default-priority="medium" data-requires-approval="no">Others</option>
+      </select>
+    </div>
+
+    <!-- ITIL Impact and Urgency Selectors (Calculates Priority in real-time) -->
+    <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div>
+        <label>Impact <span class="hint">Scope of disruption</span></label>
+        <select id="itilImpact" style="margin-top: 6px;">
+          <option value="low">Low (Single User)</option>
+          <option value="medium" selected>Medium (Department / Workgroup)</option>
+          <option value="high">High (Entire Enterprise)</option>
+        </select>
+      </div>
+      <div>
+        <label>Urgency <span class="hint">Speed of response needed</span></label>
+        <select id="itilUrgency" style="margin-top: 6px;">
+          <option value="low">Low (Workaround Exists)</option>
+          <option value="medium" selected>Medium (Operational Degradation)</option>
+          <option value="high">High (Critical Block / Service Down)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Hidden input that actually stores the final calculated priority sent to backend -->
+    <input type="hidden" name="priority" id="calculatedPriority" value="medium">
+
+    <!-- Requester User dropdown and Office Location Dropdown -->
+    <div class="form-group" style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px;">
+      <div>
+        <label>User Name / Requester <span class="hint">Logging on behalf of</span></label>
+        <select name="reporter_id" id="ticketReporter" required style="margin-top: 6px;">
+          {% for u in users %}
+          <option value="{{ u.id }}" data-location="{{ u.location or '' }}" {% if u.id == current_user.id %}selected{% endif %}>
+            {{ u.full_name or u.email }} ({{ u.email }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Location <span class="hint">Physical office location</span></label>
+        <select id="ticketLocationSelect" required style="margin-top: 6px;">
+          <option value="">-- Choose Location --</option>
+          {% for loc in locations %}
+          <option value="{{ loc }}" {% if loc == current_user.location %}selected{% endif %}>{{ loc }}</option>
+          {% endfor %}
+          <option value="Others">Others</option>
+        </select>
+        <input type="hidden" name="location" id="ticketLocation" value="{{ current_user.location or '' }}">
+        <input type="text" id="customLocationInput" placeholder="Specify other office location..." style="margin-top: 8px; display: none;">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Description <span class="hint">Full details, logs, reproduction steps</span></label>
+      <textarea name="description" id="ticketDescription" rows="7" placeholder="Provide details about the issue. Typing in both Title and Description searches the Knowledge Base in real time."></textarea>
+    </div>
+
+    <!-- Advanced File Attachments Dropzone -->
+    <div class="form-group">
+      <label>File Attachments <span class="hint">Screenshots, diagnostic logs (Max 2 MB)</span></label>
+      <div class="attach-zone" id="dropZone">
+        <span class="icon" style="font-size: 24px; display: block; margin-bottom: 4px;">📂</span>
+        <span>Drag & Drop files here or <strong style="color: var(--accent);">Browse</strong></span>
+        <input type="file" name="attachments" id="fileInput" multiple>
+        <div class="attach-list" id="attachList"></div>
+        <div id="attachErr" style="color: var(--red); font-size: 12px; margin-top: 6px; display: none;"></div>
+      </div>
+    </div>
+
+    <div class="form-actions" style="margin-top: 8px;">
+      <button type="submit" class="primary" style="padding: 12px 28px; font-size: 14.5px;">Log Ticket</button>
+      <a href="{% if portal %}/portal{% else %}/tickets{% endif %}" class="link-button">Cancel</a>
+    </div>
+  </form>
+
+  <!-- Right Side: Intelligence & Diagnostics Sidebar -->
+  <div class="intelligence-sidebar">
+    
+    <!-- Dynamic SLA & SLA Target Diagnostics -->
+    <div class="intel-card" id="slaCard">
+      <h3>⚡ Ticket Diagnostics & SLA</h3>
+      <div class="sla-info-list">
+        <div class="sla-info-item">
+          <span>Priority Rating</span>
+          <strong id="prioBadge" class="prio prio-medium" style="font-size: 10px; padding: 2px 8px;">MEDIUM</strong>
+        </div>
+        <div class="sla-info-item">
+          <span>Target Response</span>
+          <strong id="slaResponse">4 Hours</strong>
+        </div>
+        <div class="sla-info-item">
+          <span>Target Resolution</span>
+          <strong id="slaResolution">24 Hours</strong>
+        </div>
+        <div class="sla-info-item">
+          <span>CAB Approval</span>
+          <strong id="slaCab" style="color: var(--text-3);">Not Required</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Smart Knowledge Base Suggestions (Updates as you type) -->
+    <div class="intel-card" id="kbCard">
+      <h3>📚 Smart KB Suggestions</h3>
+      <div id="kbSearchLoader" style="color: var(--text-3); font-size: 12.5px; text-align: center; padding: 12px 0;">
+        Start typing a title or description to query active KB resolutions...
+      </div>
+      <ul class="kb-suggestions" id="kbSuggestionsList" style="display: none;">
+        <!-- Filled on the fly -->
+      </ul>
+    </div>
+
   </div>
-</form>
+
+</div>
+
+<!-- High-fidelity client-side javascript logic for SLA, ITIL priority matrix, Telemetry, drag-and-drop, and dynamic KB searches -->
+<script>
+(function() {
+  // 1. ITIL Priority Calculation Matrix (Impact + Urgency)
+  var impactEl = document.getElementById("itilImpact");
+  var urgencyEl = document.getElementById("itilUrgency");
+  var priorityInput = document.getElementById("calculatedPriority");
+  var prioBadge = document.getElementById("prioBadge");
+  var slaResponse = document.getElementById("slaResponse");
+  var slaResolution = document.getElementById("slaResolution");
+
+  var PRIORITY_MATRIX = {
+    "high-high": "critical",
+    "high-medium": "high",
+    "high-low": "medium",
+    "medium-high": "high",
+    "medium-medium": "medium",
+    "medium-low": "low",
+    "low-high": "medium",
+    "low-medium": "low",
+    "low-low": "low"
+  };
+
+  var SLA_TIMELINES = {
+    "critical": { response: "15 Minutes", resolution: "2 Hours" },
+    "high": { response: "1 Hour", resolution: "4 Hours" },
+    "medium": { response: "4 Hours", resolution: "24 Hours" },
+    "low": { response: "12 Hours", resolution: "72 Hours" }
+  };
+
+  function updatePriority() {
+    var impact = impactEl.value;
+    var urgency = urgencyEl.value;
+    var key = impact + "-" + urgency;
+    var finalPrio = PRIORITY_MATRIX[key] || "medium";
+    
+    // Set hidden input
+    priorityInput.value = finalPrio;
+    
+    // Update visual badge
+    prioBadge.textContent = finalPrio.toUpperCase();
+    prioBadge.className = "prio prio-" + finalPrio;
+    
+    // Update SLA terms
+    var sla = SLA_TIMELINES[finalPrio];
+    slaResponse.textContent = sla.response;
+    slaResolution.textContent = sla.resolution;
+  }
+
+  impactEl.addEventListener("change", updatePriority);
+  urgencyEl.addEventListener("change", updatePriority);
+
+  // 2. Category selection changes
+  var categorySelect = document.getElementById("ticketCategory");
+  var slaCab = document.getElementById("slaCab");
+
+  categorySelect.addEventListener("change", function() {
+    var opt = categorySelect.options[categorySelect.selectedIndex];
+    if (!opt || !opt.value) {
+      slaCab.textContent = "Not Required";
+      slaCab.style.color = "var(--text-3)";
+      return;
+    }
+    
+    // Check approval
+    if (opt.dataset.requiresApproval === "yes") {
+      slaCab.textContent = "CAB Approval Required";
+      slaCab.style.color = "var(--amber)";
+    } else {
+      slaCab.textContent = "Not Required";
+      slaCab.style.color = "var(--green)";
+    }
+    
+    // Set initial priority based on category default priority
+    var defaultPrio = opt.dataset.defaultPriority;
+    if (defaultPrio) {
+      if (defaultPrio === "critical" || defaultPrio === "high") {
+        impactEl.value = "high";
+        urgencyEl.value = defaultPrio === "critical" ? "high" : "medium";
+      } else if (defaultPrio === "medium") {
+        impactEl.value = "medium";
+        urgencyEl.value = "medium";
+      } else {
+        impactEl.value = "low";
+        urgencyEl.value = "low";
+      }
+      updatePriority();
+    }
+  });
+
+  // 3. User select / location auto-population in Location dropdown
+  var reporterSelect = document.getElementById("ticketReporter");
+  var locationSelect = document.getElementById("ticketLocationSelect");
+  var locationHidden = document.getElementById("ticketLocation");
+  var customLocation = document.getElementById("customLocationInput");
+
+  function syncLocation() {
+    if (locationSelect.value === "Others") {
+      customLocation.style.display = "block";
+      customLocation.required = true;
+      locationHidden.value = customLocation.value.trim();
+    } else {
+      customLocation.style.display = "none";
+      customLocation.required = false;
+      locationHidden.value = locationSelect.value;
+    }
+  }
+
+  locationSelect.addEventListener("change", syncLocation);
+  customLocation.addEventListener("input", syncLocation);
+
+  reporterSelect.addEventListener("change", function() {
+    var opt = reporterSelect.options[reporterSelect.selectedIndex];
+    if (opt && opt.dataset.location) {
+      var userLoc = opt.dataset.location;
+      var found = false;
+      // Search matching option
+      for (var i = 0; i < locationSelect.options.length; i++) {
+        if (locationSelect.options[i].value === userLoc) {
+          locationSelect.selectedIndex = i;
+          found = true;
+          break;
+        }
+      }
+      if (!found && userLoc) {
+        // Fallback to Others
+        locationSelect.value = "Others";
+        customLocation.value = userLoc;
+      }
+    } else {
+      locationSelect.value = "";
+      customLocation.value = "";
+    }
+    syncLocation();
+  });
+
+  // Call syncLocation on init
+  syncLocation();
+
+  // 4. File attachments dropzone & verification
+  var dropZone = document.getElementById("dropZone");
+  var fileInput = document.getElementById("fileInput");
+  var list = document.getElementById("attachList");
+  var errBox = document.getElementById("attachErr");
+  var MAX_BYTES = 2097152; // 2 MB
+
+  dropZone.addEventListener("click", function() {
+    fileInput.click();
+  });
+
+  dropZone.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    dropZone.style.borderColor = "var(--accent)";
+    dropZone.style.background = "rgba(59, 130, 246, 0.05)";
+  });
+
+  dropZone.addEventListener("dragleave", function() {
+    dropZone.style.borderColor = "var(--line)";
+    dropZone.style.background = "rgba(255, 255, 255, 0.01)";
+  });
+
+  dropZone.addEventListener("drop", function(e) {
+    e.preventDefault();
+    dropZone.style.borderColor = "var(--line)";
+    dropZone.style.background = "rgba(255, 255, 255, 0.01)";
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      renderFiles();
+    }
+  });
+
+  fileInput.addEventListener("change", renderFiles);
+
+  function renderFiles() {
+    list.innerHTML = "";
+    errBox.style.display = "none";
+    
+    if (!fileInput.files.length) return;
+    
+    var tooBig = [];
+    for (var i = 0; i < fileInput.files.length; i++) {
+      var f = fileInput.files[i];
+      var kb = (f.size / 1024).toFixed(1);
+      
+      var item = document.createElement("div");
+      item.className = "attach-file-item";
+      item.innerHTML = '<span>📄 ' + f.name + ' (' + kb + ' KB)</span><span style="font-size:10px;color:var(--text-3)">Ready</span>';
+      list.appendChild(item);
+      
+      if (f.size > MAX_BYTES) {
+        tooBig.push(f.name);
+      }
+    }
+    
+    if (tooBig.length) {
+      errBox.textContent = "Following files exceed 2 MB limit: " + tooBig.join(", ");
+      errBox.style.display = "block";
+    }
+  }
+
+  // 5. Smart KB Suggestions based on BOTH Title & Description (with Auto-populate)
+  var titleInput = document.getElementById("ticketTitle");
+  var descriptionInput = document.getElementById("ticketDescription");
+  var kbLoader = document.getElementById("kbSearchLoader");
+  var kbList = document.getElementById("kbSuggestionsList");
+  var debounceTimer;
+
+  function triggerKBSearch() {
+    clearTimeout(debounceTimer);
+    var qTitle = titleInput.value.trim();
+    var qDesc = descriptionInput.value.trim();
+    
+    // Combine both fields to search the KB comprehensively
+    var q = (qTitle + " " + qDesc).trim();
+    
+    if (q.length < 3) {
+      kbLoader.style.display = "block";
+      kbLoader.textContent = "Start typing a title or description to query active KB resolutions...";
+      kbList.style.display = "none";
+      return;
+    }
+    
+    kbLoader.style.display = "block";
+    kbLoader.textContent = "Scanning Knowledge Base for matching solutions...";
+    
+    debounceTimer = setTimeout(function() {
+      // Query dedicated KB search API
+      fetch("/api/v1/kb/search?q=" + encodeURIComponent(q), { credentials: "same-origin" })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (!data || !data.results || !data.results.kb || !data.results.kb.length) {
+            kbLoader.style.display = "block";
+            kbLoader.textContent = "No matching KB articles found.";
+            kbList.style.display = "none";
+            return;
+          }
+          
+          kbLoader.style.display = "none";
+          kbList.innerHTML = "";
+          
+          data.results.kb.forEach(function(article) {
+            var li = document.createElement("li");
+            li.className = "kb-sugg-item";
+            
+            // Extracts standard ID from search URL: e.g., /kb/12
+            var kbId = article.url.split("/").pop();
+            
+            li.innerHTML = '<a href="' + article.url + '" target="_blank" class="kb-sugg-link">📚 ' + article.title + '</a>' +
+                           '<span style="color:var(--text-3); font-size:11px; margin-bottom: 4px;">' + (article.subtitle || 'Read support manual') + '</span>' +
+                           '<button type="button" class="apply-template-btn" data-kb-id="' + kbId + '">✨ Apply KB Template</button>';
+            
+            kbList.appendChild(li);
+          });
+          
+          kbList.style.display = "flex";
+          
+          // Attach click listeners to auto-populate buttons
+          kbList.querySelectorAll(".apply-template-btn").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+              var id = btn.dataset.kbId;
+              applyKBTemplate(id);
+            });
+          });
+        })
+        .catch(function() {
+          kbLoader.style.display = "block";
+          kbLoader.textContent = "Suggestions temporarily unavailable.";
+          kbList.style.display = "none";
+        });
+    }, 400);
+  }
+
+  titleInput.addEventListener("input", triggerKBSearch);
+  descriptionInput.addEventListener("input", triggerKBSearch);
+
+  // Auto-populate form based on full KB Article body
+  function applyKBTemplate(articleId) {
+    if (!articleId) return;
+    
+    // Fetch full article body asynchronously
+    fetch("/api/v1/kb/" + articleId, { credentials: "same-origin" })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(article) {
+        if (!article) return;
+        
+        // Auto-populate Title
+        titleInput.value = article.title;
+        
+        // Auto-populate Description with summary + full template description
+        var separator = "\n=========================================\n";
+        var templateText = (article.summary ? article.summary + "\n" : "") + separator + "APPLIED SUPPORT RESOLUTION SOP:\n" + article.body;
+        descriptionInput.value = templateText;
+        
+        // Auto-route category to "Others" or auto-trigger priority evaluation
+        categorySelect.value = "others";
+        
+        // Trigger visual diagnostics highlights
+        var event = new Event('change');
+        categorySelect.dispatchEvent(event);
+        
+        // Visual cue showing template is successfully applied
+        var origBackground = descriptionInput.style.background;
+        descriptionInput.style.background = "rgba(59, 130, 246, 0.08)";
+        setTimeout(function() {
+          descriptionInput.style.background = origBackground;
+        }, 800);
+      })
+      .catch(function() {
+        alert("Could not load KB template details.");
+      });
+  }
+
+  // Re-verify files on submit
+  document.getElementById("ticketForm").addEventListener("submit", function(e) {
+    if (fileInput.files.length) {
+      for (var i = 0; i < fileInput.files.length; i++) {
+        if (fileInput.files[i].size > MAX_BYTES) {
+          e.preventDefault();
+          alert("Please remove files exceeding the 2 MB limit before submitting.");
+          return;
+        }
+      }
+    }
+  });
+
+})();
+</script>
+
 {% endblock %}

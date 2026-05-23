@@ -418,6 +418,22 @@ class Category(Base):
     )
 
 
+class ServiceCatalogItem(Base):
+    __tablename__ = "service_catalog_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)  # list of field configs
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    tenant: Mapped[Tenant] = relationship()
+    category: Mapped[Category] = relationship()
+
+
 class Ticket(Base):
     __tablename__ = "tickets"
 
@@ -426,6 +442,11 @@ class Ticket(Base):
     ticket_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     kind: Mapped[TicketKind] = mapped_column(Enum(TicketKind, name="ticket_kind"), nullable=False)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False)
+    catalog_item_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog_items.id", ondelete="SET NULL"), nullable=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
+    custom_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    sla_response_escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sla_resolution_escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -464,6 +485,8 @@ class Ticket(Base):
     category: Mapped[Category] = relationship(back_populates="tickets")
     reporter: Mapped[User] = relationship(back_populates="reported_tickets", foreign_keys=[reporter_id])
     assignee: Mapped[User | None] = relationship(back_populates="assigned_tickets", foreign_keys=[assignee_id])
+    catalog_item: Mapped[ServiceCatalogItem | None] = relationship()
+    asset: Mapped[Agent | None] = relationship()
     comments: Mapped[list["TicketComment"]] = relationship(
         back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComment.created_at",
     )
@@ -713,6 +736,7 @@ class Change(Base):
         back_populates="change", cascade="all, delete-orphan",
         order_by="ChangeEvent.created_at",
     )
+    cab_votes: Mapped[list["CabVote"]] = relationship(back_populates="change", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_changes_tenant_status", "tenant_id", "status"),
@@ -723,6 +747,21 @@ class Change(Base):
         return self.change_type in (ChangeType.normal,) and self.status in (
             ChangeStatus.under_review,
         )
+
+
+class CabVote(Base):
+    __tablename__ = "cab_votes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    change_id: Mapped[int] = mapped_column(ForeignKey("changes.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    approve: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # True = approve, False = reject, None = pending
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    voted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    change: Mapped["Change"] = relationship(back_populates="cab_votes")
+    user: Mapped["User"] = relationship()
 
 
 class ChangeEventKind(str, enum.Enum):
@@ -926,6 +965,8 @@ class KbArticle(Base):
     )
     author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    helpful_yes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    helpful_no_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

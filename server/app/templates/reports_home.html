@@ -1,6 +1,86 @@
 {% extends "base.html" %}
 {% block title %}Reports & Dashboards — OctoAssist{% endblock %}
 {% block content %}
+
+<style>
+  .kpi-card[data-kpi] {
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card[data-kpi]:hover {
+    transform: translateY(-3px) scale(1.02);
+    border-color: var(--accent) !important;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12), 0 0 12px rgba(59, 130, 246, 0.15);
+  }
+  .kpi-card[data-kpi].active-kpi {
+    border-color: var(--accent) !important;
+    background: rgba(37, 99, 235, 0.05) !important;
+    box-shadow: 0 0 0 2px var(--accent) !important;
+  }
+  .kpi-card[data-kpi]::before {
+    content: "🔎 Click to drill down";
+    position: absolute;
+    bottom: -20px;
+    right: 12px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0;
+    transition: all 0.2s ease;
+  }
+  .kpi-card[data-kpi]:hover::before {
+    bottom: 8px;
+    opacity: 0.85;
+  }
+  
+  /* Table drill down row expansion */
+  .drilldown-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .drilldown-row:hover {
+    background-color: rgba(37, 99, 235, 0.03) !important;
+  }
+  .drilldown-row.expanded {
+    background-color: rgba(37, 99, 235, 0.05) !important;
+  }
+  .detail-row {
+    background: rgba(255, 255, 255, 0.01);
+    border-bottom: 1px solid var(--line);
+    animation: fadeInDown 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  :root[data-theme="light"] .detail-row {
+    background: rgba(37, 99, 235, 0.01);
+  }
+  
+  .detail-card {
+    padding: 16px 24px;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .detail-item strong {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+  
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
 <section class="page-head">
   <div class="row-between">
     <div>
@@ -18,13 +98,13 @@
 </section>
 
 <section class="kpi-grid">
-  <div class="kpi-card">
+  <div class="kpi-card" data-kpi="tickets_open">
     <p class="kpi-label">Open tickets</p>
     <p class="kpi-value">{{ kpi.tickets_open }}</p>
     <p class="kpi-sub">{{ kpi.tickets_at_risk }} past resolution SLA</p>
     <div class="kpi-spark">{{ spark_tickets|safe }}</div>
   </div>
-  <div class="kpi-card">
+  <div class="kpi-card" data-kpi="tickets_resolved_7d">
     <p class="kpi-label">Resolved (last 7d)</p>
     <p class="kpi-value">{{ kpi.tickets_resolved_7d }}</p>
     <p class="kpi-sub">across all priorities</p>
@@ -39,12 +119,12 @@
     <p class="kpi-value">{{ sla.resolution_pct }}<span class="kpi-unit">%</span></p>
     <p class="kpi-sub">{{ sla.resolution_within }} of {{ sla.total_resolved }} within SLA</p>
   </div>
-  <div class="kpi-card">
+  <div class="kpi-card" data-kpi="changes_in_flight">
     <p class="kpi-label">Changes in flight</p>
     <p class="kpi-value">{{ kpi.changes_in_flight }}</p>
     <p class="kpi-sub">under review · approved · in progress</p>
   </div>
-  <div class="kpi-card">
+  <div class="kpi-card" data-kpi="problems_open">
     <p class="kpi-label">Open problems</p>
     <p class="kpi-value">{{ kpi.problems_open }}</p>
     <p class="kpi-sub">excluding resolved + closed</p>
@@ -59,10 +139,43 @@
     <p class="kpi-value">{{ sla.response_pct }}<span class="kpi-unit">%</span></p>
     <p class="kpi-sub">{{ sla.response_within }} of {{ sla.response_total }} within SLA</p>
   </div>
-  <div class="kpi-card">
+  <div class="kpi-card" data-kpi="patch_compliance">
     <p class="kpi-label">Patch compliance</p>
     <p class="kpi-value">{{ patch_kpi.compliance_pct }}<span class="kpi-unit">%</span></p>
-    <p class="kpi-sub">{{ patch_kpi.total_critical }} critical patches outstanding · <a href="/patches">view ›</a></p>
+    <p class="kpi-sub">{{ patch_kpi.total_critical }} critical patches outstanding</p>
+  </div>
+</section>
+
+<!-- LEVEL 1 & LEVEL 2 DOWNWARD DRILL-DOWN PANEL -->
+<section class="drilldown-section" id="drilldownSection" style="display: none; margin-bottom: 28px; animation: slideUp 0.4s ease both;">
+  <div class="card" style="padding: 28px; background: var(--surface) !important; border: 1px solid var(--line) !important; border-radius: var(--r-md) !important; box-shadow: var(--shadow-2) !important;">
+    <div class="row-between" style="border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span id="drilldownIcon" style="font-size: 28px;">📊</span>
+        <div>
+          <h2 id="drilldownTitle" style="font-size: 20px; margin: 0; color: var(--text-1);">Drilldown Analysis</h2>
+          <p id="drilldownSubtitle" class="meta" style="margin: 0; font-size: 12.5px;">Interactive records matching the selected KPI</p>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <input type="text" id="drilldownSearch" placeholder="Filter drilldown rows..." style="padding: 8px 14px; border-radius: var(--r-sm); border: 1px solid var(--line); font-size: 13px; width: 240px; background: rgba(255, 255, 255, 0.02); min-height: 0;">
+        <button class="button link-button" id="closeDrilldownBtn" style="padding: 6px 12px; font-size: 13px; min-height: 0; color: var(--red);">✕ Close</button>
+      </div>
+    </div>
+    
+    <div style="overflow-x: auto; max-height: 520px; border-radius: 8px; border: 1px solid var(--line);">
+      <table class="table" style="width: 100%; border-collapse: collapse; margin: 0;" id="drilldownTable">
+        <thead id="drilldownThead" style="background: var(--surface-2); border-bottom: 2px solid var(--line);">
+          <!-- Filled dynamically -->
+        </thead>
+        <tbody id="drilldownTbody">
+          <!-- Filled dynamically -->
+        </tbody>
+      </table>
+    </div>
+    <div id="drilldownEmptyState" style="display: none; text-align: center; padding: 48px; color: var(--text-3); font-size: 14px;">
+      No matching records found.
+    </div>
   </div>
 </section>
 
@@ -94,5 +207,311 @@
     {{ chart_workload|safe }}
   </div>
 </section>
+
+<!-- Drill-down controller script -->
+<script>
+(function() {
+  var kpiCards = document.querySelectorAll(".kpi-card[data-kpi]");
+  var section = document.getElementById("drilldownSection");
+  var titleEl = document.getElementById("drilldownTitle");
+  var subtitleEl = document.getElementById("drilldownSubtitle");
+  var iconEl = document.getElementById("drilldownIcon");
+  var tbody = document.getElementById("drilldownTbody");
+  var thead = document.getElementById("drilldownThead");
+  var searchInput = document.getElementById("drilldownSearch");
+  var emptyState = document.getElementById("drilldownEmptyState");
+  var closeBtn = document.getElementById("closeDrilldownBtn");
+  
+  var currentKpi = null;
+  var allData = [];
+  var columns = [];
+  var type = "";
+
+  var KPI_INFO = {
+    "tickets_open": { title: "Active Open Tickets", icon: "🎫", subtitle: "All open, in-progress, and on-hold tickets currently in queue" },
+    "tickets_resolved_7d": { title: "Resolved Tickets (Last 7 Days)", icon: "✅", subtitle: "Recently resolved tickets showing closure resolver" },
+    "changes_in_flight": { title: "Changes In Flight", icon: "🔄", subtitle: "Planned Change Requests under active review or implementation" },
+    "problems_open": { title: "Open Problem Investigations", icon: "🧩", subtitle: "Root cause analyses and lessons learned logs" },
+    "patch_compliance": { title: "Outstanding Critical Patches", icon: "💻", subtitle: "Vulnerability outstanding missing patches awaiting RMM deployment" }
+  };
+
+  kpiCards.forEach(function(card) {
+    card.addEventListener("click", function() {
+      var kpi = card.dataset.kpi;
+      if (!kpi) return;
+      
+      // De-active others, active this
+      kpiCards.forEach(function(c) { c.classList.remove("active-kpi"); });
+      
+      if (currentKpi === kpi) {
+        // Toggle hide
+        closeDrilldown();
+        return;
+      }
+      
+      card.classList.add("active-kpi");
+      currentKpi = kpi;
+      loadDrilldown(kpi);
+    });
+  });
+
+  closeBtn.addEventListener("click", closeDrilldown);
+
+  function closeDrilldown() {
+    section.style.display = "none";
+    kpiCards.forEach(function(c) { c.classList.remove("active-kpi"); });
+    currentKpi = null;
+  }
+
+  function loadDrilldown(kpi) {
+    var info = KPI_INFO[kpi] || { title: "Drilldown Analysis", icon: "📊", subtitle: "Underlying record details" };
+    titleEl.textContent = info.title;
+    iconEl.textContent = info.icon;
+    subtitleEl.textContent = info.subtitle;
+    searchInput.value = "";
+    
+    // Show spinner in table
+    thead.innerHTML = "";
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 32px; color: var(--text-3); font-size: 13.5px;"><span class="spinner" style="display:inline-block; width:16px; height:16px; border:2px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; margin-right:8px; vertical-align:middle;"></span>Fetching database logs...</td></tr>';
+    section.style.display = "block";
+    emptyState.style.display = "none";
+    
+    // Smooth scroll down to section
+    setTimeout(function() {
+      section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
+
+    fetch("/reports/api/drilldown?kpi=" + kpi, { credentials: "same-origin" })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(res) {
+        if (!res || !res.data) {
+          tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 32px; color: var(--red);">Failed to retrieve records.</td></tr>';
+          return;
+        }
+        allData = res.data;
+        columns = res.columns;
+        type = res.type;
+        renderTable(allData);
+      })
+      .catch(function() {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 32px; color: var(--red);">Server error during query.</td></tr>';
+      });
+  }
+
+  function renderTable(data) {
+    thead.innerHTML = "";
+    tbody.innerHTML = "";
+    
+    if (data.length === 0) {
+      emptyState.style.display = "block";
+      document.getElementById("drilldownTable").parentElement.style.display = "none";
+      return;
+    }
+    
+    emptyState.style.display = "none";
+    document.getElementById("drilldownTable").parentElement.style.display = "block";
+
+    // Build headers
+    var headerRow = document.createElement("tr");
+    columns.forEach(function(col) {
+      var th = document.createElement("th");
+      th.style.padding = "12px 16px";
+      th.style.textAlign = "left";
+      th.style.fontSize = "11.5px";
+      th.style.fontWeight = "700";
+      th.style.textTransform = "uppercase";
+      th.style.letterSpacing = "0.5px";
+      th.style.color = "var(--text-3)";
+      th.textContent = col;
+      headerRow.appendChild(th);
+    });
+    // Action column header
+    var thAction = document.createElement("th");
+    thAction.style.width = "40px";
+    headerRow.appendChild(thAction);
+    thead.appendChild(headerRow);
+
+    // Build data rows
+    data.forEach(function(item) {
+      var tr = document.createElement("tr");
+      tr.className = "drilldown-row";
+      tr.dataset.id = item.id;
+      tr.style.borderBottom = "1px solid var(--line)";
+      
+      // Determine columns based on type
+      var cells = [];
+      if (type === "tickets" || type === "tickets_resolved") {
+        cells.push('<strong style="font-family:monospace; color:var(--accent);">' + item.number + '</strong>');
+        cells.push('<strong>' + escapeHtml(item.title) + '</strong>');
+        cells.push('<span class="badge">' + escapeHtml(item.category) + '</span>');
+        cells.push('<span class="prio prio-' + item.priority.toLowerCase() + '" style="font-size:9.5px; padding:1px 6px;">' + item.priority + '</span>');
+        if (type === "tickets") {
+          cells.push('<span style="font-size:11px; font-weight:700;">' + item.status + '</span>');
+          cells.push(escapeHtml(item.reporter));
+          cells.push('<span style="font-size:11.5px;">' + item.created + '</span>');
+        } else {
+          cells.push('<span style="font-size:11.5px;">' + item.resolved_at + '</span>');
+          cells.push(escapeHtml(item.resolver));
+        }
+      } else if (type === "changes") {
+        cells.push('<strong style="font-family:monospace; color:var(--accent);">' + item.number + '</strong>');
+        cells.push('<strong>' + escapeHtml(item.title) + '</strong>');
+        cells.push('<span class="badge">' + escapeHtml(item.type) + '</span>');
+        cells.push('<span class="prio prio-' + (item.risk === "HIGH" ? "high" : item.risk === "MEDIUM" ? "medium" : "low") + '" style="font-size:9.5px; padding:1px 6px;">' + item.risk + ' RISK</span>');
+        cells.push('<span style="font-size:11px; font-weight:700;">' + item.status + '</span>');
+        cells.push('<span style="font-size:11.5px;">' + item.planned_start + '</span>');
+      } else if (type === "problems") {
+        cells.push('<strong style="font-family:monospace; color:var(--accent);">' + item.number + '</strong>');
+        cells.push('<strong>' + escapeHtml(item.title) + '</strong>');
+        cells.push('<span class="prio prio-' + item.priority.toLowerCase() + '" style="font-size:9.5px; padding:1px 6px;">' + item.priority + '</span>');
+        cells.push('<span style="font-size:11px; font-weight:700;">' + item.status + '</span>');
+        cells.push('<span class="badge" style="background:rgba(99, 102, 241, 0.1); color:#6366f1;">' + item.linked_tickets + ' TICKETS</span>');
+        cells.push('<span style="font-size:11.5px;">' + item.created + '</span>');
+      } else if (type === "patches") {
+        cells.push('<strong>💻 ' + escapeHtml(item.asset) + '</strong>');
+        cells.push('<strong>' + escapeHtml(item.title) + '</strong>');
+        cells.push('<span class="prio prio-' + (item.severity === "CRITICAL" ? "critical" : item.severity === "HIGH" ? "high" : "medium") + '" style="font-size:9.5px; padding:1px 6px;">' + item.severity + '</span>');
+        cells.push('<span style="font-family:monospace; font-size:11.5px;">' + item.cve + '</span>');
+        cells.push('<span style="font-size:11.5px;">' + item.detected + '</span>');
+      }
+
+      cells.forEach(function(cellHtml) {
+        var td = document.createElement("td");
+        td.style.padding = "12px 16px";
+        td.style.fontSize = "12.5px";
+        td.style.color = "var(--text-1)";
+        td.innerHTML = cellHtml;
+        tr.appendChild(td);
+      });
+
+      // Chevron expand indicator cell
+      var tdChevron = document.createElement("td");
+      tdChevron.style.padding = "12px 16px";
+      tdChevron.style.textAlign = "right";
+      tdChevron.style.fontSize = "14px";
+      tdChevron.style.color = "var(--text-3)";
+      tdChevron.innerHTML = '<span class="chevron-ico" style="display:inline-block; transition:transform 0.2s ease;">›</span>';
+      tr.appendChild(tdChevron);
+
+      tbody.appendChild(tr);
+
+      // Level 2 Drill Down: Click Row to Expand Detailed Sub-Panel Downwards
+      tr.addEventListener("click", function() {
+        var nextRow = tr.nextElementSibling;
+        var isExpanded = tr.classList.contains("expanded");
+        
+        // Collapse currently expanded rows in the table
+        tbody.querySelectorAll(".drilldown-row.expanded").forEach(function(expandedRow) {
+          expandedRow.classList.remove("expanded");
+          expandedRow.querySelector(".chevron-ico").style.transform = "rotate(0)";
+          var detailsRow = expandedRow.nextElementSibling;
+          if (detailsRow && detailsRow.classList.contains("detail-row")) {
+            detailsRow.remove();
+          }
+        });
+
+        if (!isExpanded) {
+          tr.classList.add("expanded");
+          tr.querySelector(".chevron-ico").style.transform = "rotate(90deg)";
+          
+          // Insert dynamic level-2 details card right below the row
+          var detailTr = document.createElement("tr");
+          detailTr.className = "detail-row";
+          var detailTd = document.createElement("td");
+          detailTd.colSpan = columns.length + 1;
+          detailTd.style.padding = "0";
+          
+          var detailsHtml = '<div class="detail-card">';
+          detailsHtml += '<div class="detail-grid">';
+          
+          // Render specific details based on types
+          var detailsObj = item.detail || {};
+          for (var label in detailsObj) {
+            if (label === "Comments" && Array.isArray(detailsObj[label])) {
+              detailsHtml += '<div class="detail-item" style="grid-column: 1 / -1;"><strong>Recent Activity Logs</strong>';
+              if (detailsObj[label].length === 0) {
+                detailsHtml += '<p style="margin:4px 0; color:var(--text-3); font-style:italic;">No customer activity logged.</p>';
+              } else {
+                detailsObj[label].forEach(function(comm) {
+                  detailsHtml += '<div style="background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:8px 12px; margin-top:6px; font-size:12px;">' +
+                                 '<div class="row-between" style="font-weight:700; font-size:11px; margin-bottom:4px; color:var(--text-2);">' +
+                                 '<span>👤 ' + escapeHtml(comm.author) + '</span>' +
+                                 '<span style="color:var(--text-3); font-weight:normal;">' + comm.date + '</span>' +
+                                 '</div><p style="margin:0; line-height:1.4;">' + escapeHtml(comm.body) + '</p></div>';
+                });
+              }
+              detailsHtml += '</div>';
+            } else if (label === "CAB Votes" && Array.isArray(detailsObj[label])) {
+              detailsHtml += '<div class="detail-item" style="grid-column: 1 / -1;"><strong>CAB Advisory Voting Log & Quorum</strong>';
+              if (detailsObj[label].length === 0) {
+                detailsHtml += '<p style="margin:4px 0; color:var(--text-3); font-style:italic;">No voting records pending or submitted.</p>';
+              } else {
+                detailsHtml += '<div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">';
+                detailsObj[label].forEach(function(vote) {
+                  var approveBadge = vote.approve === "APPROVE" ? '<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; font-size:9.5px;">APPROVED</span>' : '<span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; font-size:9.5px;">REJECTED</span>';
+                  detailsHtml += '<div style="background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:8px 12px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">' +
+                                 '<span><strong>' + escapeHtml(vote.author) + '</strong>' + (vote.comment ? ' <span style="color:var(--text-3);">— ' + escapeHtml(vote.comment) + '</span>' : '') + '</span>' +
+                                 approveBadge + '</div>';
+                });
+                detailsHtml += '</div>';
+              }
+              detailsHtml += '</div>';
+            } else {
+              detailsHtml += '<div class="detail-item"><strong>' + label + '</strong><p style="margin:4px 0; line-height:1.5;">' + escapeHtml(detailsObj[label]).replace(/\n/g, '<br>') + '</p></div>';
+            }
+          }
+          
+          detailsHtml += '</div>';
+          
+          // Action button to full details page
+          var targetUrl = "/tickets/" + item.id;
+          if (type === "changes") targetUrl = "/changes/" + item.id;
+          if (type === "problems") targetUrl = "/problems/" + item.id;
+          if (type === "patches") targetUrl = "/patches";
+          
+          detailsHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--line); text-align:right;">' +
+                         '<a href="' + targetUrl + '" class="button primary" style="padding:6px 14px; font-size:12px; min-height:0; display:inline-flex; align-items:center; gap:6px;">🔍 Full Records Details Panel ›</a>' +
+                         '</div>';
+          detailsHtml += '</div>';
+          
+          detailTd.innerHTML = detailsHtml;
+          detailTr.appendChild(detailTd);
+          tr.after(detailTr);
+        }
+      });
+    });
+  }
+
+  // Filter input typing search handler
+  searchInput.addEventListener("input", function() {
+    var query = searchInput.value.toLowerCase().trim();
+    if (!query) {
+      renderTable(allData);
+      return;
+    }
+    
+    var filtered = allData.filter(function(item) {
+      // Concatenate fields for generic filter
+      var text = (item.number || "") + " " + (item.title || "") + " " + (item.status || "") + " " + (item.category || "") + " " + (item.reporter || "") + " " + (item.asset || "") + " " + (item.severity || "");
+      return text.toLowerCase().indexOf(query) !== -1;
+    });
+    
+    renderTable(filtered);
+  });
+
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+})();
+</script>
+
+<style>
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+</style>
 
 {% endblock %}

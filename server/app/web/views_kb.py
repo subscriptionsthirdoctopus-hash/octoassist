@@ -312,3 +312,47 @@ def portal_kb_read(
         request=request, name="kb_detail.html",
         context=_ctx(user, db, article=art, portal_view=True),
     )
+
+
+@router.post("/portal/kb/{article_id}/rate")
+def portal_kb_rate(
+    article_id: int,
+    helpful: str = Form(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    art = db.get(KbArticle, article_id)
+    if art is None or art.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+        
+    if helpful == "yes":
+        art.helpful_yes_count += 1
+    elif helpful == "no":
+        art.helpful_no_count += 1
+        
+    db.commit()
+    return RedirectResponse(url=f"/portal/kb/{art.slug}", status_code=303)
+
+
+@router.get("/api/v1/kb/search")
+def kb_search_api(
+    q: str = "",
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve published KB articles matching query (JSON for autocomplete)."""
+    rows = search(
+        db, tenant_id=user.tenant_id, q=q, portal_only=False, limit=5
+    )
+    return {
+        "q": q,
+        "results": {
+            "kb": [
+                {
+                    "url": f"/kb/{k.id}",
+                    "title": k.title,
+                    "subtitle": (k.summary or "")[:100] + ("…" if k.summary and len(k.summary) > 100 else "")
+                } for k in rows
+            ]
+        }
+    }

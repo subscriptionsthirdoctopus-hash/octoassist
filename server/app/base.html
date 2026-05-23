@@ -37,7 +37,7 @@
         {% endif %}
         <span class="who">{{ current_user.full_name or current_user.email }} <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>
         <form method="post" action="/logout" class="inline-form">
-          <button type="submit" class="link-button">Sign out</button>
+          <button type="submit" class="link-button">Logout</button>
         </form>
       {% else %}
         <a href="/login">Sign in</a>

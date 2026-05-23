@@ -19,6 +19,37 @@
 
 <article class="card prose" style="max-width:780px;line-height:1.7;font-size:15px;white-space:pre-wrap;">{{ article.body or "(empty)" }}</article>
 
+{% if portal_view %}
+<section class="card" style="max-width:780px; margin-top:20px; padding:20px; border-radius:10px; background:var(--surface-glass, rgba(255,255,255,0.7)); backdrop-filter:blur(10px); border:1px solid var(--line, rgba(226,232,240,0.8)); text-align:center;">
+  <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700; color:var(--text);">Was this article helpful?</h4>
+  <div style="display:flex; justify-content:center; gap:12px;">
+    <form method="post" action="/portal/kb/{{ article.id }}/rate">
+      <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="helpful" value="yes">
+      <button type="submit" class="button" style="display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:8px 16px; border-radius:6px; cursor:pointer;">
+        👍 Yes
+      </button>
+    </form>
+    
+    <form method="post" action="/portal/kb/{{ article.id }}/rate">
+      <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="helpful" value="no">
+      <button type="submit" class="button" style="display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:8px 16px; border-radius:6px; cursor:pointer;">
+        👎 No
+      </button>
+    </form>
+  </div>
+  
+  {% set total_votes = article.helpful_yes_count + article.helpful_no_count %}
+  {% if total_votes > 0 %}
+    {% set pct = (article.helpful_yes_count / total_votes * 100) | round | int %}
+    <p class="meta" style="margin-top:12px; font-size:11.5px; font-weight:600; color:var(--slate,#64748b);">
+      {{ pct }}% of users found this article helpful ({{ article.helpful_yes_count }} of {{ total_votes }})
+    </p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if not portal_view %}
 <div class="form-actions" style="margin-top:24px;max-width:780px;">
   <a href="/kb/{{ article.id }}/edit" class="button primary">Edit</a>

@@ -71,6 +71,11 @@
   --topbar-bg: rgba(3, 7, 18, 0.65);
   --topbar-border: rgba(255, 255, 255, 0.06);
   --topbar-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  /* Scrollbars - Dark */
+  --scrollbar-track: rgba(3, 7, 18, 0.4);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.24);
 }
 
 /* ============================================================
@@ -111,6 +116,11 @@
   --topbar-bg: rgba(255, 255, 255, 0.75);
   --topbar-border: rgba(15, 23, 42, 0.04);
   --topbar-shadow: 0 4px 20px rgba(15, 23, 42, 0.02);
+
+  /* Scrollbars - Light */
+  --scrollbar-track: rgba(244, 247, 252, 0.5);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.15);
+  --scrollbar-thumb-hover: rgba(15, 23, 42, 0.28);
 }
 
 /* Status + priority pills — light-mode variants.
@@ -154,24 +164,31 @@ html, body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";  /* Inter alt forms */
   background: var(--bg);
   background-image: 
-    radial-gradient(at 15% 15%, rgba(59, 130, 246, 0.07) 0px, transparent 45%),
-    radial-gradient(at 85% 15%, rgba(99, 102, 241, 0.07) 0px, transparent 45%),
-    radial-gradient(at 50% 85%, rgba(236, 72, 153, 0.04) 0px, transparent 45%);
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    radial-gradient(at 15% 15%, rgba(59, 130, 246, 0.08) 0px, transparent 45%),
+    radial-gradient(at 85% 15%, rgba(99, 102, 241, 0.08) 0px, transparent 45%),
+    radial-gradient(at 50% 85%, rgba(236, 72, 153, 0.05) 0px, transparent 45%);
   background-attachment: fixed;
-  background-size: 100% 100%;
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%, 100% 100%;
   color: var(--text-2);
   font-size: var(--t-body);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.3s ease;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
 }
 
 :root[data-theme="light"] body {
   background-image: 
-    radial-gradient(at 15% 15%, rgba(37, 99, 235, 0.05) 0px, transparent 40%),
-    radial-gradient(at 85% 15%, rgba(139, 92, 246, 0.05) 0px, transparent 40%),
-    radial-gradient(at 50% 85%, rgba(236, 72, 153, 0.03) 0px, transparent 40%) !important;
+    linear-gradient(rgba(37, 99, 235, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.012) 1px, transparent 1px),
+    radial-gradient(at 15% 15%, rgba(37, 99, 235, 0.06) 0px, transparent 40%),
+    radial-gradient(at 85% 15%, rgba(139, 92, 246, 0.06) 0px, transparent 40%),
+    radial-gradient(at 50% 85%, rgba(236, 72, 153, 0.04) 0px, transparent 40%) !important;
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%, 100% 100% !important;
 }
 
 h1, h2, h3, h4, h5 { 
@@ -200,18 +217,43 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 
 ::selection { background: var(--accent-soft); color: var(--accent-hover); }
 
+/* Custom Scrollbars for WebKit Browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.25s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 /* ---------- Top bar — theme-aware via tokens ----------
    In dark mode the topbar is one shade lighter than the page; in light mode
    it's a translucent white with backdrop blur. Both end up "floating above"
    content via a soft drop shadow. */
 .topbar {
   background: var(--topbar-bg);
-  backdrop-filter: saturate(180%) blur(8px);
-  -webkit-backdrop-filter: saturate(180%) blur(8px);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
   color: var(--text-1);
   border-bottom: 1px solid var(--topbar-border);
   box-shadow: var(--topbar-shadow);
-  padding: 10px 28px;
+  padding: 12px 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -219,33 +261,84 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   top: 0;
   z-index: 50;
 }
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 1;
+}
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .brand-link { text-decoration: none; color: inherit; transition: opacity 0.12s; }
 .brand-link:hover { opacity: 0.9; text-decoration: none; }
 .brand-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
 .brand-mark { font-weight: 700; letter-spacing: 1.2px; font-size: 11px; color: rgba(148, 163, 184, 0.85); }
 .brand-product { color: white; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
-.topbar nav { display: flex; align-items: center; gap: 2px; }
+.topbar nav { display: flex; align-items: center; gap: 4px; }
 .topbar nav a {
+  position: relative;
   color: rgba(241, 245, 249, 0.78);
   text-decoration: none;
   font-size: 13.5px;
   font-weight: 500;
   padding: 7px 12px;
   border-radius: var(--r-sm);
-  transition: background 0.12s, color 0.12s;
+  transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease, box-shadow 0.2s ease;
+}
+.topbar nav a::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent) 0%, #60a5fa 100%);
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 99px;
 }
 .topbar nav a:hover {
   color: white;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08) !important;
   text-decoration: none;
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.topbar nav a:hover::after {
+  width: 60%;
+  left: 20%;
 }
 .topbar nav .who {
   color: rgba(241, 245, 249, 0.82); font-size: 13px; font-weight: 500;
-  padding-left: 14px; margin-left: 8px; border-left: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 5px 12px; margin-left: 8px; border-left: 1px solid rgba(255, 255, 255, 0.12);
   display: inline-flex; align-items: center; gap: 7px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  border-radius: var(--r-sm);
+}
+.topbar nav .who:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-0.5px);
 }
 .topbar nav .who a, .topbar nav form button { color: rgba(241, 245, 249, 0.78); }
+.topbar nav .who button.link-button, .topbar nav form button.link-button {
+  color: rgba(241, 245, 249, 0.78);
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.topbar nav .who button.link-button:hover, .topbar nav form button.link-button:hover {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  text-decoration: none;
+  transform: scale(1.02);
+}
 .topbar nav .role-pill {
   font-size: 10px;
   padding: 2px 7px;
@@ -253,6 +346,12 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 700;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.topbar nav .who:hover .role-pill {
+  transform: scale(1.08);
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.6);
 }
 /* Role pills on dark background — higher saturation backgrounds for legibility */
 .role-admin     { background: #2563eb; color: white; }
@@ -277,9 +376,14 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   line-height: 1;
   margin: 0 8px;
   box-shadow: none;
-  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+  transition: background 0.2s, border-color 0.2s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
 }
-.theme-toggle:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.05); }
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: scale(1.12) rotate(15deg);
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
+}
 .theme-toggle:active { transform: scale(0.95); }
 :root[data-theme="light"] .theme-toggle { border-color: var(--line-strong); }
 :root[data-theme="light"] .theme-toggle:hover { background: var(--hover); }
@@ -400,11 +504,33 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   font-size: 14px; line-height: 1;
   box-shadow: none;
   position: relative;
-  transition: background 0.12s, transform 0.12s;
+  transition: background 0.2s, border-color 0.2s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
 }
-.bell-btn:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.05); }
+@keyframes bellRing {
+  0%, 100% { transform: rotate(0); }
+  20%, 60% { transform: rotate(15deg); }
+  40%, 80% { transform: rotate(-15deg); }
+}
+.bell-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(1.12);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+.bell-btn:hover .bell-icon {
+  animation: bellRing 0.6s ease;
+  display: inline-block;
+}
+.bell-btn:hover .bell-badge {
+  transform: scale(1.1) translate(1px, -1px);
+  box-shadow: 0 0 8px var(--red);
+}
 :root[data-theme="light"] .bell-btn { border-color: var(--line-strong); }
-:root[data-theme="light"] .bell-btn:hover { background: var(--hover); }
+:root[data-theme="light"] .bell-btn:hover {
+  background: var(--hover) !important;
+  border-color: var(--line-strong) !important;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
+}
 .bell-icon { font-size: 14px; }
 .bell-badge {
   position: absolute; top: -4px; right: -4px;
@@ -2382,4 +2508,82 @@ tr:last-child td {
 }
 tr:hover td {
   background: var(--hover) !important;
+}
+
+/* ============================================================
+   ADVANCED PREMIUM AESTHETIC POLISH & ENTRANCE ANIMATIONS
+   ============================================================ */
+
+/* High-fidelity Card frosted shadows override */
+.card, .kpi-card, .report-card, .comment, .auth-card {
+  position: relative;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.card:hover, .kpi-card:hover, .report-card:hover, .comment:hover {
+  transform: translateY(-4px) scale(1.01) !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.5), 
+              0 0 24px -2px rgba(59, 130, 246, 0.15) !important;
+}
+
+:root[data-theme="light"] .card:hover, 
+:root[data-theme="light"] .kpi-card:hover, 
+:root[data-theme="light"] .report-card:hover, 
+:root[data-theme="light"] .comment:hover {
+  border-color: rgba(37, 99, 235, 0.28) !important;
+  box-shadow: 0 16px 40px -8px rgba(15, 23, 42, 0.08), 
+              0 0 24px -2px rgba(37, 99, 235, 0.08) !important;
+}
+
+/* Staggered entry animation keyframes */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Apply entrance animations to page elements */
+.card, .kpi-card, .report-card, .comment, table.data, .filters, .empty, .auth-card {
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Stagger delay classes */
+.cards > .card:nth-child(1), .kpi-grid > .kpi-card:nth-child(1) { animation-delay: 0.04s; }
+.cards > .card:nth-child(2), .kpi-grid > .kpi-card:nth-child(2) { animation-delay: 0.08s; }
+.cards > .card:nth-child(3), .kpi-grid > .kpi-card:nth-child(3) { animation-delay: 0.12s; }
+.cards > .card:nth-child(4), .kpi-grid > .kpi-card:nth-child(4) { animation-delay: 0.16s; }
+.cards > .card:nth-child(5), .kpi-grid > .kpi-card:nth-child(5) { animation-delay: 0.20s; }
+
+/* Micro-animations and tactile feedback for all buttons */
+button, .button, input[type="submit"] {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+              background-color 0.2s ease, 
+              border-color 0.2s ease, 
+              box-shadow 0.2s ease !important;
+}
+button:hover, .button:hover, input[type="submit"]:hover {
+  transform: translateY(-1px) !important;
+}
+button:active, .button:active, input[type="submit"]:active {
+  transform: translateY(1px) scale(0.97) !important;
+}
+
+/* Modern clean focus indicators */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 4px var(--accent-soft) !important;
+  border-radius: 4px !important;
 }

@@ -152,6 +152,14 @@ def new_ticket_form(
     cats = (db.query(Category)
               .filter(Category.tenant_id == user.tenant_id, Category.kind == ticket_kind, Category.is_active == True)  # noqa: E712
               .order_by(Category.name).all())
+    
+    # Query active users in the tenant
+    users = db.query(User).filter(User.tenant_id == user.tenant_id, User.is_active == True).order_by(User.full_name, User.email).all()
+    
+    # Extract distinct sorted locations from the users list
+    loc_set = set(u.location for u in users if u.location)
+    locations = sorted(list(loc_set))
+    
     return templates.TemplateResponse(
         request=request,
         name="ticket_new.html",
@@ -159,31 +167,74 @@ def new_ticket_form(
                      ticket_kind=ticket_kind.value,
                      categories=cats,
                      priorities=[p.value for p in TicketPriority],
+                     users=users,
+                     locations=locations,
                      portal=False),
     )
 
 
 @router.post("/tickets/new")
-def new_ticket_submit(
+async def new_ticket_submit(
     request: Request,
     title: str = Form(...),
     description: str = Form(""),
-    category_id: int = Form(...),
+    category_id: str = Form(...),
     priority: str = Form(...),
+    reporter_id: int = Form(...),
+    location: str = Form(""),
+    kind: str = Form("incident"),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    cat = db.get(Category, category_id)
+    # Resolve category, creating "Others" on the fly if selected
+    try:
+        cat_id = int(category_id)
+        cat = db.get(Category, cat_id)
+    except ValueError:
+        try:
+            t_kind = TicketKind(kind)
+        except ValueError:
+            t_kind = TicketKind.incident
+        cat = db.query(Category).filter(Category.tenant_id == user.tenant_id, Category.name == "Others", Category.kind == t_kind).first()
+        if not cat:
+            cat = Category(
+                tenant_id=user.tenant_id,
+                name="Others",
+                kind=t_kind,
+                default_priority=TicketPriority.medium,
+                requires_approval=False,
+                is_active=True
+            )
+            db.add(cat)
+            db.commit()
+            db.refresh(cat)
+
     if cat is None or cat.tenant_id != user.tenant_id:
         raise HTTPException(status_code=400, detail="Invalid category")
     try:
         prio = TicketPriority(priority)
     except ValueError:
         prio = cat.default_priority
+
+    # Log ticket on behalf of the selected requester user
+    reporter = db.get(User, reporter_id)
+    if not reporter or reporter.tenant_id != user.tenant_id:
+        reporter = user
+
     ticket = ticketing.create_ticket(
-        db, tenant_id=user.tenant_id, reporter=user, category=cat,
+        db, tenant_id=user.tenant_id, reporter=reporter, category=cat,
         title=title, description=description, priority=prio,
     )
+    
+    # Save inputted location
+    if location:
+        ticket.location = location
+        db.commit()
+
+    # Process and save any uploaded files (screenshots, diagnostic logs, etc.)
+    from .views_portal import _attach_uploaded_files
+    await _attach_uploaded_files(db, request=request, ticket=ticket, user=user, field_name="attachments")
+
     return RedirectResponse(url=f"/tickets/{ticket.id}", status_code=303)
 
 
@@ -230,6 +281,18 @@ def ticket_detail(
         kb_hints = kb_search(db, tenant_id=user.tenant_id, q=t.category.name,
                              portal_only=False, limit=3)
 
+    # Fetch latest snapshot and pending patches for the linked asset
+    from ..models import AssetSnapshot, PatchObservation
+    asset_snapshot = None
+    pending_patches_count = 0
+    if t.asset_id:
+        asset_snapshot = (db.query(AssetSnapshot)
+                            .filter(AssetSnapshot.agent_id == t.asset_id)
+                            .order_by(AssetSnapshot.snapshot_at.desc()).first())
+        pending_patches_count = (db.query(PatchObservation)
+                                   .filter(PatchObservation.agent_id == t.asset_id, PatchObservation.resolved_at.is_(None))
+                                   .count())
+
     return templates.TemplateResponse(
         request=request,
         name="ticket_detail.html",
@@ -238,6 +301,8 @@ def ticket_detail(
                      staff=staff,
                      attachments=att_rows,
                      kb_hints=kb_hints,
+                     asset_snapshot=asset_snapshot,
+                     pending_patches_count=pending_patches_count,
                      attach_error=attach_error,
                      statuses=[s.value for s in TicketStatus],
                      priorities=[p.value for p in TicketPriority],
@@ -323,3 +388,21 @@ def change_priority(
         raise HTTPException(status_code=400)
     ticketing.update_priority(db, ticket=t, actor=user, new_priority=np)
     return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=303)
+
+
+@router.get("/api/v1/kb/{article_id}")
+def get_kb_article_json(
+    article_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from ..models import KbArticle
+    article = db.get(KbArticle, article_id)
+    if not article or article.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return {
+        "id": article.id,
+        "title": article.title,
+        "summary": article.summary,
+        "body": article.body,
+    }

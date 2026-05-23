@@ -1,9 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Settings — OctoAssist{% endblock %}
 {% block content %}
-<section class="page-head">
-  <h1>Settings</h1>
-  <p class="meta">Tenant: {{ tenant.name }} · click a tile to open</p>
+<section class="page-head" style="margin-bottom: 24px;">
+  <div class="row-between" style="align-items: center; gap: 16px; flex-wrap: wrap;">
+    <div>
+      <h1>Settings</h1>
+      <p class="meta" style="margin: 0;">Configure your enterprise ITSM workspace parameters and directory integrations</p>
+    </div>
+    <div style="position: relative; display: flex; align-items: center;">
+      <span style="position: absolute; left: 12px; font-size: 13.5px; opacity: 0.6; pointer-events: none;">🔍</span>
+      <input type="text" id="settingsSearchInput" placeholder="Search settings (e.g. SLA, Users, SSO)..." style="padding: 8px 14px 8px 34px; border-radius: var(--r-sm); border: 1px solid var(--line); font-size: 13px; width: 320px; background: rgba(255, 255, 255, 0.02); min-height: 0;" autofocus>
+    </div>
+  </div>
 </section>
 
 {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
@@ -126,4 +134,28 @@
   </a>
 
 </div>
+
+<script>
+(function() {
+  var searchInput = document.getElementById("settingsSearchInput");
+  var tiles = document.querySelectorAll(".settings-tile");
+  
+  if (searchInput) {
+    searchInput.addEventListener("input", function() {
+      var query = searchInput.value.toLowerCase().trim();
+      tiles.forEach(function(tile) {
+        var title = tile.querySelector(".tile-title").textContent.toLowerCase();
+        var sub = tile.querySelector(".tile-sub").textContent.toLowerCase();
+        if (title.indexOf(query) !== -1 || sub.indexOf(query) !== -1) {
+          tile.style.display = "block";
+          tile.style.opacity = "1";
+        } else {
+          tile.style.display = "none";
+          tile.style.opacity = "0";
+        }
+      });
+    });
+  }
+})();
+</script>
 {% endblock %}

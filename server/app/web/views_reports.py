@@ -85,6 +85,141 @@ def reports_home(
     )
 
 
+@router.get("/reports/api/drilldown")
+def reports_drilldown_api(
+    kpi: str,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    tenant_id = user.tenant_id
+    if kpi == "tickets_open":
+        rows = db.query(Ticket).filter(Ticket.tenant_id == tenant_id, Ticket.status != TicketStatus.resolved, Ticket.status != TicketStatus.closed).order_by(Ticket.created_at.desc()).limit(100).all()
+        return {
+            "type": "tickets",
+            "columns": ["Number", "Title", "Category", "Priority", "Status", "Reporter", "Created"],
+            "data": [
+                {
+                    "id": t.id,
+                    "number": t.ticket_number,
+                    "title": t.title,
+                    "category": t.category.name if t.category else "Others",
+                    "priority": t.priority.value.upper(),
+                    "status": t.status.value.replace("_", " ").upper(),
+                    "reporter": t.reporter.full_name or t.reporter.email if t.reporter else "—",
+                    "created": t.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M"),
+                    "detail": {
+                        "Description": t.description or "No description provided.",
+                        "Due Date": t.due_resolution_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if t.due_resolution_at else "No SLA Limit",
+                        "Location": t.location or "Not Specified",
+                        "Comments": [
+                            {"author": c.author.full_name or c.author.email, "body": c.body, "date": c.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M")}
+                            for c in t.comments if not c.is_internal
+                        ][:3]
+                    }
+                } for t in rows
+            ]
+        }
+        
+    elif kpi == "tickets_resolved_7d":
+        from datetime import timedelta
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        rows = db.query(Ticket).filter(Ticket.tenant_id == tenant_id, Ticket.status == TicketStatus.resolved, Ticket.resolved_at >= seven_days_ago).order_by(Ticket.resolved_at.desc()).limit(100).all()
+        return {
+            "type": "tickets_resolved",
+            "columns": ["Number", "Title", "Category", "Priority", "Resolved At", "Resolver"],
+            "data": [
+                {
+                    "id": t.id,
+                    "number": t.ticket_number,
+                    "title": t.title,
+                    "category": t.category.name if t.category else "Others",
+                    "priority": t.priority.value.upper(),
+                    "resolved_at": t.resolved_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if t.resolved_at else "—",
+                    "resolver": t.assignee.full_name or t.assignee.email if t.assignee else "Auto-Resolved",
+                    "detail": {
+                        "Description": t.description or "No description provided.",
+                        "Resolution Notes": "Ticket resolved within SLA parameters.",
+                        "Total Open Time": f"{((t.resolved_at - t.created_at).total_seconds() / 3600):.1f} Hours" if t.resolved_at else "N/A"
+                    }
+                } for t in rows
+            ]
+        }
+        
+    elif kpi == "changes_in_flight":
+        rows = db.query(Change).filter(Change.tenant_id == tenant_id, Change.status.in_([ChangeStatus.draft, ChangeStatus.under_review, ChangeStatus.approved, ChangeStatus.in_progress])).order_by(Change.created_at.desc()).all()
+        return {
+            "type": "changes",
+            "columns": ["Number", "Title", "Type", "Risk", "Status", "Planned Start"],
+            "data": [
+                {
+                    "id": c.id,
+                    "number": c.change_number,
+                    "title": c.title,
+                    "type": c.change_type.value.upper(),
+                    "risk": c.risk.value.upper(),
+                    "status": c.status.value.replace("_", " ").upper(),
+                    "planned_start": c.planned_start.astimezone(IST).strftime("%Y-%m-%d %H:%M") if c.planned_start else "—",
+                    "detail": {
+                        "Type & Risk": f"Type: {c.change_type.value} | Risk: {c.risk.value}",
+                        "Planned Window": f"{c.planned_start.astimezone(IST).strftime('%Y-%m-%d %H:%M') if c.planned_start else '—'} to {c.planned_end.astimezone(IST).strftime('%Y-%m-%d %H:%M') if c.planned_end else '—'}",
+                        "Description & Rollback": f"Description: {c.description or 'No description'}\nRollback Plan: {c.rollback_plan or 'None'}",
+                        "CAB Votes": [
+                            {"author": v.user.full_name or v.user.email, "approve": "APPROVE" if v.approve else "REJECT", "comment": v.comment or ""}
+                            for v in c.votes
+                        ]
+                    }
+                } for c in rows
+            ]
+        }
+        
+    elif kpi == "problems_open":
+        rows = db.query(Problem).filter(Problem.tenant_id == tenant_id, Problem.status != ProblemStatus.resolved, Problem.status != ProblemStatus.closed).order_by(Problem.created_at.desc()).all()
+        return {
+            "type": "problems",
+            "columns": ["Number", "Title", "Priority", "Status", "Linked Tickets", "Created"],
+            "data": [
+                {
+                    "id": p.id,
+                    "number": p.problem_number,
+                    "title": p.title,
+                    "priority": p.priority.value.upper(),
+                    "status": p.status.value.replace("_", " ").upper(),
+                    "linked_tickets": len(p.linked_tickets),
+                    "created": p.created_at.astimezone(IST).strftime("%Y-%m-%d %H:%M"),
+                    "detail": {
+                        "Workaround": p.workaround or "No workaround documented yet.",
+                        "Root Cause": p.root_cause or "Investigating root cause...",
+                        "Impacted Assets": "Critical systems inventory linkage active."
+                    }
+                } for p in rows
+            ]
+        }
+        
+    elif kpi == "patch_compliance":
+        rows = db.query(PatchObservation).filter(PatchObservation.tenant_id == tenant_id, PatchObservation.resolved_at.is_(None)).order_by(PatchObservation.severity.desc()).limit(100).all()
+        return {
+            "type": "patches",
+            "columns": ["Asset", "Patch Title", "Severity", "CVE ID", "Detected"],
+            "data": [
+                {
+                    "id": p.id,
+                    "asset": p.agent.hostname if p.agent else "—",
+                    "title": p.title,
+                    "severity": p.severity.value.upper(),
+                    "cve": p.cve_id or "N/A",
+                    "detected": p.detected_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.detected_at else "—",
+                    "detail": {
+                        "Vulnerability Description": p.description or "No outstanding advisory details.",
+                        "Remediation": "Run remote installation agent or apply immediate server patch deployment task.",
+                        "IP Address": p.agent.ip_address if p.agent else "Unknown"
+                    }
+                } for p in rows
+            ]
+        }
+    
+    return {"type": "empty", "columns": [], "data": []}
+
+
 # ----------  Tickets report ----------
 
 @router.get("/reports/tickets", response_class=HTMLResponse)
