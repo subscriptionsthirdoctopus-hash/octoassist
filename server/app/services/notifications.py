@@ -77,7 +77,16 @@ def _render_ticket_details(ticket: Ticket) -> str:
     kind_str = "Incident" if ticket.kind.value == "incident" else "Service Request"
     assignee_str = f"{ticket.assignee.display_name} ({ticket.assignee.email})" if ticket.assignee else "Not Assigned (IT Operations Queue)"
     reporter_str = f"{ticket.reporter.display_name} ({ticket.reporter.email})" if ticket.reporter else "—"
-    created_str = ticket.created_at.strftime("%d-%b-%Y %I:%M %p UTC") if ticket.created_at else "—"
+    if ticket.created_at:
+        from datetime import timezone, timedelta
+        IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+        dt = ticket.created_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        created_str = dt.astimezone(IST).strftime("%d-%b-%Y %I:%M %p IST")
+    else:
+        created_str = "—"
+
     
     return (
         "============================================================\n"
@@ -206,6 +215,22 @@ def ticket_status_changed(db: Session, ticket: Ticket, old_status: str) -> None:
         _fire(tenant, ticket.assignee.email,
               f"[OctoAssist] {ticket.ticket_number} — Status Updated to {ticket.status.value.replace('_',' ').title()}",
               body)
+
+    # Notify global IT operations notification email (technicians group) when ticket is closed or resolved
+    if ticket.status.value in ("closed", "resolved") and tenant.notification_email:
+        body = (
+            f"Hello Team,\n\n"
+            f"Ticket {ticket.ticket_number} has been updated to {ticket.status.value.upper()}.\n\n"
+            f"{details}\n"
+            f"To view details, click below:\n"
+            f"{base_url}/tickets/{ticket.id}\n\n"
+            "Best regards,\n"
+            "OctoAssist System Service\n"
+        )
+        _fire(tenant, tenant.notification_email,
+              f"[OctoAssist] {ticket.ticket_number} — Status Updated to {ticket.status.value.replace('_',' ').title()}",
+              body)
+
 
 
 def ticket_comment(db: Session, ticket: Ticket, comment: TicketComment) -> None:

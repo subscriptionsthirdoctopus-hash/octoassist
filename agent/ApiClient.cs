@@ -102,6 +102,65 @@ public class ApiClient
         }
     }
 
+    public async Task<List<PendingDeployment>> GetPendingDeploymentsAsync(string agentToken, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, "api/v1/agent/deployments");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", agentToken);
+
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            _log.LogWarning("Failed to get pending deployments: {status} {body}", resp.StatusCode, body);
+            return new List<PendingDeployment>();
+        }
+        var result = await resp.Content.ReadFromJsonAsync<List<PendingDeployment>>(JsonOpts, ct);
+        return result ?? new List<PendingDeployment>();
+    }
+
+    public async Task StartDeploymentAsync(string agentToken, int targetId, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"api/v1/agent/deployments/{targetId}/start");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", agentToken);
+
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            _log.LogWarning("Failed to start deployment {id}: {status} {body}", targetId, resp.StatusCode, body);
+        }
+    }
+
+    public async Task PostDeploymentAttemptAsync(string agentToken, int targetId, DeploymentAttempt body, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"api/v1/agent/deployments/{targetId}/attempt");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", agentToken);
+        req.Content = JsonContent.Create(body, options: JsonOpts);
+
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var resBody = await resp.Content.ReadAsStringAsync(ct);
+            _log.LogWarning("Failed to post deployment attempt for target {id}: {status} {resBody}", targetId, resp.StatusCode, resBody);
+            resp.EnsureSuccessStatusCode();
+        }
+    }
+
+    public async Task FinishDeploymentAsync(string agentToken, int targetId, DeploymentFinish body, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"api/v1/agent/deployments/{targetId}/finish");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", agentToken);
+        req.Content = JsonContent.Create(body, options: JsonOpts);
+
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var resBody = await resp.Content.ReadAsStringAsync(ct);
+            _log.LogWarning("Failed to finish deployment target {id}: {status} {resBody}", targetId, resp.StatusCode, resBody);
+            resp.EnsureSuccessStatusCode();
+        }
+    }
+
     public class RegisterResult
     {
         [JsonPropertyName("agent_id")] public int AgentId { get; set; }

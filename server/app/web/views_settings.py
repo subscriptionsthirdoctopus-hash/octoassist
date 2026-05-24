@@ -63,11 +63,9 @@ def settings_home(
                                SoftwarePackage.is_active.is_(True)).scalar()) or 0
     reply_templates_count = (db.query(_f.count(ReplyTemplate.id))
                                .filter(ReplyTemplate.tenant_id == user.tenant_id).scalar()) or 0
-    from ..models import Holiday, CabCommittee
+    from ..models import Holiday
     holidays_count = (db.query(_f.count(Holiday.id))
                         .filter(Holiday.tenant_id == user.tenant_id).scalar()) or 0
-    committee_count = (db.query(_f.count(CabCommittee.id))
-                         .filter(CabCommittee.tenant_id == user.tenant_id).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -78,7 +76,6 @@ def settings_home(
             "location_rules_count": int(location_rules_count),
             "category_rules_count": int(category_rules_count),
             "cab_count": int(cab_count),
-            "committee_count": int(committee_count),
             "catalog_count": int(catalog_count),
             "reply_templates_count": int(reply_templates_count),
             "holidays_count": int(holidays_count),

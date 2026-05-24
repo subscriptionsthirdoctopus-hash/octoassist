@@ -183,6 +183,7 @@ async def bulk_update_users(
                          User.tenant_id == user.tenant_id)
                  .all())
     n = 0
+    skipped = []
     for t in targets:
         # Guard: don't let an admin demote / deactivate themselves
         if t.id == user.id and action in ("demote_requester", "deactivate"):

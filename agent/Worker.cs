@@ -4,6 +4,9 @@ using OctoAssistAgent.Models;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
+using System.IO;
+using System.Net.Http;
 
 namespace OctoAssistAgent;
 
@@ -108,11 +111,239 @@ public class Worker : BackgroundService
         {
             var snap = _collector.Collect();
             await _api.CheckinAsync(_cfg.AgentToken, snap, ct);
+
+            // Execute pending deployments right after check-in
+            await SafeExecuteDeployments(ct);
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "Checkin failed; will retry on next interval");
         }
+    }
+
+    private async Task SafeExecuteDeployments(CancellationToken ct)
+    {
+        try
+        {
+            var deployments = await _api.GetPendingDeploymentsAsync(_cfg.AgentToken, ct);
+            if (deployments == null || deployments.Count == 0) return;
+
+            _log.LogInformation("Retrieved {count} pending patch deployments", deployments.Count);
+            int processed = 0;
+
+            foreach (var d in deployments)
+            {
+                _log.LogInformation("Executing deployment target={id} window={name} packages={count}",
+                    d.TargetId, d.WindowName, d.SelectedPackages.Count);
+
+                await _api.StartDeploymentAsync(_cfg.AgentToken, d.TargetId, ct);
+
+                bool anyFailed = false;
+                bool anyRebootNeeded = false;
+                bool anySuccess = false;
+
+                foreach (var pkg in d.SelectedPackages)
+                {
+                    // Skip packages that clearly belong to Linux
+                    var pkgLow = pkg.ToLowerInvariant();
+                    if (pkgLow.StartsWith("systemd") || pkgLow.StartsWith("libsystemd") || pkgLow.StartsWith("snapd") || 
+                        pkgLow.StartsWith("ubuntu-") || pkgLow.StartsWith("linux-") || pkgLow.StartsWith("apt-") || pkgLow.StartsWith("dpkg"))
+                    {
+                        _log.LogWarning("Skipping non-Windows package on Windows host: {pkg}", pkg);
+                        var nowStr = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                        await _api.PostDeploymentAttemptAsync(_cfg.AgentToken, d.TargetId, new DeploymentAttempt
+                        {
+                            PackageName = pkg,
+                            StartedAt = nowStr,
+                            FinishedAt = nowStr,
+                            ExitCode = 0,
+                            Success = false,
+                            NeedsReboot = false,
+                            Stderr = "skipped: non-Windows package name",
+                            Method = "skipped"
+                        }, ct);
+                        continue;
+                    }
+
+                    var startedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                    DeploymentAttempt attempt;
+                    try
+                    {
+                        attempt = await InstallPackageAsync(pkg, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        attempt = new DeploymentAttempt
+                        {
+                            PackageName = pkg,
+                            StartedAt = startedAt,
+                            FinishedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                            ExitCode = 1,
+                            Success = false,
+                            NeedsReboot = false,
+                            Stderr = $"{ex.GetType().Name}: {ex.Message}",
+                            Method = pkg.ToUpperInvariant().StartsWith("KB") ? "windows-update" : "winget"
+                        };
+                    }
+
+                    _log.LogInformation("  {pkg} -> exit={exitCode} success={success}",
+                        pkg, attempt.ExitCode, attempt.Success);
+
+                    if (!attempt.Success) anyFailed = true;
+                    else anySuccess = true;
+
+                    if (attempt.NeedsReboot) anyRebootNeeded = true;
+
+                    await _api.PostDeploymentAttemptAsync(_cfg.AgentToken, d.TargetId, attempt, ct);
+                }
+
+                await _api.FinishDeploymentAsync(_cfg.AgentToken, d.TargetId, new DeploymentFinish
+                {
+                    Note = "Windows Update via PSWindowsUpdate (C# Agent)",
+                    NeedsReboot = anyRebootNeeded
+                }, ct);
+
+                if (anySuccess && anyRebootNeeded)
+                {
+                    try
+                    {
+                        await PromptOrScheduleRebootAsync(ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "Failed to schedule reboot notice");
+                    }
+                }
+
+                processed++;
+            }
+
+            if (processed > 0)
+            {
+                _log.LogInformation("Patches applied. Re-collecting snapshot and sending updated check-in.");
+                var snap = _collector.Collect();
+                await _api.CheckinAsync(_cfg.AgentToken, snap, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Patch deployments execution cycle failed");
+        }
+    }
+
+    private async Task<DeploymentAttempt> InstallPackageAsync(string packageName, CancellationToken ct)
+    {
+        var startedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var pkg = packageName.Trim();
+        bool isKb = pkg.ToUpperInvariant().StartsWith("KB") && pkg.Substring(2).Split(' ')[0].All(char.IsDigit);
+        bool isWinget = !isKb && pkg.Contains('.') && !pkg.Contains(' ') && !pkg.Contains('/') && !pkg.Contains('(');
+
+        int exitCode = 1;
+        string stdout = "", stderr = "", method = "";
+        bool success = false, needsReboot = false;
+
+        if (isKb)
+        {
+            method = "windows-update";
+            var kbId = pkg;
+            var psScript = $@"if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {{
+                Write-Error 'PSWindowsUpdate module not installed'; exit 2
+            }}
+            Import-Module PSWindowsUpdate;
+            try {{
+                $sm = New-Object -ComObject Microsoft.Update.ServiceManager;
+                if (-not ($sm.Services | ? {{ $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' }})) {{
+                    $sm.AddService2('7971f918-a847-4430-9279-4a52d1efe18d', 7, '') | Out-Null
+                }}
+            }} catch {{}}
+            Install-WindowsUpdate -MicrosoftUpdate -KBArticleID '{kbId}' -AcceptAll -IgnoreReboot -Confirm:$false";
+
+            var res = await RunPowerShellAsync(psScript, 7200000); // 2 hours timeout limit
+            exitCode = res.ExitCode;
+            stdout = res.Stdout;
+            stderr = res.Stderr;
+            success = exitCode == 0;
+            if (stdout != null && stdout.ToLowerInvariant().Contains("reboot")) needsReboot = true;
+            if (stderr != null && stderr.ToLowerInvariant().Contains("reboot")) needsReboot = true;
+        }
+        else if (isWinget)
+        {
+            method = "winget";
+            var res = await RunProcessAsync("winget.exe", $"upgrade --id \"{pkg}\" --silent --accept-source-agreements --accept-package-agreements --disable-interactivity", 1800000); // 30 mins
+            exitCode = res.ExitCode;
+            stdout = res.Stdout;
+            stderr = res.Stderr;
+            success = exitCode == 0;
+        }
+        else
+        {
+            method = "windows-update";
+            // Clean up title regex safe
+            var cleanTitle = pkg;
+            if (cleanTitle.Contains('('))
+            {
+                var idx = cleanTitle.LastIndexOf('(');
+                if (idx > 0) cleanTitle = cleanTitle.Substring(0, idx).Trim();
+            }
+            var escapedTitle = System.Text.RegularExpressions.Regex.Escape(cleanTitle).Replace("'", "''");
+
+            var psScript = $@"if (-not (Get-Module -ListAvailable PSWindowsUpdate)) {{
+                Write-Error 'PSWindowsUpdate module not installed'; exit 2
+            }}
+            Import-Module PSWindowsUpdate;
+            try {{
+                $sm = New-Object -ComObject Microsoft.Update.ServiceManager;
+                if (-not ($sm.Services | ? {{ $_.ServiceID -eq '7971f918-a847-4430-9279-4a52d1efe18d' }})) {{
+                    $sm.AddService2('7971f918-a847-4430-9279-4a52d1efe18d', 7, '') | Out-Null
+                }}
+            }} catch {{}}
+            Install-WindowsUpdate -MicrosoftUpdate -Title '{escapedTitle}' -AcceptAll -IgnoreReboot -Confirm:$false";
+
+            var res = await RunPowerShellAsync(psScript, 7200000);
+            exitCode = res.ExitCode;
+            stdout = res.Stdout;
+            stderr = res.Stderr;
+            success = exitCode == 0;
+            if (stdout != null && stdout.ToLowerInvariant().Contains("reboot")) needsReboot = true;
+            if (stderr != null && stderr.ToLowerInvariant().Contains("reboot")) needsReboot = true;
+        }
+
+        // Truncate to keep payloads small
+        if (stdout != null && stdout.Length > 7000) stdout = stdout.Substring(stdout.Length - 7000);
+        if (stderr != null && stderr.Length > 1000) stderr = stderr.Substring(stderr.Length - 1000);
+
+        return new DeploymentAttempt
+        {
+            PackageName = packageName,
+            StartedAt = startedAt,
+            FinishedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ExitCode = exitCode,
+            Success = success,
+            NeedsReboot = needsReboot,
+            Stdout = stdout,
+            Stderr = stderr,
+            Method = method
+        };
+    }
+
+    private async Task PromptOrScheduleRebootAsync(CancellationToken ct)
+    {
+        // WTSSendMessage to alert users of pending reboot in 5 minutes, then trigger shutdown.exe
+        var title = "Security Updates Installed";
+        var body = "OctoAssist has successfully installed critical security updates on your workstation. Your computer will automatically reboot in 5 minutes to complete the installation. Please save your work immediately.";
+        
+        await ActionSendToastAsync(new Dictionary<string, object>
+        {
+            { "title", title },
+            { "body", body }
+        }, ct);
+
+        // Queue shutdown sequence in 5 minutes (300 seconds)
+        await ActionRebootAsync(new Dictionary<string, object>
+        {
+            { "delay_seconds", 300 },
+            { "reason", "Security updates installed; mandatory restart." }
+        }, ct);
     }
 
     private async Task FastPollingLoopAsync(CancellationToken ct)
