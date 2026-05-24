@@ -118,6 +118,13 @@
     <p class="tile-meta">{{ cab_count }} member{{ "" if cab_count == 1 else "s" }} on the board</p>
   </a>
 
+  <a href="/settings/cab/committees" class="settings-tile">
+    <span class="icon">🏛️</span>
+    <p class="tile-title">CAB Committees</p>
+    <p class="tile-sub">Group CAB members into named committees — Change Management, Risk Management, Security Review, etc. Each committee has its own member list.</p>
+    <p class="tile-meta">{{ committee_count or 0 }} committee{{ "" if (committee_count or 0) == 1 else "s" }}</p>
+  </a>
+
 
   <a href="/reports/library" class="settings-tile">
     <span class="icon">📊</span>
