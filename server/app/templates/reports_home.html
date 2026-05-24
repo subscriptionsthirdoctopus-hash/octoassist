@@ -561,6 +561,74 @@
     });
   }
 
+  // --- SVG Charts Custom Hover Tooltips ---
+  (function() {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'custom-chart-tooltip';
+    tooltip.style.position = 'absolute';
+    tooltip.style.pointerEvents = 'none';
+    tooltip.style.padding = '8px 14px';
+    tooltip.style.background = 'rgba(15, 23, 42, 0.95)'; // Deep Slate
+    tooltip.style.backdropFilter = 'blur(6px)';
+    tooltip.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+    tooltip.style.borderRadius = '8px';
+    tooltip.style.color = '#f8fafc';
+    tooltip.style.fontSize = '12.5px';
+    tooltip.style.fontWeight = '600';
+    tooltip.style.boxShadow = '0 10px 25px -5px rgba(0,0,0,0.4)';
+    tooltip.style.zIndex = '99999';
+    tooltip.style.opacity = '0';
+    tooltip.style.transition = 'opacity 0.12s ease';
+    document.body.appendChild(tooltip);
+
+    document.addEventListener('mouseover', function(e) {
+      // Donut segment or line chart point
+      const target = e.target.closest('.chart-line circle, .chart-donut svg circle');
+      if (!target) return;
+      
+      const titleEl = target.querySelector('title');
+      if (!titleEl) return;
+      
+      const text = titleEl.textContent || titleEl.innerText;
+      target.setAttribute('data-custom-tooltip', text);
+      // Remove temporary to prevent browser default tooltip
+      titleEl.remove();
+      
+      let formattedText = text;
+      if (text.includes(':')) {
+        const parts = text.split(':');
+        const label = parts[0].trim().replace(/_/g, ' ');
+        const val = parts[1].trim();
+        formattedText = `<span style="opacity: 0.7; font-weight: normal; text-transform: capitalize; margin-right: 4px;">${label}:</span><strong style="color: #3b82f6; font-size: 13.5px;">${val}</strong>`;
+      }
+      
+      tooltip.innerHTML = formattedText;
+      tooltip.style.opacity = '1';
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (tooltip.style.opacity === '1') {
+        tooltip.style.left = (e.pageX + 14) + 'px';
+        tooltip.style.top = (e.pageY - 14) + 'px';
+      }
+    });
+
+    document.addEventListener('mouseout', function(e) {
+      const target = e.target.closest('.chart-line circle, .chart-donut svg circle');
+      if (!target) return;
+      
+      const text = target.getAttribute('data-custom-tooltip');
+      if (text) {
+        // Re-create title element
+        const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        titleEl.textContent = text;
+        target.appendChild(titleEl);
+        target.removeAttribute('data-custom-tooltip');
+        tooltip.style.opacity = '0';
+      }
+    });
+  })();
+
 })();
 </script>
 

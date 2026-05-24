@@ -22,7 +22,7 @@ from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
-from ..auth import current_user, require_staff
+from ..auth import current_user, require_staff, require_admin
 from ..database import get_db
 from ..models import (
     KbArticle, KbArticleStatus, KbArticleVisibility, KbCategory, Tenant, User,
@@ -257,7 +257,7 @@ def kb_publish_toggle(
 @router.post("/kb/{article_id}/delete")
 def kb_delete(
     article_id: int,
-    user: User = Depends(require_staff),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     art = db.get(KbArticle, article_id)
@@ -350,6 +350,7 @@ def kb_search_api(
             "kb": [
                 {
                     "url": f"/kb/{k.id}",
+                    "slug": k.slug,
                     "title": k.title,
                     "subtitle": (k.summary or "")[:100] + ("…" if k.summary and len(k.summary) > 100 else "")
                 } for k in rows

@@ -87,7 +87,15 @@
       &nbsp; opened {{ change.created_at | ist }} by <strong>{{ change.requester.display_name }}</strong>
     </p>
   </div>
-  <div><a href="/changes" class="link-button">← Changes</a></div>
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <a href="/changes" class="link-button">← Changes</a>
+    {% if current_user.role.value == "admin" %}
+    <form method="post" action="/changes/{{ change.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this change record permanently? This cannot be undone.');">
+      <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      <button type="submit" class="button danger-solid">🗑️ Delete Change</button>
+    </form>
+    {% endif %}
+  </div>
 </section>
 
 {# Lifecycle ribbon #}

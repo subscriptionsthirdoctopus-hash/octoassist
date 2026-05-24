@@ -51,12 +51,18 @@
 {% endif %}
 
 {% if not portal_view %}
-<div class="form-actions" style="margin-top:24px;max-width:780px;">
+<div class="form-actions" style="margin-top:24px;max-width:780px; display: flex; gap: 8px; align-items: center;">
   <a href="/kb/{{ article.id }}/edit" class="button primary">Edit</a>
   <form method="post" action="/kb/{{ article.id }}/publish" class="inline-form">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
     <button type="submit" class="button">{% if article.status.value == 'published' %}Move to draft{% else %}Publish{% endif %}</button>
   </form>
+  {% if current_user.role.value == "admin" %}
+  <form method="post" action="/kb/{{ article.id }}/delete" class="inline-form" onsubmit="return confirm('Are you sure you want to delete this article permanently? This cannot be undone.');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <button type="submit" class="button danger-solid">🗑️ Delete</button>
+  </form>
+  {% endif %}
 </div>
 {% endif %}
 

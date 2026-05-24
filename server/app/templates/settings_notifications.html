@@ -42,6 +42,149 @@
 </div>
 
 <div class="card" style="margin-top:16px;">
+  <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Notification events (check/uncheck)</h3>
+  <p class="meta" style="margin:0 0 16px;">
+    Select exactly who gets notified for each key system event by configuring the granular subcategories below.
+  </p>
+  {% set prefs = tenant.notification_settings if tenant.notification_settings is not none else {} %}
+  <form method="post" action="/settings/notifications/preferences" style="display:flex; flex-direction:column; gap:20px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    
+    <!-- Ticket Creation Group -->
+    <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">🎫 Ticket Creation</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a new support ticket is logged.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_ticket_created_requester" value="1" {% if prefs.get('notify_ticket_created_requester', True) %}checked{% endif %}>
+          <span>Notify the <strong>Requester</strong> (End User confirmation)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_ticket_created_assignee" value="1" {% if prefs.get('notify_ticket_created_assignee', True) %}checked{% endif %}>
+          <span>Notify the <strong>Assignee</strong> (Assigned IT Technician alert)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_ticket_created_cab" value="1" {% if prefs.get('notify_ticket_created_cab', True) %}checked{% endif %}>
+          <span>Notify <strong>CAB Members</strong> (FYI notification to leadership)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Status Changes Group -->
+    <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">🔄 Status Changes</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a ticket transitions to a new status (e.g. In Progress, On Hold, Resolved).</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_status_changed_requester" value="1" {% if prefs.get('notify_status_changed_requester', True) %}checked{% endif %}>
+          <span>Notify the <strong>Requester</strong> (Keeps user informed of progress)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_status_changed_assignee" value="1" {% if prefs.get('notify_status_changed_assignee', True) %}checked{% endif %}>
+          <span>Notify the <strong>Assignee</strong> (Technician updates)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Comments Group -->
+    <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">💬 New Comments &amp; Replies</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a public comment or reply is added to the ticket conversation.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_comment_added_requester" value="1" {% if prefs.get('notify_comment_added_requester', True) %}checked{% endif %}>
+          <span>Notify the <strong>Requester</strong> (when an Agent comments)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_comment_added_assignee" value="1" {% if prefs.get('notify_comment_added_assignee', True) %}checked{% endif %}>
+          <span>Notify the <strong>Assignee</strong> (when the Requester replies)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Assignment Group -->
+    <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">👤 Technician Assignment</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a ticket is assigned or re-assigned to a specific technician.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_assigned_assignee" value="1" {% if prefs.get('notify_assigned_assignee', True) %}checked{% endif %}>
+          <span>Notify the <strong>Assignee</strong> (Welcome technician to the ticket)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_assigned_requester" value="1" {% if prefs.get('notify_assigned_requester', True) %}checked{% endif %}>
+          <span>Notify the <strong>Requester</strong> (Let user know who is attending their ticket)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Priority Group -->
+    <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">⚡ Priority Escalations</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a ticket priority level is updated or elevated.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_priority_changed_requester" value="1" {% if prefs.get('notify_priority_changed_requester', True) %}checked{% endif %}>
+          <span>Notify the <strong>Requester</strong> (Alert user of priority shifts)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_priority_changed_assignee" value="1" {% if prefs.get('notify_priority_changed_assignee', True) %}checked{% endif %}>
+          <span>Notify the <strong>Assignee</strong> (Technician prioritization)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Change Management Group -->
+    <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">👥 Change Advisory Board (CAB)</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a new production Change Request is submitted.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_change_submitted_requester" value="1" {% if prefs.get('notify_change_submitted_requester', True) %}checked{% endif %}>
+          <span>Notify the <strong>Requester</strong> (Change confirmation alert)</span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_change_submitted_cab" value="1" {% if prefs.get('notify_change_submitted_cab', True) %}checked{% endif %}>
+          <span>Notify <strong>CAB Members</strong> (Change Request review notification)</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Patch Windows Group -->
+    <div style="padding-bottom: 8px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">💻 Patch Window Alerts</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when RMM patch execution waves start or complete.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_patch_window_started" value="1" {% if prefs.get('notify_patch_window_started', True) %}checked{% endif %}>
+          <span>Notify on Patch Window <strong>Started</strong></span>
+        </label>
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="notify_patch_window_completed" value="1" {% if prefs.get('notify_patch_window_completed', True) %}checked{% endif %}>
+          <span>Notify on Patch Window <strong>Completed</strong></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Auto-Assignment Group -->
+    <div style="border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; padding-bottom: 8px;">
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">🎯 Auto-Assignment Settings</h4>
+      <p class="meta" style="margin:0 0 12px; font-size:12px;">Toggle whether newly logged tickets are automatically assigned to technicians using your configured Location and Category routing rules.</p>
+      <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
+        <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
+          <input type="checkbox" name="auto_assign_tickets" value="1" {% if prefs.get('auto_assign_tickets', True) %}checked{% endif %}>
+          <span>Enable <strong>Auto-Assignment</strong> for new tickets</span>
+        </label>
+      </div>
+    </div>
+
+    <div style="margin-top:10px; padding-top:16px; border-top:1px solid var(--line);">
+      <button type="submit" class="button primary">Save Settings &amp; Preferences</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
   <h3 style="margin:0 0 8px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">SMTP — outbound email</h3>
   <form method="post" action="/settings/tenant/smtp" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:760px;">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">

@@ -16,16 +16,7 @@
   </div>
 </section>
 
-<div class="card" style="background:#eff6ff;border-left:4px solid var(--accent,#2563eb);margin-bottom:18px;">
-  <p style="margin:0;font-size:13.5px;">
-    <strong>Windows updates on these endpoints are managed centrally by your organisation.</strong>
-    OctoAssist is a Windows-only platform. The agent applies registry policy on every check-in
-    so end users see <em>"Some settings are managed by your organisation"</em> on the Windows
-    Update page and cannot manually trigger updates locally. Quick-deploy a category below and
-    the agent installs via <code>Install-WindowsUpdate -MicrosoftUpdate</code> on the next
-    30-second poll. Non-Windows hosts cannot register — the server rejects them.
-  </p>
-</div>
+
 
 {# ────────── Quick-deploy cards (Intune / Zoho Endpoint Central-style one-click) ────────── #}
 {% if quick_deploy_options %}

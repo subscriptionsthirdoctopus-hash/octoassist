@@ -299,3 +299,47 @@ def software_product_detail(
                      detail=detail,
                      license_labels=LICENSE_LABEL),
     )
+
+
+@router.get("/software/product/{publisher}/{product}/export.csv")
+def software_product_export(
+    publisher: str,
+    product: str,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    publisher = unquote(publisher)
+    product   = unquote(product)
+    detail = sam.product_detail(db, user.tenant_id, publisher, product)
+    if detail is None:
+        raise HTTPException(status_code=404)
+
+    import csv
+    from io import StringIO
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow(["Hostname", "Version", "Installed Date", "Last Seen", "As Reported Name"])
+
+    # Data rows
+    for e in detail.get("endpoints", []):
+        last_seen = e.get("last_seen_at")
+        last_seen_str = last_seen.strftime("%Y-%m-%d %H:%M:%S") if last_seen else "never"
+        writer.writerow([
+            e.get("hostname", ""),
+            e.get("version", ""),
+            e.get("install_date", ""),
+            last_seen_str,
+            e.get("raw_name", "")
+        ])
+
+    body = output.getvalue()
+    safe_filename = f"{publisher}_{product}_installs.csv".replace(" ", "_").replace("/", "_")
+
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )

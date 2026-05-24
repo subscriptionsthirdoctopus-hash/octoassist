@@ -4,10 +4,10 @@ import time
 from datetime import datetime, timezone, timedelta
 
 from ..database import SessionLocal
-from ..models import Ticket, TicketPriority, User, UserRole, Tenant, TicketStatus
+from ..models import Ticket, TicketPriority, User, UserRole, Tenant, TicketStatus, TicketEventKind
 from ..services.audit import record
-from ..models import TicketEventKind
 from ..services.email import send_email, EmailError
+from ..config import settings
 
 log = logging.getLogger("octoassist.sla_escalator")
 
@@ -27,6 +27,8 @@ def _tick_once() -> int:
         )
         escalated_count = 0
         for t in open_tickets:
+            if t.status == TicketStatus.on_hold:
+                continue
             escalate_response = False
             escalate_resolution = False
             
@@ -93,6 +95,7 @@ def _tick_once() -> int:
                     )
                     to_emails = [u.email for u in admins if u.email]
                     if to_emails:
+                        base_url = settings.base_url.rstrip("/")
                         subject = f"[SLA ESCALATION] Ticket {t.ticket_number} is nearing breach!"
                         body = (
                             f"ALERT: Ticket {t.ticket_number} is nearing {reason_str} breach!\n\n"
@@ -100,7 +103,7 @@ def _tick_once() -> int:
                             f"Status: {t.status.value}\n"
                             f"Priority has been escalated to CRITICAL.\n"
                             f"SLA Due Date: {t.due_resolution_at or t.due_response_at}\n\n"
-                            f"Link to Ticket: http://localhost:8000/tickets/{t.id}\n"
+                            f"Link to Ticket: {base_url}/tickets/{t.id}\n"
                         )
                         for email in to_emails:
                             try:

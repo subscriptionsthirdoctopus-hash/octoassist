@@ -1,9 +1,9 @@
 import enum
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 from sqlalchemy import (
-    String, Integer, DateTime, ForeignKey, Index, Text, Boolean, Enum,
+    String, Integer, DateTime, ForeignKey, Index, Text, Boolean, Enum, Date,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,6 +34,7 @@ class Tenant(Base):
     # outlook.com, hotmail.com, live.com, msn.com, or *.onmicrosoft.com)
     # used as the destination for OctoAssist notifications.
     notification_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    notification_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict, server_default="'{}'::jsonb")
     # Phase 7+8: outbound mail for OctoAssist → admin notifications.
     # smtp_password and graph_client_secret are encrypted at rest via app/crypto.py.
     mail_provider: Mapped[str] = mapped_column(String(16), nullable=False, default="smtp")
@@ -376,6 +377,10 @@ class User(Base):
     is_cab_member: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     tenant: Mapped[Tenant] = relationship(back_populates="users")
+    committees: Mapped[list["CabCommittee"]] = relationship(
+        secondary="cab_committee_members",
+        back_populates="members",
+    )
     reported_tickets: Mapped[list["Ticket"]] = relationship(
         back_populates="reporter",
         foreign_keys="Ticket.reporter_id",
@@ -1085,3 +1090,42 @@ class SoftwarePackage(Base):
         if self.version:
             bits.append(self.version)
         return " ".join(bits)
+
+
+class Holiday(Base):
+    """Business calendar holidays. SLA calculations skip these dates."""
+    __tablename__ = "holidays"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    holiday_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_holidays_tenant_date", "tenant_id", "holiday_date", unique=True),
+    )
+
+
+class CabCommittee(Base):
+    """CAB Committees — e.g. Change Management, Risk Management"""
+    __tablename__ = "cab_committees"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    members: Mapped[list["User"]] = relationship(
+        secondary="cab_committee_members",
+        back_populates="committees",
+    )
+
+
+class CabCommitteeMember(Base):
+    """Join table linking users to CAB committees"""
+    __tablename__ = "cab_committee_members"
+
+    committee_id: Mapped[int] = mapped_column(ForeignKey("cab_committees.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)

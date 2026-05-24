@@ -303,9 +303,10 @@ async def new_ticket_submit(
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
 
+    location = form.get("location")
     ticket = ticketing.create_ticket(
         db, tenant_id=user.tenant_id, reporter=user, category=cat,
-        title=title, description=description,
+        title=title, description=description, location=location,
     )
 
     # Set catalog and asset linkage details

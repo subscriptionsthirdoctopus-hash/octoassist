@@ -8,10 +8,19 @@
 </section>
 
 {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
 
 <div class="card">
+  <form method="post" action="/settings/tenant/rename" style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--line); padding-bottom:20px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label style="font-weight:700;">Organisation Name
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <input type="text" name="name" value="{{ tenant.name }}" required placeholder="e.g. Tema IT Team" style="flex:1;">
+        <button type="submit" class="primary">Update Name</button>
+      </div>
+    </label>
+  </form>
   <dl>
-    <dt>Name</dt><dd>{{ tenant.name }}</dd>
     <dt>Created</dt><dd>{{ tenant.created_at | ist }}</dd>
     <dt>Enrolment key</dt>
     <dd>

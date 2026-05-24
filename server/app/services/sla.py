@@ -1,12 +1,14 @@
 """SLA computation.
 
 For Phase 2 we keep this simple: SLA targets come from the category, then are
-adjusted per priority via a multiplier. Business-hours calendars are out of
-scope; we use wall-clock minutes from creation time.
+adjusted per priority via a multiplier. We now support custom date-based
+holidays and automatic weekend skipping!
 """
 from datetime import datetime, timedelta, timezone
+import zoneinfo
+from sqlalchemy.orm import Session
 
-from ..models import Category, TicketPriority
+from ..models import Category, TicketPriority, Holiday
 
 
 # Multipliers applied to the category's stated SLA (response & resolution).
@@ -19,16 +21,42 @@ _PRIORITY_MULTIPLIER: dict[TicketPriority, float] = {
 }
 
 
-def compute_sla(category: Category, priority: TicketPriority, created_at: datetime | None = None) -> tuple[datetime, datetime]:
-    """Return (due_response_at, due_resolution_at) based on category + priority."""
+def _add_business_minutes(db: Session, tenant_id: int, start_time: datetime, minutes_to_add: int) -> datetime:
+    # 1. Fetch holidays from database for this tenant
+    holidays = {h.holiday_date for h in db.query(Holiday).filter(Holiday.tenant_id == tenant_id).all()}
+    
+    current_time = start_time
+    remaining_minutes = minutes_to_add
+    
+    # India Standard Time (IST) zone for local date calculations
+    kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
+    
+    step_minutes = 15
+    while remaining_minutes > 0:
+        current_time += timedelta(minutes=step_minutes)
+        current_date_local = current_time.astimezone(kolkata).date()
+        
+        # Weekend (Saturday=5, Sunday=6) or database holiday
+        if current_date_local.weekday() >= 5 or current_date_local in holidays:
+            continue
+            
+        remaining_minutes -= step_minutes
+        
+    return current_time
+
+
+def compute_sla(db: Session, tenant_id: int, category: Category, priority: TicketPriority, created_at: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return (due_response_at, due_resolution_at) based on category + priority, skipping weekends and custom holidays."""
     base = created_at or datetime.now(timezone.utc)
     mult = _PRIORITY_MULTIPLIER.get(priority, 1.0)
+    
     response_minutes = max(1, int(round(category.sla_response_minutes * mult)))
     resolution_minutes = max(1, int(round(category.sla_resolution_minutes * mult)))
-    return (
-        base + timedelta(minutes=response_minutes),
-        base + timedelta(minutes=resolution_minutes),
-    )
+    
+    due_response = _add_business_minutes(db, tenant_id, base, response_minutes)
+    due_resolution = _add_business_minutes(db, tenant_id, base, resolution_minutes)
+    
+    return due_response, due_resolution
 
 
 def time_to_breach(due: datetime | None, now: datetime | None = None) -> tuple[str, bool]:

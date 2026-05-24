@@ -152,8 +152,11 @@ async def _redirect_to_login(request: Request, exc: NotAuthenticated):
 @app.on_event("startup")
 def _startup() -> None:
     Base.metadata.create_all(bind=engine)
+    from sqlalchemy import text
     db = SessionLocal()
     try:
+        db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS notification_settings JSONB DEFAULT '{}'::jsonb"))
+        db.commit()
         seed.run(db)
     finally:
         db.close()

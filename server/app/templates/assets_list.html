@@ -167,7 +167,11 @@
         <td>{{ r.os }}</td>
         <td>{{ r.cpu }}</td>
         <td>{% if r.ram_gb %}{{ "%.1f"|format(r.ram_gb) }} GB{% else %}—{% endif %}</td>
-        <td>{{ r.software_count }}</td>
+        <td>
+          <a href="/asset/{{ r.id }}#installed-software" style="font-weight:600;color:var(--accent,#2563eb);text-decoration:none;">
+            {{ r.software_count }}
+          </a>
+        </td>
         <td>
           {% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}<span style="color:var(--red);">never</span>{% endif %}
           {% if r.online_state == 'offline' %}<br><span style="font-size:11px;color:var(--red);font-weight:600;">⚠ Offline</span>{% endif %}

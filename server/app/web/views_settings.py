@@ -14,7 +14,8 @@ from ..auth import require_admin
 from ..database import get_db
 from ..models import (
     Agent, Category, CategoryRule, IdentityProvider, IdentityProviderKind, LocationRule,
-    SoftwarePackage, Tenant, TicketKind, TicketPriority, User, UserRole,
+    SoftwarePackage, Tenant, TicketKind, TicketPriority, User, UserRole, ReplyTemplate,
+    CabCommittee,
 )
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
 
@@ -60,6 +61,11 @@ def settings_home(
     catalog_count = (db.query(_f.count(SoftwarePackage.id))
                        .filter(SoftwarePackage.tenant_id == user.tenant_id,
                                SoftwarePackage.is_active.is_(True)).scalar()) or 0
+    reply_templates_count = (db.query(_f.count(ReplyTemplate.id))
+                               .filter(ReplyTemplate.tenant_id == user.tenant_id).scalar()) or 0
+    from ..models import Holiday
+    holidays_count = (db.query(_f.count(Holiday.id))
+                        .filter(Holiday.tenant_id == user.tenant_id).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -71,6 +77,8 @@ def settings_home(
             "category_rules_count": int(category_rules_count),
             "cab_count": int(cab_count),
             "catalog_count": int(catalog_count),
+            "reply_templates_count": int(reply_templates_count),
+            "holidays_count": int(holidays_count),
             "flash": flash,
         },
     )
@@ -205,6 +213,58 @@ def settings_notifications(
     return templates.TemplateResponse(
         request=request, name="settings_notifications.html",
         context={"current_user": user, "tenant": tenant, "flash": flash},
+    )
+
+
+@router.post("/settings/notifications/preferences")
+def save_notification_preferences(
+    notify_ticket_created_requester: int = Form(0),
+    notify_ticket_created_assignee: int = Form(0),
+    notify_ticket_created_cab: int = Form(0),
+    notify_status_changed_requester: int = Form(0),
+    notify_status_changed_assignee: int = Form(0),
+    notify_comment_added_requester: int = Form(0),
+    notify_comment_added_assignee: int = Form(0),
+    notify_assigned_assignee: int = Form(0),
+    notify_assigned_requester: int = Form(0),
+    notify_priority_changed_requester: int = Form(0),
+    notify_priority_changed_assignee: int = Form(0),
+    notify_change_submitted_requester: int = Form(0),
+    notify_change_submitted_cab: int = Form(0),
+    notify_patch_window_started: int = Form(0),
+    notify_patch_window_completed: int = Form(0),
+    auto_assign_tickets: int = Form(0),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+        
+    settings_dict = dict(tenant.notification_settings or {})
+    settings_dict["notify_ticket_created_requester"] = bool(notify_ticket_created_requester)
+    settings_dict["notify_ticket_created_assignee"] = bool(notify_ticket_created_assignee)
+    settings_dict["notify_ticket_created_cab"] = bool(notify_ticket_created_cab)
+    settings_dict["notify_status_changed_requester"] = bool(notify_status_changed_requester)
+    settings_dict["notify_status_changed_assignee"] = bool(notify_status_changed_assignee)
+    settings_dict["notify_comment_added_requester"] = bool(notify_comment_added_requester)
+    settings_dict["notify_comment_added_assignee"] = bool(notify_comment_added_assignee)
+    settings_dict["notify_assigned_assignee"] = bool(notify_assigned_assignee)
+    settings_dict["notify_assigned_requester"] = bool(notify_assigned_requester)
+    settings_dict["notify_priority_changed_requester"] = bool(notify_priority_changed_requester)
+    settings_dict["notify_priority_changed_assignee"] = bool(notify_priority_changed_assignee)
+    settings_dict["notify_change_submitted_requester"] = bool(notify_change_submitted_requester)
+    settings_dict["notify_change_submitted_cab"] = bool(notify_change_submitted_cab)
+    settings_dict["notify_patch_window_started"] = bool(notify_patch_window_started)
+    settings_dict["notify_patch_window_completed"] = bool(notify_patch_window_completed)
+    settings_dict["auto_assign_tickets"] = bool(auto_assign_tickets)
+    
+    tenant.notification_settings = settings_dict
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/notifications?flash={quote('Preferences saved successfully.')}",
+        status_code=303,
     )
 
 
@@ -854,6 +914,138 @@ def settings_cab_toggle(
     )
 
 
+# ---------------------------- Phase J: CAB Committees ----------------------------
+
+@router.get("/settings/cab/committees", response_class=HTMLResponse)
+def settings_cab_committees(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    committees = (db.query(CabCommittee)
+                    .filter(CabCommittee.tenant_id == user.tenant_id)
+                    .order_by(CabCommittee.name)
+                    .all())
+    return templates.TemplateResponse(
+        request=request, name="settings_cab_committees.html",
+        context={"current_user": user, "tenant": db.query(Tenant).first(),
+                 "committees": committees, "flash": flash, "error": error},
+    )
+
+
+@router.post("/settings/cab/committees/new")
+def settings_cab_committee_new(
+    name: str = Form(...),
+    description: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    if not name.strip():
+        return RedirectResponse(
+            url=f"/settings/cab/committees?error={quote('Committee name cannot be empty.')}",
+            status_code=303,
+        )
+    committee = CabCommittee(
+        tenant_id=user.tenant_id,
+        name=name.strip(),
+        description=description.strip(),
+    )
+    db.add(committee)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/cab/committees?flash={quote(f'Committee \"{committee.name}\" created successfully.')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/cab/committees/{committee_id}/delete")
+def settings_cab_committee_delete(
+    committee_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    committee = db.get(CabCommittee, committee_id)
+    if committee is None or committee.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    name = committee.name
+    db.delete(committee)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/cab/committees?flash={quote(f'Committee \"{name}\" deleted successfully.')}",
+        status_code=303,
+    )
+
+
+@router.get("/settings/cab/committees/{committee_id}/members", response_class=HTMLResponse)
+def settings_cab_committee_members(
+    committee_id: int,
+    request: Request,
+    q: str | None = None,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
+    committee = db.get(CabCommittee, committee_id)
+    if committee is None or committee.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+        
+    qy = (db.query(User)
+            .filter(User.tenant_id == user.tenant_id,
+                    User.is_active == True))  # noqa: E712
+    if q:
+        from sqlalchemy import func as _f, or_
+        like = f"%{q.strip().lower()}%"
+        qy = qy.filter(or_(
+            _f.lower(User.email).like(like),
+            _f.lower(User.full_name).like(like),
+            _f.lower(User.department).like(like),
+        ))
+    all_users = qy.order_by(User.full_name, User.email).limit(500).all()
+    
+    # We want to know which user IDs are currently in this committee
+    member_ids = {u.id for u in committee.members}
+    
+    return templates.TemplateResponse(
+        request=request, name="settings_cab_committee_members.html",
+        context={"current_user": user, "tenant": db.query(Tenant).first(),
+                 "committee": committee, "users": all_users, "member_ids": member_ids,
+                 "q": q or "", "flash": flash},
+    )
+
+
+@router.post("/settings/cab/committees/{committee_id}/members/toggle/{user_id}")
+def settings_cab_committee_member_toggle(
+    committee_id: int,
+    user_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    committee = db.get(CabCommittee, committee_id)
+    if committee is None or committee.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    target_user = db.get(User, user_id)
+    if target_user is None or target_user.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+        
+    if target_user in committee.members:
+        committee.members.remove(target_user)
+        verb = "removed from"
+    else:
+        committee.members.append(target_user)
+        verb = "added to"
+        
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/cab/committees/{committee_id}/members?flash={quote(f'{target_user.display_name} {verb} {committee.name}')}",
+        status_code=303,
+    )
+
+
 # ---------------------------- Phase L: Software catalog ----------------------------
 
 @router.get("/settings/software-catalog", response_class=HTMLResponse)
@@ -960,6 +1152,212 @@ def settings_catalog_delete(
     db.delete(p); db.commit()
     return RedirectResponse(
         url=f"/settings/software-catalog?flash={quote(f'Deleted: {name}')}",
+        status_code=303,
+    )
+
+
+# ---------------------------- Predefined Replies ----------------------------
+
+@router.get("/settings/reply-templates", response_class=HTMLResponse)
+def settings_reply_templates(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    templates_list = (
+        db.query(ReplyTemplate)
+        .filter(ReplyTemplate.tenant_id == user.tenant_id)
+        .order_by(ReplyTemplate.sort_order.asc(), ReplyTemplate.title.asc())
+        .all()
+    )
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request,
+        name="settings_reply_templates.html",
+        context={
+            "current_user": user,
+            "tenant": tenant,
+            "templates": templates_list,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@router.post("/settings/reply-templates/new")
+def create_reply_template(
+    title: str = Form(...),
+    body: str = Form(...),
+    sort_order: int = Form(0),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    title_str = title.strip()
+    body_str = body.strip()
+    if not title_str or not body_str:
+        return RedirectResponse(
+            url="/settings/reply-templates?error=Title+and+body+are+required.",
+            status_code=303,
+        )
+    
+    new_template = ReplyTemplate(
+        tenant_id=user.tenant_id,
+        title=title_str,
+        body=body_str,
+        sort_order=sort_order,
+        created_by_id=user.id,
+    )
+    db.add(new_template)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/reply-templates?flash={quote(f'Created predefined response: {title_str}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/reply-templates/{template_id}/delete")
+def delete_reply_template(
+    template_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    rt = db.get(ReplyTemplate, template_id)
+    if rt is None or rt.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    title = rt.title
+    db.delete(rt)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/reply-templates?flash={quote(f'Deleted template: {title}')}",
+        status_code=303,
+    )
+
+
+# ---------------------------- Tenant Rename ----------------------------
+
+@router.post("/settings/tenant/rename")
+def rename_tenant(
+    name: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+    name_str = name.strip()
+    if not name_str:
+        return RedirectResponse(url="/settings/tenant?error=Tenant+name+cannot+be+empty.", status_code=303)
+    tenant.name = name_str
+    db.commit()
+    return RedirectResponse(url=f"/settings/tenant?flash={quote('Organisation name updated successfully.')}", status_code=303)
+
+
+# ---------------------------- Holidays Settings ----------------------------
+
+@router.get("/settings/holidays", response_class=HTMLResponse)
+def settings_holidays(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    from ..models import Holiday
+    holidays_list = (
+        db.query(Holiday)
+        .filter(Holiday.tenant_id == user.tenant_id)
+        .order_by(Holiday.holiday_date.asc())
+        .all()
+    )
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request,
+        name="settings_holidays.html",
+        context={
+            "current_user": user,
+            "tenant": tenant,
+            "holidays": holidays_list,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@router.post("/settings/holidays/new")
+def create_holiday(
+    name: str = Form(...),
+    holiday_date: str = Form(...),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime
+    from urllib.parse import quote
+    from ..models import Holiday
+    
+    name_str = name.strip()
+    date_str = holiday_date.strip()
+    if not name_str or not date_str:
+        return RedirectResponse(
+            url="/settings/holidays?error=Name+and+date+are+required.",
+            status_code=303,
+        )
+    
+    try:
+        parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return RedirectResponse(
+            url="/settings/holidays?error=Invalid+date+format.+Use+YYYY-MM-DD.",
+            status_code=303,
+        )
+        
+    # Check duplicate
+    existing = (
+        db.query(Holiday)
+        .filter(Holiday.tenant_id == user.tenant_id, Holiday.holiday_date == parsed_date)
+        .first()
+    )
+    if existing:
+        return RedirectResponse(
+            url=f"/settings/holidays?error={quote(f'Holiday on {date_str} already exists.')}",
+            status_code=303,
+        )
+        
+    new_holiday = Holiday(
+        tenant_id=user.tenant_id,
+        name=name_str,
+        holiday_date=parsed_date,
+    )
+    db.add(new_holiday)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/holidays?flash={quote(f'Added holiday: {name_str} on {date_str}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/holidays/{holiday_id}/delete")
+def delete_holiday(
+    holiday_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    from ..models import Holiday
+    
+    h = db.get(Holiday, holiday_id)
+    if h is None or h.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    name = h.name
+    date_str = h.holiday_date.strftime("%Y-%m-%d")
+    db.delete(h)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/holidays?flash={quote(f'Deleted holiday: {name} ({date_str})')}",
         status_code=303,
     )
 

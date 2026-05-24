@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Holidays & SLA Calendar — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Holidays &amp; SLA Calendar</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ holidays|length }} holiday{{ "" if holidays|length == 1 else "s" }} configured</p>
+  </div>
+</section>
+
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin-top:0;">Business Calendar SLA Rules</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">
+    When SLA response and resolution targets are calculated for new tickets:
+    <br>• <strong>Weekends</strong> (Saturdays &amp; Sundays) are automatically paused and skipped.
+    <br>• <strong>Holidays</strong> listed below are automatically paused and skipped based on local dates.
+    <br>• <strong>SLA Pausing:</strong> When a technician moves a ticket status to <em>"On Hold"</em>, the SLA clock is paused immediately. When shifted back, the due date is automatically extended by the paused duration.
+  </p>
+</section>
+
+<div class="card form" style="max-width:none;margin-bottom:24px;">
+  <h3 style="margin-top:0;">Add Holiday</h3>
+  <form method="post" action="/settings/holidays/new" class="row-form" style="align-items:end;gap:12px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <label style="flex:1;">Holiday Date
+      <input type="date" name="holiday_date" required style="width:100%;">
+    </label>
+    <label style="flex:2;">Holiday Name (e.g. Christmas, Diwali)
+      <input type="text" name="name" required placeholder="e.g. Diwali" style="width:100%;">
+    </label>
+    <button type="submit" class="primary">Add Holiday</button>
+  </form>
+</div>
+
+{% if holidays %}
+<table class="data" style="margin-top:16px;">
+  <thead>
+    <tr>
+      <th style="width:30%;">Date</th>
+      <th style="width:50%;">Holiday Name</th>
+      <th style="width:20%;"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in holidays %}
+    <tr>
+      <td><strong>{{ h.holiday_date.strftime("%d %b %Y") }}</strong></td>
+      <td>{{ h.name }}</td>
+      <td>
+        <form method="post" action="/settings/holidays/{{ h.id }}/delete" class="inline-form" onsubmit="return confirm('Delete holiday \'{{ h.name|e }}\' on {{ h.holiday_date }}?');">
+          <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <button type="submit" class="link-button" style="color:#dc2626;">delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty" style="margin-top:16px;">
+  <h2>No custom holidays added yet</h2>
+  <p>Add holidays above to exclude those dates from SLA calculations.</p>
+</div>
+{% endif %}
+{% endblock %}

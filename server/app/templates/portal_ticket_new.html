@@ -36,7 +36,7 @@
     </div>
 
     <label>Subject
-      <input type="text" name="title" required maxlength="255" value="Request: {{ catalog_item.name }}" readonly>
+      <input type="text" name="title" id="ticketTitle" required maxlength="255" value="Request: {{ catalog_item.name }}" readonly>
     </label>
 
     <div class="custom-fields-container" style="display: flex; flex-direction: column; gap: 16px; margin: 20px 0;">
@@ -64,7 +64,7 @@
     </div>
   {% else %}
     <label>Subject
-      <input type="text" name="title" required maxlength="255" placeholder="One-line summary" autofocus>
+      <input type="text" name="title" id="ticketTitle" required maxlength="255" placeholder="One-line summary" autofocus>
     </label>
 
     <label>Category</label>
@@ -93,8 +93,19 @@
   {% endif %}
 
   <label>Details / Description
-    <textarea name="description" rows="6" placeholder="Please provide a detailed description."></textarea>
+    <textarea name="description" id="ticketDescription" rows="6" placeholder="Please provide a detailed description. Typing in both Subject and Details searches the Knowledge Base in real time to suggest immediate answers."></textarea>
   </label>
+
+  <!-- Live Smart Knowledge Base Suggestions (Updates as you type) -->
+  <div class="card" id="kbCard" style="display: none; margin-top: 16px; border: 1px solid var(--line,#e2e8f0); border-radius: var(--r-md, 8px); padding: 16px; background: rgba(37, 99, 235, 0.03);">
+    <h3 style="margin: 0 0 10px 0; font-size: 14.5px; font-weight: 700; color: var(--accent,#2563eb);">📚 Recommended Solutions</h3>
+    <div id="kbSearchLoader" style="color: var(--text-3,#64748b); font-size: 12.5px; padding: 4px 0;">
+      Scanning Knowledge Base for matching solutions...
+    </div>
+    <ul id="kbSuggestionsList" style="display: none; list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;">
+      <!-- Filled on the fly -->
+    </ul>
+  </div>
 
   <label style="margin: 20px 0; display: block; font-weight: 600; font-size: 13px; color: var(--text);">Affected Workstation / Asset <span class="meta" style="font-weight: normal; font-size: 11px;">(optional)</span>
     <select name="asset_id" style="width: 100%; margin-top: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line, #e2e8f0); background: var(--surface); color: var(--text);">
@@ -167,6 +178,77 @@
     grid.addEventListener("change", paint);
     paint();
   }
+  // Smart KB Suggestions based on BOTH Title & Description in portal view
+  var titleInput = document.getElementById("ticketTitle");
+  var descriptionInput = document.getElementById("ticketDescription");
+  var kbCard = document.getElementById("kbCard");
+  var kbLoader = document.getElementById("kbSearchLoader");
+  var kbList = document.getElementById("kbSuggestionsList");
+  var debounceTimer;
+
+  function triggerKBSearch() {
+    clearTimeout(debounceTimer);
+    var qTitle = titleInput ? titleInput.value.trim() : "";
+    var qDesc = descriptionInput ? descriptionInput.value.trim() : "";
+    var q = (qTitle + " " + qDesc).trim();
+    
+    if (q.length < 3) {
+      if (kbCard) kbCard.style.display = "none";
+      return;
+    }
+    
+    if (kbCard) kbCard.style.display = "block";
+    if (kbLoader) {
+      kbLoader.style.display = "block";
+      kbLoader.textContent = "Scanning Knowledge Base for matching solutions...";
+    }
+    if (kbList) kbList.style.display = "none";
+    
+    debounceTimer = setTimeout(function() {
+      fetch("/api/v1/kb/search?q=" + encodeURIComponent(q), { credentials: "same-origin" })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (!data || !data.results || !data.results.kb || !data.results.kb.length) {
+            if (kbLoader) {
+              kbLoader.style.display = "block";
+              kbLoader.textContent = "No matching solutions found. Please submit your ticket below and our team will help you.";
+            }
+            if (kbList) kbList.style.display = "none";
+            return;
+          }
+          
+          if (kbLoader) kbLoader.style.display = "none";
+          if (kbList) {
+            kbList.innerHTML = "";
+            data.results.kb.forEach(function(article) {
+              var li = document.createElement("li");
+              li.style.display = "flex";
+              li.style.flexDirection = "column";
+              li.style.gap = "4px";
+              li.style.borderBottom = "1px solid var(--line,#e2e8f0)";
+              li.style.paddingBottom = "8px";
+              
+              var readUrl = "/portal/kb/" + encodeURIComponent(article.slug || article.url.split("/").pop());
+              li.innerHTML = '<a href="' + readUrl + '" target="_blank" style="color: var(--accent,#2563eb); font-weight: 600; font-size: 13.5px; text-decoration: none;">📚 ' + article.title + '</a>' +
+                             '<span style="color: var(--slate,#64748b); font-size: 12px;">' + (article.subtitle || 'Read support manual') + '</span>';
+              kbList.appendChild(li);
+            });
+            kbList.style.display = "flex";
+          }
+        })
+        .catch(function() {
+          if (kbLoader) {
+            kbLoader.style.display = "block";
+            kbLoader.textContent = "Suggestions temporarily unavailable.";
+          }
+          if (kbList) kbList.style.display = "none";
+        });
+    }, 400);
+  }
+
+  if (titleInput) titleInput.addEventListener("input", triggerKBSearch);
+  if (descriptionInput) descriptionInput.addEventListener("input", triggerKBSearch);
+
   // Show selected filenames + enforce 2 MB per file client-side
   var fileInput = document.querySelector("input[type=file][name=attachments]");
   var list = document.getElementById("attachList");

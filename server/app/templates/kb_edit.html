@@ -52,10 +52,10 @@
   </div>
 </form>
 
-{% if article %}
-<form method="post" action="/kb/{{ article.id }}/delete" class="inline-form" style="margin-top:24px;" onsubmit="return confirm('Delete this article? This cannot be undone.');">
+{% if article and current_user.role.value == "admin" %}
+<form method="post" action="/kb/{{ article.id }}/delete" class="inline-form" style="margin-top:24px; display: block;" onsubmit="return confirm('Delete this article? This cannot be undone.');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-  <button type="submit" class="link-button" style="color:var(--red);">Delete article</button>
+  <button type="submit" class="button danger-solid">🗑️ Delete Article</button>
 </form>
 {% endif %}
 {% endblock %}

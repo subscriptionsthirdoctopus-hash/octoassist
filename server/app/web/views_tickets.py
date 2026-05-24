@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
-from ..auth import current_user, require_staff
+from ..auth import current_user, require_staff, require_admin
 from ..database import get_db
 from ..models import (
     Category, Tenant, Ticket, TicketAttachment, TicketEventKind,
@@ -223,13 +223,8 @@ async def new_ticket_submit(
 
     ticket = ticketing.create_ticket(
         db, tenant_id=user.tenant_id, reporter=reporter, category=cat,
-        title=title, description=description, priority=prio,
+        title=title, description=description, priority=prio, location=location
     )
-    
-    # Save inputted location
-    if location:
-        ticket.location = location
-        db.commit()
 
     # Process and save any uploaded files (screenshots, diagnostic logs, etc.)
     from .views_portal import _attach_uploaded_files
@@ -254,6 +249,14 @@ def ticket_detail(
                        User.is_active == True,  # noqa: E712
                        User.role.in_([UserRole.admin, UserRole.agent]))
                .order_by(User.full_name, User.email).all())
+
+    from ..models import ReplyTemplate
+    reply_templates = (
+        db.query(ReplyTemplate)
+        .filter(ReplyTemplate.tenant_id == user.tenant_id)
+        .order_by(ReplyTemplate.sort_order.asc(), ReplyTemplate.title.asc())
+        .all()
+    )
 
     # Attachments — same model the portal uses, just rendered for staff
     from ..api.uploads import _safe_ext
@@ -306,6 +309,7 @@ def ticket_detail(
                      attach_error=attach_error,
                      statuses=[s.value for s in TicketStatus],
                      priorities=[p.value for p in TicketPriority],
+                     reply_templates=reply_templates,
                      portal=False),
     )
 
@@ -406,3 +410,17 @@ def get_kb_article_json(
         "summary": article.summary,
         "body": article.body,
     }
+
+
+@router.post("/tickets/{ticket_id}/delete")
+def delete_ticket(
+    ticket_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Ticket, ticket_id)
+    if t is None or t.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    db.delete(t)
+    db.commit()
+    return RedirectResponse(url="/tickets", status_code=303)

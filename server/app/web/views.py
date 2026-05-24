@@ -353,6 +353,52 @@ def asset_detail(
     )
 
 
+@router.get("/asset/{agent_id}/software/export.csv")
+def asset_software_export(
+    agent_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import StreamingResponse
+    import csv
+    from io import StringIO
+
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    snap = _latest_snapshot(db, agent.id)
+    software_list = []
+    if snap and snap.payload and isinstance(snap.payload, dict):
+        software_list = snap.payload.get("software", [])
+        if not isinstance(software_list, list):
+            software_list = []
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow(["Name", "Version", "Publisher", "Install Date"])
+
+    # Data rows
+    for s in software_list:
+        writer.writerow([
+            s.get("name", ""),
+            s.get("version", "—"),
+            s.get("publisher", "—"),
+            s.get("install_date", "—")
+        ])
+
+    body = output.getvalue()
+    safe_filename = f"{agent.hostname}_installed_software.csv".replace(" ", "_").replace("/", "_")
+
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
 @router.get("/enrolment", response_class=HTMLResponse)
 def enrolment(
     request: Request,

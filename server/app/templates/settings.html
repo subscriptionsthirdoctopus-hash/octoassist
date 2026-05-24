@@ -83,6 +83,20 @@
     <p class="tile-meta">Created {{ tenant.created_at | istdate }}</p>
   </a>
 
+  <a href="/settings/reply-templates" class="settings-tile">
+    <span class="icon">💬</span>
+    <p class="tile-title">Predefined Replies</p>
+    <p class="tile-sub">Predefined replies/canned solutions technicians can insert instantly when answering tickets.</p>
+    <p class="tile-meta">{{ reply_templates_count }} template{{ "" if reply_templates_count == 1 else "s" }} configured</p>
+  </a>
+
+  <a href="/settings/holidays" class="settings-tile">
+    <span class="icon">📅</span>
+    <p class="tile-title">Holidays &amp; SLA Cal</p>
+    <p class="tile-sub">Customise business holidays and weekends to adjust SLA due calculation targets.</p>
+    <p class="tile-meta">{{ holidays_count }} holiday{{ "" if holidays_count == 1 else "s" }} configured</p>
+  </a>
+
   <a href="/settings/categories-routing" class="settings-tile">
     <span class="icon">🎯</span>
     <p class="tile-title">Category routing</p>

@@ -7,7 +7,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .models import Category, Tenant, TicketKind, TicketPriority, User, UserRole
+from .models import Category, Tenant, TicketKind, TicketPriority, User, UserRole, ReplyTemplate, CabCommittee
 from .security import hash_password
 
 log = logging.getLogger("octoassist.seed")
@@ -44,6 +44,11 @@ def run(db: Session) -> None:
         db.commit()
         db.refresh(tenant)
         log.info("Bootstrapped tenant '%s' enrolment_key=%s", tenant.name, tenant.enrolment_key)
+    elif tenant.name == "Third Octopus":
+        tenant.name = settings.tenant_name
+        db.commit()
+        db.refresh(tenant)
+        log.info("Auto-renamed legacy tenant 'Third Octopus' to '%s'", tenant.name)
 
     # Bootstrap admin user from env
     admin = db.query(User).filter(User.email == settings.admin_email).first()
@@ -160,3 +165,64 @@ def run(db: Session) -> None:
     # IT context). Idempotent — keyed by slug.
     from .seed_kb_tema import seed_tema_kb
     seed_tema_kb(db, tenant)
+
+    # Seed 10 professional predefined canned response templates
+    existing_templates = db.query(ReplyTemplate).filter(ReplyTemplate.tenant_id == tenant.id).count()
+    if existing_templates == 0:
+        canned_replies = [
+            ("Acknowledge & Investigate", 
+             "Hello,\n\nWe have received your request and are currently investigating the issue. A technician will update you as soon as we have more details or diagnostic findings.\n\nBest regards,\nTema IT Team", 1),
+            
+            ("Request for More Information", 
+             "Hello,\n\nIn order to assist you further, could you please provide additional details, error codes, or a screenshot of the issue you are experiencing?\n\nBest regards,\nTema IT Team", 2),
+            
+            ("Password Reset Completed", 
+             "Hello,\n\nYour account password has been successfully reset. Please log in using the temporary credentials sent to your registered mobile number and update your password immediately upon first login.\n\nBest regards,\nTema IT Team", 3),
+            
+            ("Software Installation Completed", 
+             "Hello,\n\nWe have successfully pushed the requested software to your workstation remote agent. Please restart your system if you do not see the application icon on your desktop.\n\nBest regards,\nTema IT Team", 4),
+            
+            ("Escalated to Level 2 Support", 
+             "Hello,\n\nWe have reviewed your ticket and escalated it to our Level 2 engineering support team for deeper investigation. We will keep you updated on the progress.\n\nBest regards,\nTema IT Team", 5),
+            
+            ("Scheduled Maintenance Notice", 
+             "Hello,\n\nThe system you reported is scheduled for routine maintenance in the upcoming window. We anticipate services will be fully restored post-maintenance. Thank you for your patience.\n\nBest regards,\nTema IT Team", 6),
+            
+            ("On Hold - Pending Vendor Response", 
+             "Hello,\n\nThis ticket is currently on hold as we have escalated the issue to the external software/hardware vendor for a patch or replacement. We will notify you once they respond.\n\nBest regards,\nTema IT Team", 7),
+            
+            ("On Hold - Pending User Verification", 
+             "Hello,\n\nWe have applied a tentative fix. This ticket is on hold awaiting your verification. Please let us know if the issue is resolved so we can close the ticket.\n\nBest regards,\nTema IT Team", 8),
+            
+            ("Issue Resolved & Closing Ticket", 
+             "Hello,\n\nWe believe the reported issue has been resolved. We are closing this ticket. If the problem persists, feel free to reopen this ticket or submit a new request.\n\nBest regards,\nTema IT Team", 9),
+            
+            ("Hardware Replacement Arranged", 
+             "Hello,\n\nWe have approved a hardware replacement for your workstation. Please visit the IT Helpdesk desk at your earliest convenience to collect your new device and return the legacy hardware.\n\nBest regards,\nTema IT Team", 10)
+        ]
+        
+        for title, body, order in canned_replies:
+            db.add(ReplyTemplate(
+                tenant_id=tenant.id,
+                title=title,
+                body=body,
+                sort_order=order
+            ))
+        db.commit()
+        log.info("Seeded 10 default predefined helpdesk responses")
+
+    # Seed default CAB Committees (Change Management and Risk Management) if none exist
+    existing_committees = db.query(CabCommittee).filter(CabCommittee.tenant_id == tenant.id).count()
+    if existing_committees == 0:
+        db.add(CabCommittee(
+            tenant_id=tenant.id,
+            name="Change Management Committee",
+            description="Responsible for coordinating, reviewing, and approving scheduled system changes and infrastructure upgrades."
+        ))
+        db.add(CabCommittee(
+            tenant_id=tenant.id,
+            name="Risk Management Committee",
+            description="Evaluates high-risk deployments, rollback plans, and security compliance metrics for production services."
+        ))
+        db.commit()
+        log.info("Seeded default CAB Committees (Change Management and Risk Management)")

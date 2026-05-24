@@ -163,16 +163,13 @@
   </tbody>
 
   {% elif row_type == "kb" %}
-  <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Audience</th><th>Author</th><th>Views</th><th>Updated</th></tr></thead>
+  <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Updated</th></tr></thead>
   <tbody>
     {% for a in rows %}
     <tr>
       <td><a href="/kb/{{ a.id }}"><strong>{{ a.title }}</strong></a></td>
       <td style="font-size:12.5px;">{{ a.category.name if a.category else "—" }}</td>
       <td style="font-size:12.5px;">{{ a.status.value }}</td>
-      <td style="font-size:12.5px;">{{ a.visibility.value }}</td>
-      <td style="font-size:12.5px;">{{ a.author.email if a.author else "—" }}</td>
-      <td style="font-size:12.5px;">{{ a.view_count }}</td>
       <td style="font-size:12.5px; color:var(--text-3);">{{ a.updated_at | ist }}</td>
     </tr>
     {% endfor %}

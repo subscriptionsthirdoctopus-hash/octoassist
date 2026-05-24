@@ -61,9 +61,6 @@
       <th>Article</th>
       <th style="width:140px;">Category</th>
       <th style="width:110px;">Status</th>
-      <th style="width:90px;">Audience</th>
-      <th style="width:140px;">Author</th>
-      <th style="width:80px;">Views</th>
       <th style="width:110px;">Updated</th>
     </tr>
   </thead>
@@ -78,9 +75,6 @@
       </td>
       <td style="color:var(--text-2); font-size:13px;">{{ a.category.name if a.category else "—" }}</td>
       <td><span class="kb-status {{ a.status.value }}">{{ a.status.value }}</span></td>
-      <td><span class="kb-vis {{ a.visibility.value }}">{{ a.visibility.value }}</span></td>
-      <td><span style="color:var(--text-1); font-weight:500; font-size:13px;">{{ a.author.display_name if a.author else "—" }}</span></td>
-      <td><span class="views-count">👁 {{ a.view_count }}</span></td>
       <td style="color:var(--text-3); font-size:12.5px;">{{ a.updated_at | ist }}</td>
     </tr>
     {% endfor %}

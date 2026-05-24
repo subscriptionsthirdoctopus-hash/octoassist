@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
-from ..auth import require_staff
+from ..auth import require_staff, require_admin
 from ..database import get_db
 from ..models import (
     Change, ChangeEventKind, ChangeRisk, ChangeStatus, ChangeType, Tenant, User, UserRole,
@@ -392,3 +392,17 @@ def change_cancel(
         raise HTTPException(status_code=404)
     change_svc.cancel(db, change=c, actor=user, note=note)
     return RedirectResponse(url=f"/changes/{change_id}", status_code=303)
+
+
+@router.post("/changes/{change_id}/delete")
+def delete_change(
+    change_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    c = db.get(Change, change_id)
+    if c is None or c.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    db.delete(c)
+    db.commit()
+    return RedirectResponse(url="/changes", status_code=303)

@@ -222,8 +222,13 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
   </table>
 </section>
 
-<section>
-  <h2>Installed Software ({{ snapshot.software|length }})</h2>
+<section id="installed-software">
+  <div class="row-between" style="align-items:center;margin-bottom:12px;">
+    <h2 style="margin:0;">Installed Software ({{ snapshot.software|length }})</h2>
+    <a href="/asset/{{ agent.id }}/software/export.csv" class="button" style="text-decoration:none;background:#16a34a;color:white;border-color:#16a34a;font-weight:600;">
+      📥 Export Software CSV
+    </a>
+  </div>
   <table class="data">
     <thead><tr><th>Name</th><th>Version</th><th>Publisher</th><th>Installed</th></tr></thead>
     <tbody>

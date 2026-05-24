@@ -59,7 +59,15 @@
       Opened {{ problem.created_at | ist }} by <strong>{{ problem.reporter.display_name if problem.reporter else "—" }}</strong>
     </p>
   </div>
-  <div><a href="/problems" class="link-button">← Problems</a></div>
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <a href="/problems" class="link-button">← Problems</a>
+    {% if current_user.role.value == "admin" %}
+    <form method="post" action="/problems/{{ problem.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this problem permanently? This cannot be undone.');">
+      <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      <button type="submit" class="button danger-solid">🗑️ Delete Problem</button>
+    </form>
+    {% endif %}
+  </div>
 </section>
 
 <div class="pk-grid">

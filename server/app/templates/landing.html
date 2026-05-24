@@ -18,7 +18,13 @@
       <div class="lh-cta-row">
         <a href="/login" class="lh-button primary big">Sign in</a>
         {% for i in enabled_idps %}
-          <a href="/auth/oidc/{{ i.id }}/start" class="lh-button big">Sign in with {{ i.display_name }}</a>
+          <a href="/auth/oidc/{{ i.id }}/start" class="lh-button big">
+            {% if i.display_name.lower().startswith("sign in with") %}
+              {{ i.display_name }}
+            {% else %}
+              Sign in with {{ i.display_name }}
+            {% endif %}
+          </a>
         {% endfor %}
         <a href="#contact" class="lh-button ghost big">Book a walk-through</a>
       </div>

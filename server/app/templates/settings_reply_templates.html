@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Predefined Replies — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Predefined Replies</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ templates|length }} reply template{{ "" if templates|length == 1 else "s" }} configured</p>
+  </div>
+</section>
+
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin-top:0;">How this works</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">Predefined replies (canned solutions) let technicians quickly insert standard responses (e.g. troubleshooting steps, acknowledgement, closure notices) into the ticket reply form. This ensures professional consistency across your IT support team.</p>
+</section>
+
+<div class="card form" style="max-width:none;margin-bottom:24px;">
+  <h3 style="margin-top:0;">Add Predefined Reply</h3>
+  <form method="post" action="/settings/reply-templates/new" style="display:flex; flex-direction:column; gap:12px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <label style="flex:3; min-width:200px;">Template Title
+        <input type="text" name="title" required placeholder="e.g. Acknowledge & Investigate" style="width:100%;">
+      </label>
+      <label style="flex:1; min-width:80px;">Sort Order
+        <input type="number" name="sort_order" value="0" style="width:100%;">
+      </label>
+    </div>
+    <label>Template Text (Body)
+      <textarea name="body" required placeholder="Type the message that will be inserted. You can use standard formatting..." rows="6" style="width:100%; font-family:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:4px; resize:vertical;"></textarea>
+    </label>
+    <div>
+      <button type="submit" class="primary">Add Template</button>
+    </div>
+  </form>
+</div>
+
+{% if templates %}
+<table class="data" style="margin-top:16px;">
+  <thead>
+    <tr>
+      <th style="width:20%;">Title</th>
+      <th style="width:55%;">Text Preview</th>
+      <th style="width:10%;">Sort Order</th>
+      <th style="width:15%;"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in templates %}
+    <tr>
+      <td><strong>{{ t.title }}</strong></td>
+      <td><span style="font-family:monospace; font-size:12px; white-space:pre-wrap; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">{{ t.body }}</span></td>
+      <td>{{ t.sort_order }}</td>
+      <td>
+        <form method="post" action="/settings/reply-templates/{{ t.id }}/delete" class="inline-form" onsubmit="return confirm('Delete template \'{{ t.title|e }}\'?');">
+          <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <button type="submit" class="link-button" style="color:#dc2626;">delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty" style="margin-top:16px;">
+  <h2>No reply templates yet</h2>
+  <p>Create your first predefined reply template above.</p>
+</div>
+{% endif %}
+{% endblock %}

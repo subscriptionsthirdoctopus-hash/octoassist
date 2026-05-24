@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
-from ..auth import require_staff
+from ..auth import require_staff, require_admin
 from ..database import get_db
 from ..models import (
     Problem, ProblemStatus, ProblemTicketLink, Tenant, Ticket, TicketPriority,
@@ -194,3 +194,17 @@ def problem_unlink(
         raise HTTPException(status_code=404)
     problem_svc.unlink_ticket(db, problem_id=problem_id, ticket_id=ticket_id)
     return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
+
+
+@router.post("/problems/{problem_id}/delete")
+def delete_problem(
+    problem_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    p = db.get(Problem, problem_id)
+    if p is None or p.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    db.delete(p)
+    db.commit()
+    return RedirectResponse(url="/problems", status_code=303)

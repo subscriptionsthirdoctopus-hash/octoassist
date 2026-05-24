@@ -21,27 +21,27 @@
 
   /* Status quick-pick */
   .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-  .stat-btn  { padding:8px 6px; border-radius:6px; border:1px solid var(--line,#e2e8f0); background:var(--surface-2);
-               text-align:center; font-size:12px; font-weight:600; color:#334155; cursor:pointer;
+  .stat-btn  { padding:8px 6px !important; border-radius:6px; border:1px solid var(--line,#e2e8f0) !important; background:var(--surface-2) !important;
+               text-align:center; font-size:12px; font-weight:600; color:#334155 !important; cursor:pointer;
                text-transform:capitalize; transition:all .12s; }
-  .stat-btn:hover { background:#e2e8f0; }
-  .stat-btn.active.s-open        { background:#dbeafe; color:#1e3a8a; border-color:#93c5fd; }
-  .stat-btn.active.s-in_progress { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
-  .stat-btn.active.s-on_hold     { background:#e2e8f0; color:#475569; border-color:#94a3b8; }
-  .stat-btn.active.s-resolved    { background:#dcfce7; color:#166534; border-color:#86efac; }
-  .stat-btn.active.s-closed      { background:#cbd5e1; color:#0f172a; border-color:#64748b; }
-  .stat-btn.active.s-cancelled   { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+  .stat-btn:hover { background:#e2e8f0 !important; }
+  .stat-btn.active.s-open        { background:#dbeafe !important; color:#1e3a8a !important; border-color:#93c5fd !important; }
+  .stat-btn.active.s-in_progress { background:#fef3c7 !important; color:#92400e !important; border-color:#fcd34d !important; }
+  .stat-btn.active.s-on_hold     { background:#e2e8f0 !important; color:#475569 !important; border-color:#94a3b8 !important; }
+  .stat-btn.active.s-resolved    { background:#dcfce7 !important; color:#166534 !important; border-color:#86efac !important; }
+  .stat-btn.active.s-closed      { background:#cbd5e1 !important; color:#0f172a !important; border-color:#64748b !important; }
+  .stat-btn.active.s-cancelled   { background:#fee2e2 !important; color:#991b1b !important; border-color:#fca5a5 !important; }
   .stat-form { display:contents; }
 
   /* Priority pill row */
-  .prio-row { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
-  .prio-btn { padding:6px 4px; border-radius:6px; border:1px solid var(--line,#e2e8f0); background:var(--surface-2);
-              font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; color:#475569; }
-  .prio-btn:hover { background:#e2e8f0; }
-  .prio-btn.active.p-low      { background:#dbeafe; color:#1e3a8a; border-color:#93c5fd; }
-  .prio-btn.active.p-medium   { background:#fef9c3; color:#854d0e; border-color:#fde047; }
-  .prio-btn.active.p-high     { background:#fed7aa; color:#9a3412; border-color:#fb923c; }
-  .prio-btn.active.p-critical { background:#fecaca; color:#7f1d1d; border-color:#ef4444; }
+  .prio-row { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
+  .prio-btn { padding:8px 6px !important; border-radius:6px; border:1px solid var(--line,#e2e8f0) !important; background:var(--surface-2) !important;
+              font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; color:#475569 !important; }
+  .prio-btn:hover { background:#e2e8f0 !important; }
+  .prio-btn.active.p-low      { background:#dbeafe !important; color:#1e3a8a !important; border-color:#93c5fd !important; }
+  .prio-btn.active.p-medium   { background:#fef9c3 !important; color:#854d0e !important; border-color:#fde047 !important; }
+  .prio-btn.active.p-high     { background:#fed7aa !important; color:#9a3412 !important; border-color:#fb923c !important; }
+  .prio-btn.active.p-critical { background:#fecaca !important; color:#7f1d1d !important; border-color:#ef4444 !important; }
 
   /* Assignee row */
   .assign-row { display:flex; gap:6px; align-items:stretch; }
@@ -119,19 +119,34 @@
   h3.section { font-size:14px; margin:18px 0 4px; color:#0f172a; }
 </style>
 
-<section class="tk-head">
-  <div>
-    <h1><span class="tk-num">{{ ticket.ticket_number }}</span>{{ ticket.title }}</h1>
-    <p class="tk-sub">
-      {{ ticket.kind.value.replace("_"," ") | capitalize }}
-      · <a href="/tickets?status=&kind=" style="color:inherit;">{{ ticket.category.name if ticket.category else "—" }}</a>
-      · opened {{ ticket.created_at | ist }}
-      by <strong>{{ ticket.reporter.display_name if ticket.reporter else "—" }}</strong>
-      {% if ticket.location %} · 📍 {{ ticket.location }}{% endif %}
-    </p>
-  </div>
-  <div>
-    <a href="/tickets" class="link-button">← Tickets</a>
+<section class="page-head" style="margin-bottom: 20px;">
+  <div class="row-between" style="align-items: center; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 14px; width: 100%;">
+    <div>
+      <h1 style="color: var(--text-1) !important; background: none !important; -webkit-text-fill-color: initial !important; font-size: 24px; font-weight: 700; margin: 0; display: inline-flex; align-items: center; gap: 8px;">
+        <span style="color: var(--text-3); font-weight: 600; font-size: 15px; letter-spacing: 0.5px;">{{ ticket.ticket_number }}</span>
+        {{ ticket.title }}
+      </h1>
+      <p class="meta" style="margin-top: 6px; font-size: 13px;">
+        {{ ticket.kind.value.replace("_"," ") | capitalize }}
+        · <a href="/tickets?status=&kind=" style="color:inherit; font-weight: 600; text-decoration: none;">{{ ticket.category.name if ticket.category else "—" }}</a>
+        · opened {{ ticket.created_at | ist }}
+        by <strong>{{ ticket.reporter.display_name if ticket.reporter else "—" }}</strong>
+        {% if ticket.location %} · 📍 {{ ticket.location }}{% endif %}
+      </p>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <a href="/tickets" class="button" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; height: auto;">
+        ← Back to Queue
+      </a>
+      {% if current_user.role.value == "admin" %}
+      <form method="post" action="/tickets/{{ ticket.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this ticket permanently? This cannot be undone.');">
+        <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <button type="submit" class="button danger-solid" style="padding: 8px 14px; font-size: 13px; height: auto;">
+          🗑️ Delete Ticket
+        </button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 </section>
 
@@ -218,6 +233,17 @@
         <span class="reply-tab internal" data-mode="internal" id="tabInternal">Internal note</span>
       </div>
       <input type="hidden" name="is_internal" id="isInternalInput" value="">
+      {% if reply_templates %}
+      <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 12px; color: var(--slate, #64748b);">💡 Predefined reply:</span>
+        <select id="predefinedReplySelect" style="padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; background: var(--surface); color: var(--text-1); cursor: pointer;">
+          <option value="">-- Select predefined reply --</option>
+          {% for rt in reply_templates %}
+            <option value="{{ rt.body }}">{{ rt.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <textarea name="body" id="replyBody" rows="4" placeholder="Type your reply…" required></textarea>
       <div class="reply-actions">
         <label style="font-size:11.5px;color:var(--slate,#64748b);">
@@ -384,18 +410,6 @@
       </div>
     </div>
 
-    {# KB suggestions #}
-    {% if kb_hints %}
-    <div class="panel" style="background:#f0f9ff;border-color:#bae6fd;">
-      <h4 style="color:#075985;">💡 Related KB</h4>
-      <ul class="kb-list">
-        {% for a in kb_hints %}
-        <li><a href="/kb/{{ a.id }}">{{ a.title }}</a></li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-
   </aside>
 </div>
 
@@ -443,6 +457,21 @@
   }
   tabPub.addEventListener("click", function(){ setMode("public"); });
   tabInt.addEventListener("click", function(){ setMode("internal"); });
+
+  // Handle predefined replies selection insertion
+  var preSelect = document.getElementById("predefinedReplySelect");
+  if (preSelect) {
+    preSelect.addEventListener("change", function(e) {
+      var val = e.target.value;
+      if (val) {
+        var ta = document.getElementById("replyBody");
+        if (ta) {
+          ta.value = val;
+        }
+        e.target.value = "";
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}

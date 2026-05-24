@@ -2,24 +2,31 @@
 {% block title %}{{ detail.product }} — Software (SAM){% endblock %}
 {% block content %}
 <section class="page-head">
-  <p class="meta" style="margin:0;"><a href="/software">← Software (SAM)</a></p>
-  <h1>{{ detail.product }}</h1>
-  <p class="meta">
-    <strong>{{ detail.publisher }}</strong>
-    · <span class="role-pill" style="background:var(--navy);color:white;font-size:10px;">{{ detail.category }}</span>
-    {% set lp = detail.license_posture %}
-    {% if lp == 'licensed_paid' %}
-      <span class="prio prio-critical">{{ license_labels[lp] }}</span>
-    {% elif lp == 'licensed_oem' %}
-      <span class="prio prio-medium">{{ license_labels[lp] }}</span>
-    {% elif lp == 'free_personal' %}
-      <span class="prio prio-high">{{ license_labels[lp] }}</span>
-    {% elif lp == 'freeware_oss' %}
-      <span class="prio prio-low">{{ license_labels[lp] }}</span>
-    {% else %}
-      <span class="prio prio-low" style="background:#e6e6e6;color:#444;">{{ license_labels[lp] }}</span>
-    {% endif %}
-  </p>
+  <p class="meta" style="margin:0 0 10px;"><a href="/software">← Software (SAM)</a></p>
+  <div class="row-between">
+    <div>
+      <h1 style="margin:0 0 4px;">{{ detail.product }}</h1>
+      <p class="meta" style="margin:0;">
+        <strong>{{ detail.publisher }}</strong>
+        · <span class="role-pill" style="background:var(--navy);color:white;font-size:10px;">{{ detail.category }}</span>
+        {% set lp = detail.license_posture %}
+        {% if lp == 'licensed_paid' %}
+          <span class="prio prio-critical">{{ license_labels[lp] }}</span>
+        {% elif lp == 'licensed_oem' %}
+          <span class="prio prio-medium">{{ license_labels[lp] }}</span>
+        {% elif lp == 'free_personal' %}
+          <span class="prio prio-high">{{ license_labels[lp] }}</span>
+        {% elif lp == 'freeware_oss' %}
+          <span class="prio prio-low">{{ license_labels[lp] }}</span>
+        {% else %}
+          <span class="prio prio-low" style="background:#e6e6e6;color:#444;">{{ license_labels[lp] }}</span>
+        {% endif %}
+      </p>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="/software/product/{{ detail.publisher|urlencode }}/{{ detail.product|urlencode }}/export.csv" style="background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: white; display: inline-flex; align-items: center; gap: 6px;">⬇ Export Installs CSV</a>
+    </div>
+  </div>
 </section>
 
 <section class="kpi-grid">

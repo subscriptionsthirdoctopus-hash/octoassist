@@ -136,7 +136,11 @@
             <span class="prio prio-low" style="background:#e6e6e6;color:#444;">{{ license_labels[lp] }}</span>
           {% endif %}
         </td>
-        <td><strong>{{ r.install_count }}</strong></td>
+        <td>
+          <a href="/software/product/{{ r.publisher|urlencode }}/{{ r.product|urlencode }}">
+            <strong>{{ r.install_count }}</strong>
+          </a>
+        </td>
         <td>
           {{ r.endpoint_count }}
           {% if r.sample_hostnames %}

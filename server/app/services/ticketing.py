@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..models import (
     Category, Ticket, TicketComment, TicketEvent, TicketEventKind,
-    TicketKind, TicketPriority, TicketStatus, User,
+    TicketKind, TicketPriority, TicketStatus, User, Tenant,
 )
 from .audit import record
 from .sla import compute_sla
@@ -32,21 +32,29 @@ def create_ticket(
     title: str,
     description: str,
     priority: TicketPriority | None = None,
+    location: str | None = None,
 ) -> Ticket:
     prio = priority or category.default_priority
     now = datetime.now(timezone.utc)
-    due_response, due_resolution = compute_sla(category, prio, now)
+    due_response, due_resolution = compute_sla(db, tenant_id, category, prio, now)
 
-    # Phase C: derive ticket location from the reporter's primary asset (or
-    # their Entra profile fallback), then look up a routing rule to auto-
-    # assign. Both are best-effort — failures leave fields NULL/None.
-    location = derive_location_for(user=reporter, db=db)
-    auto_assignee = auto_assignee_for(location=location, tenant_id=tenant_id, db=db)
-    if auto_assignee is None:
-        # Phase F fallback: per-category default assignee
-        auto_assignee = category_assignee_for(
-            category_id=category.id, tenant_id=tenant_id, db=db
-        )
+    # Phase C: derive ticket location from the reporter's primary asset if not provided
+    if not location or not location.strip():
+        location = derive_location_for(user=reporter, db=db)
+    else:
+        location = location.strip()
+
+    tenant = db.get(Tenant, tenant_id)
+    prefs = tenant.notification_settings or {} if tenant else {}
+    auto_assignee = None
+    
+    if prefs.get("auto_assign_tickets", True):
+        auto_assignee = auto_assignee_for(location=location, tenant_id=tenant_id, db=db)
+        if auto_assignee is None:
+            # Phase F fallback: per-category default assignee
+            auto_assignee = category_assignee_for(
+                category_id=category.id, tenant_id=tenant_id, db=db
+            )
 
     ticket = Ticket(
         tenant_id=tenant_id,
@@ -121,6 +129,23 @@ def transition_status(db: Session, *, ticket: Ticket, actor: User, new_status: T
     old = ticket.status
     ticket.status = new_status
     now = datetime.now(timezone.utc)
+
+    if old == TicketStatus.on_hold:
+        hold_event = (
+            db.query(TicketEvent)
+            .filter(TicketEvent.ticket_id == ticket.id,
+                    TicketEvent.kind == TicketEventKind.status_changed,
+                    TicketEvent.after_value["status"].astext == "on_hold")
+            .order_by(TicketEvent.created_at.desc())
+            .first()
+        )
+        if hold_event:
+            pause_duration = now - hold_event.created_at
+            if ticket.due_response_at:
+                ticket.due_response_at += pause_duration
+            if ticket.due_resolution_at:
+                ticket.due_resolution_at += pause_duration
+
     if new_status == TicketStatus.resolved and ticket.resolved_at is None:
         ticket.resolved_at = now
     if new_status == TicketStatus.closed and ticket.closed_at is None:

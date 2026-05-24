@@ -482,6 +482,9 @@
 
   // Call syncLocation on init
   syncLocation();
+  if (reporterSelect) {
+    reporterSelect.dispatchEvent(new Event('change'));
+  }
 
   // 4. File attachments dropzone & verification
   var dropZone = document.getElementById("dropZone");

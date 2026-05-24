@@ -29,3 +29,9 @@ deploy/docker/.env
 .idea/
 *.swp
 .DS_Store
+
+# Coding agent tool configs (Antigravity)
+.gemini/
+
+# Local scratch / debug
+scratch/

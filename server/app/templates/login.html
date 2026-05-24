@@ -10,7 +10,11 @@
   <div class="sso-buttons">
     {% for i in enabled_idps %}
     <a class="button sso primary" href="/auth/oidc/{{ i.id }}/start{% if next %}?next={{ next }}{% endif %}">
-      Sign in with {{ i.display_name }}
+      {% if i.display_name.lower().startswith("sign in with") %}
+        {{ i.display_name }}
+      {% else %}
+        Sign in with {{ i.display_name }}
+      {% endif %}
     </a>
     {% endfor %}
   </div>

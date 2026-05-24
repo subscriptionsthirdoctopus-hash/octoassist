@@ -1022,6 +1022,31 @@ button.danger:hover, .button.danger:hover {
   background: #fef2f2; border-color: #fca5a5;
 }
 
+button.danger-solid, .button.danger-solid {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border: none;
+  color: white !important;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.4);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+button.danger-solid:hover, .button.danger-solid:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(239, 68, 68, 0.5);
+  color: white !important;
+  text-decoration: none !important;
+}
+button.danger-solid:active, .button.danger-solid:active {
+  transform: translateY(0.5px);
+}
+
 .link-button {
   background: none;
   border: none;
@@ -1174,6 +1199,11 @@ button.danger:hover, .button.danger:hover {
   padding: 10px 14px;
   font-size: 14px;
   font-weight: 600;
+  white-space: normal;
+  line-height: 1.4;
+  height: auto;
+  min-height: 40px;
+  word-break: break-word;
 }
 .auth-divider {
   text-align: center;
@@ -2586,4 +2616,37 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   outline-offset: 3px !important;
   box-shadow: 0 0 0 4px var(--accent-soft) !important;
   border-radius: 4px !important;
+}
+
+/* Beautiful Premium Dropdown Arrow for all select tags */
+select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 14px !important;
+  padding-right: 36px !important;
+  cursor: pointer !important;
+}
+:root[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+}
+
+/* =============================================================
+   HARD OVERRIDES FOR DANGER SOLID BUTTONS TO ENSURE HIGH VISIBILITY
+   ============================================================= */
+button.danger-solid, .button.danger-solid {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  border: none !important;
+  color: white !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.4) !important;
+  padding: 8px 16px !important;
+}
+button.danger-solid:hover, .button.danger-solid:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  box-shadow: 0 6px 20px 0 rgba(239, 68, 68, 0.5) !important;
+  color: white !important;
+  transform: translateY(-1px) !important;
 }

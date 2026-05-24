@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}CAB Committees — Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>👥 CAB Management</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · Create and organize custom change and risk committees.</p>
+  </div>
+</section>
+
+<div style="display:flex; gap:16px; margin: 0 0 20px; border-bottom:1px solid var(--line,#e2e8f0); padding-bottom:8px;">
+  <a href="/settings/cab" style="color:#64748b; text-decoration:none; padding-bottom:8px; font-weight:500; transition: color 0.2s;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='#64748b'">CAB Members</a>
+  <a href="/settings/cab/committees" style="font-weight:700; color:#2563eb; text-decoration:none; border-bottom:2px solid #2563eb; padding-bottom:8px;">CAB Committees</a>
+</div>
+
+{% if flash %}
+<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;">
+  <p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;">
+  <p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p>
+</div>
+{% endif %}
+
+<div style="display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start;">
+  <!-- Committees List -->
+  <div>
+    {% if committees %}
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        {% for c in committees %}
+          <div class="card" style="max-width:none; padding: 18px; position: relative; transition: transform 0.2s, box-shadow 0.2s;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+              <div>
+                <h3 style="margin:0 0 6px 0; font-size:16px; font-weight:700; color:var(--text-1);">{{ c.name }}</h3>
+                <p style="margin:0 0 12px 0; font-size:13.5px; line-height:1.5; color:#475569;">{{ c.description or "(No description provided)" }}</p>
+                
+                <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748b; font-weight:500; background: #f8fafc; padding: 4px 8px; border-radius: 4px; width: fit-content;">
+                  <span>👥</span> 
+                  <strong>{{ c.members|length }}</strong> member{{ "" if c.members|length == 1 else "s" }} assigned
+                </div>
+              </div>
+              
+              <div style="display: flex; gap: 8px;">
+                <a href="/settings/cab/committees/{{ c.id }}/members" class="button" style="padding: 6px 12px; font-size: 12.5px; height: auto; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                  👥 Manage Members
+                </a>
+                <form method="post" action="/settings/cab/committees/{{ c.id }}/delete" onsubmit="return confirm('Are you sure you want to delete the committee \'{{ c.name|e }}\'? This action cannot be undone.');" style="margin:0;">
+                  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+                  <button type="submit" class="button danger-solid" style="padding: 6px 12px; font-size: 12.5px; height: auto;">
+                    Delete
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty" style="padding: 40px 20px;">
+        <h2>No CAB Committees configured</h2>
+        <p>Use the creation panel on the right to configure your first change committee.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Create New Committee Card -->
+  <div class="card" style="padding: 18px;">
+    <h3 style="margin-top:0; font-size:15px; color:var(--text-1); border-bottom:1px solid var(--line); padding-bottom:8px;">➕ Create Committee</h3>
+    <form method="post" action="/settings/cab/committees/new" style="display: flex; flex-direction: column; gap: 12px; margin-top:12px;">
+      <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+      
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: #475569;">
+        Committee Name
+        <input type="text" name="name" required placeholder="e.g. Risk Management Committee" 
+               style="padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; margin-top: 4px;">
+      </label>
+
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: #475569;">
+        Description
+        <textarea name="description" placeholder="Specify the core mandate, scope, or types of tickets this committee reviews." rows="4"
+                  style="padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; margin-top: 4px;"></textarea>
+      </label>
+
+      <button type="submit" class="primary" style="margin-top: 4px; width: 100%; justify-content: center;">
+        Create Committee
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
