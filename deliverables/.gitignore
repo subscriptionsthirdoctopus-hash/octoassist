@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Raw screenshot sources — too big to track (25+ MB).
+# To regenerate: take fresh shots via Chrome devtools then run
+# `node process_shots_light.js` to produce the shots_light/ JPEGs.
+screenshots/
+
+# Stale intermediate from an earlier crop pass; replaced by shots_light/.
+shots_cropped/
+
+# QA renderings — produced by `pdftoppm` for visual inspection only.
+qa_deck/
+qa_sop/
+
+# Superseded by process_shots_light.js
+crop_shots.js
+
+# Office open-document lock file
+~$*
+
+# macOS
+.DS_Store
