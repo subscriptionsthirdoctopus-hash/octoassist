@@ -30,8 +30,7 @@ deploy/docker/.env
 *.swp
 .DS_Store
 
-# Coding agent tool configs (Antigravity)
+# Coding agent tool configs + scratch debug (Antigravity)
 .gemini/
-
-# Local scratch / debug
 scratch/
+server/test_submit.py

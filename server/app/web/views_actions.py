@@ -386,3 +386,156 @@ def asset_processes_kill(
         url=f"/asset/{agent_id}/processes?flash=Kill+queued+for+{name or pid}",
         status_code=303,
     )
+
+
+# ---------- Per-asset Windows Services ----------
+
+@router.get("/asset/{agent_id}/services", response_class=HTMLResponse)
+def asset_services(
+    agent_id: int,
+    request: Request,
+    flash: str | None = None,
+    error: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+
+    # Query latest completed custom powershell action with label "List Windows Services"
+    latest = (db.query(RemoteAction)
+                .filter(RemoteAction.agent_id == agent_id,
+                        RemoteAction.tenant_id == user.tenant_id,
+                        RemoteAction.kind == RemoteActionKind.custom_powershell,
+                        RemoteAction.params['label'].astext == "List Windows Services",
+                        RemoteAction.status == RemoteActionStatus.succeeded)
+                .order_by(RemoteAction.created_at.desc()).first())
+                
+    pending = (db.query(RemoteAction)
+                 .filter(RemoteAction.agent_id == agent_id,
+                         RemoteAction.tenant_id == user.tenant_id,
+                         RemoteAction.kind == RemoteActionKind.custom_powershell,
+                         RemoteAction.params['label'].astext == "List Windows Services",
+                         RemoteAction.status.in_(
+                             [RemoteActionStatus.pending,
+                              RemoteActionStatus.in_progress]))
+                 .order_by(RemoteAction.created_at.desc()).first())
+
+    services = []
+    if latest and latest.stdout:
+        try:
+            import json
+            services = json.loads(latest.stdout)
+            if isinstance(services, dict):
+                services = [services]
+        except Exception:
+            services = []
+            
+    # Process Status and StartType enums to strings for uniform rendering
+    STATUS_MAP = {
+        1: "Stopped",
+        2: "StartPending",
+        3: "StopPending",
+        4: "Running",
+        5: "ContinuePending",
+        6: "PausePending",
+        7: "Paused"
+    }
+    START_TYPE_MAP = {
+        0: "Boot",
+        1: "System",
+        2: "Automatic",
+        3: "Manual",
+        4: "Disabled"
+    }
+    
+    formatted_services = []
+    for s in services:
+        status_val = s.get("Status")
+        if isinstance(status_val, int):
+            status_str = STATUS_MAP.get(status_val, str(status_val))
+        else:
+            status_str = str(status_val or "Unknown")
+            
+        start_val = s.get("StartType")
+        if isinstance(start_val, int):
+            start_str = START_TYPE_MAP.get(start_val, str(start_val))
+        else:
+            start_str = str(start_val or "Unknown")
+            
+        formatted_services.append({
+            "Name": s.get("Name", "Unknown"),
+            "DisplayName": s.get("DisplayName", "Unknown"),
+            "Status": status_str,
+            "StartType": start_str
+        })
+        
+    # Sort services by DisplayName
+    formatted_services.sort(key=lambda x: x["DisplayName"].lower())
+
+    return templates.TemplateResponse(
+        request=request, name="asset_services.html",
+        context=_ctx(user, db, agent=agent,
+                     services=formatted_services,
+                     scan_time=(latest.finished_at if latest else None),
+                     pending_refresh=pending,
+                     flash=flash,
+                     error=error),
+    )
+
+
+@router.post("/asset/{agent_id}/services/refresh")
+def asset_services_refresh(
+    agent_id: int,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    script = "Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Json -Compress"
+    try:
+        ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                     agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
+                     params={"script": script, "label": "List Windows Services"})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return RedirectResponse(
+        url=f"/asset/{agent_id}/services?flash=Refresh+queued+(arrives+in+~30+sec)",
+        status_code=303,
+    )
+
+
+@router.post("/asset/{agent_id}/services/control")
+def asset_services_control(
+    agent_id: int,
+    name: str = Form(...),
+    action: str = Form(...),
+    user: User = Depends(require_admin), # Service control is strictly admin-only!
+    db: Session = Depends(get_db),
+):
+    name = name.strip()
+    action = action.strip().lower()
+    if action not in ("start", "stop", "restart"):
+        raise HTTPException(status_code=400, detail="Invalid service action")
+        
+    if action == "start":
+        cmd = f"Start-Service -Name '{name}'"
+    elif action == "stop":
+        cmd = f"Stop-Service -Name '{name}' -Force"
+    else:
+        cmd = f"Restart-Service -Name '{name}' -Force"
+        
+    # Combine command with service listing so the view updates instantly upon execution!
+    script = f"{cmd}; Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Json -Compress"
+    
+    try:
+        ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                     agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
+                     params={"script": script, "label": "List Windows Services"})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    return RedirectResponse(
+        url=f"/asset/{agent_id}/services?flash=Service+{action}+{name}+queued",
+        status_code=303,
+    )
+

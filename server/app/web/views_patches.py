@@ -207,9 +207,18 @@ def bulk_deploy_form(
             "affected": int(n),
         })
 
+    from ..models import AssetGroup, AssetGroupMember
+    import json
+    groups = db.query(AssetGroup).filter(AssetGroup.tenant_id == tid).order_by(AssetGroup.name).all()
+    group_map = {}
+    for g in groups:
+        members = db.query(AssetGroupMember.agent_id).filter(AssetGroupMember.group_id == g.id).all()
+        group_map[g.id] = [m.agent_id for m in members]
+    group_map_json = json.dumps(group_map)
+
     return templates.TemplateResponse(
         request=request, name="patches_bulk_deploy.html",
-        context=_ctx(user, db, endpoints=endpoints, packages=packages),
+        context=_ctx(user, db, endpoints=endpoints, packages=packages, groups=groups, group_map_json=group_map_json),
     )
 
 

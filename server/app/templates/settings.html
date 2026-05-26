@@ -118,13 +118,6 @@
     <p class="tile-meta">{{ cab_count }} member{{ "" if cab_count == 1 else "s" }} on the board</p>
   </a>
 
-  <a href="/settings/cab/committees" class="settings-tile">
-    <span class="icon">🏛️</span>
-    <p class="tile-title">CAB Committees</p>
-    <p class="tile-sub">Group CAB members into named committees — Change Management, Risk Management, Security Review, etc. Each committee has its own member list.</p>
-    <p class="tile-meta">{{ committee_count or 0 }} committee{{ "" if (committee_count or 0) == 1 else "s" }}</p>
-  </a>
-
 
   <a href="/reports/library" class="settings-tile">
     <span class="icon">📊</span>
@@ -138,6 +131,13 @@
     <p class="tile-title">Software catalog</p>
     <p class="tile-sub">Curate the installers your team pushes — Chrome, Acrobat, VPN client, LOB apps — with silent-install args and uninstall commands. Picked from a dropdown on the Deploy software page.</p>
     <p class="tile-meta">{{ catalog_count }} package{{ "" if catalog_count == 1 else "s" }} in catalog</p>
+  </a>
+
+  <a href="/settings/groups" class="settings-tile">
+    <span class="icon">🖥️</span>
+    <p class="tile-title">Asset Groups</p>
+    <p class="tile-sub">Curate custom groups of workstations/servers to target software uninstalls/updates and patch deployments in bulk.</p>
+    <p class="tile-meta">{{ asset_groups_count }} group{{ "" if asset_groups_count == 1 else "s" }} configured</p>
   </a>
 
   <a href="/actions" class="settings-tile">

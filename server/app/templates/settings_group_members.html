@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Manage Members — {{ group.name }} — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="meta" style="margin:0 0 4px;"><a href="/settings/groups">← Asset Groups</a></p>
+    <h1>Manage Members: {{ group.name }}</h1>
+    <p class="meta">Select which endpoint machines belong to this curated group.</p>
+  </div>
+</section>
+
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+
+<form method="post" action="/settings/groups/{{ group.id }}/members">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  
+  <div class="card" style="max-width:none; margin-bottom:16px; display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+    <div style="display:flex; gap:12px; align-items:center; flex:1; min-width:280px;">
+      <input type="checkbox" id="select-all" onclick="toggleAll(this)" style="margin:0;">
+      <label for="select-all" style="font-weight:600; font-size:13px; cursor:pointer;">Select All (visible)</label>
+      <input type="search" id="member-filter" placeholder="search assets by hostname, OS, user..." oninput="filterAssets(this.value);"
+             style="flex:1; padding:6px 10px; font-size:13px; border:1px solid var(--border); border-radius:4px;">
+    </div>
+    <div>
+      <span id="selected-count" class="role-pill" style="background:var(--navy); color:white; font-size:12px; font-weight:600; padding:4px 10px; border-radius:12px;">0 selected</span>
+      <button type="submit" class="button primary" style="margin-left:12px;">Save Membership</button>
+    </div>
+  </div>
+
+  {% if agents %}
+  <table class="data" id="agents-table">
+    <thead>
+      <tr>
+        <th style="width:40px; text-align:center;"></th>
+        <th>Hostname</th>
+        <th>Primary User</th>
+        <th>Operating System</th>
+        <th>Location</th>
+        <th>Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in agents %}
+      <tr data-search="{{ a.hostname|lower }} {{ a.primary_user.full_name|lower if a.primary_user else '' }} {{ a.location|lower if a.location else '' }}">
+        <td style="text-align:center;">
+          <input type="checkbox" name="agent_ids" value="{{ a.id }}" class="agent-checkbox"
+                 {% if a.id in member_ids %}checked{% endif %} onclick="updateCount();" style="margin:0; cursor:pointer;">
+        </td>
+        <td><strong>{{ a.hostname }}</strong></td>
+        <td>{{ a.primary_user.full_name if a.primary_user else "—" }}</td>
+        <td style="font-size:12.5px; color:var(--slate);">Windows Endpoint</td>
+        <td>{{ a.location or "—" }}</td>
+        <td style="font-size:12.5px; color:var(--slate);">{% if a.last_seen_at %}{{ a.last_seen_at | ist }}{% else %}never{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h2>No registered agent machines found</h2>
+    <p>Install the OctoAssist agent on your workstations first to add them to groups.</p>
+  </div>
+  {% endif %}
+</form>
+
+<script>
+  function updateCount() {
+    const checked = document.querySelectorAll('.agent-checkbox:checked').length;
+    document.getElementById('selected-count').textContent = checked + ' selected';
+  }
+
+  function toggleAll(master) {
+    document.querySelectorAll('#agents-table tbody tr').forEach(row => {
+      if (row.style.display !== 'none') {
+        const cb = row.querySelector('.agent-checkbox');
+        if (cb) cb.checked = master.checked;
+      }
+    });
+    updateCount();
+  }
+
+  function filterAssets(q) {
+    const query = (q || '').toLowerCase().trim();
+    document.querySelectorAll('#agents-table tbody tr').forEach(row => {
+      const text = row.getAttribute('data-search') || '';
+      row.style.display = (!query || text.indexOf(query) >= 0) ? '' : 'none';
+    });
+  }
+
+  // Initialize selected count
+  document.addEventListener('DOMContentLoaded', updateCount);
+</script>
+{% endblock %}

@@ -29,6 +29,9 @@
   </div>
 </section>
 
+{% if flash %}<div class="alert success" style="margin-top: 14px; margin-bottom: 0;">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert danger" style="margin-top: 14px; margin-bottom: 0;">{{ error }}</div>{% endif %}
+
 <section class="kpi-grid">
   <div class="kpi-card">
     <p class="kpi-label">Installs</p>
@@ -50,6 +53,64 @@
     {% endif %}
   </div>
 </section>
+
+{% if current_user.role == 'admin' %}
+<form method="post" action="/software/product/action" style="margin-top: 18px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <input type="hidden" name="publisher" value="{{ detail.publisher }}">
+  <input type="hidden" name="product" value="{{ detail.product }}">
+
+  <section class="card" style="margin-bottom:18px; border-left:4px solid var(--accent,#2563eb); background:var(--surface);">
+    <h2 style="margin:0 0 10px 0; font-size:18px; display:flex; align-items:center; gap:8px;">⚡ Administrator Actions: Remote Software Control</h2>
+    <p class="meta" style="margin:0 0 14px 0;">
+      Queue a background remote action for matching endpoints. If the package exists in the Software Catalog, its installer will run. For uninstalls, the system will automatically search the endpoint's registry and run the uninstaller silently.
+    </p>
+    
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:end; margin-bottom: 12px;">
+      <label style="display:flex; flex-direction:column; gap:4px;">
+        <strong>1. Action:</strong>
+        <select name="action_type" required style="padding:8px 10px; border:1px solid var(--line); border-radius:4px; font-size:13.5px; background:var(--surface); color:var(--text);">
+          <option value="uninstall">Uninstall</option>
+          <option value="install">Install / Update</option>
+        </select>
+      </label>
+
+      <label style="display:flex; flex-direction:column; gap:4px;">
+        <strong>2. Target Mode:</strong>
+        <select name="target_mode" id="target-mode-select" onchange="handleTargetModeChange(this.value)" required style="padding:8px 10px; border:1px solid var(--line); border-radius:4px; font-size:13.5px; background:var(--surface); color:var(--text);">
+          <option value="all">All endpoints with this software</option>
+          <option value="group">Asset Group</option>
+          <option value="select">Selected endpoints below (via checkboxes)</option>
+          <option value="pattern">Endpoints matching hostname pattern</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="asset-group-row" style="display:none; margin-bottom: 12px;">
+      <label style="display:flex; flex-direction:column; gap:4px;">
+        <strong>Asset Group Target:</strong>
+        <select name="group_id" style="padding:8px 10px; border:1px solid var(--border); border-radius:4px; font-size:13.5px; background:var(--surface); color:var(--text); margin-top: 4px;">
+          <option value="">-- Choose Asset Group --</option>
+          {% for g in groups %}
+          <option value="{{ g.id }}">{{ g.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div id="hostname-pattern-row" style="display:none; margin-bottom: 12px;">
+      <label style="display:block;">
+        <strong>Hostname Pattern:</strong>
+        <input type="text" name="hostname_pattern" placeholder="e.g. LON-WORKSTATION-*" style="width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:4px; font-size:13.5px; background:var(--surface); color:var(--text); margin-top: 4px;">
+        <span class="meta" style="font-size:11.5px; margin-top: 4px; display:block;">Use <code>%</code> or <code>*</code> as wildcard (e.g. <code>LON-%</code> targets all London agents).</span>
+      </label>
+    </div>
+
+    <div style="margin-top:14px; text-align:right;">
+      <button type="submit" class="button primary" style="padding: 8px 16px; font-weight:600;">Execute Remote Action</button>
+    </div>
+  </section>
+{% endif %}
 
 {% if detail.version_breakdown %}
 <section style="margin-top:16px;">
@@ -75,6 +136,9 @@
   <table class="data">
     <thead>
       <tr>
+        {% if current_user.role == 'admin' %}
+        <th class="endpoint-checkbox-col" style="width: 40px; text-align: center; opacity: 0.5;"><input type="checkbox" id="select-all-endpoints" onclick="toggleAllEndpoints(this)"></th>
+        {% endif %}
         <th>Hostname</th>
         <th>Version</th>
         <th>Installed</th>
@@ -85,6 +149,9 @@
     <tbody>
       {% for e in detail.endpoints %}
       <tr>
+        {% if current_user.role == 'admin' %}
+        <td class="endpoint-checkbox-col" style="text-align: center; opacity: 0.5;"><input type="checkbox" name="agent_ids" value="{{ e.agent_id }}" class="endpoint-checkbox"></td>
+        {% endif %}
         <td><a href="/asset/{{ e.agent_id }}">{{ e.hostname }}</a></td>
         <td><code>{{ e.version }}</code></td>
         <td>{{ e.install_date }}</td>
@@ -95,4 +162,30 @@
     </tbody>
   </table>
 </section>
+
+{% if current_user.role == 'admin' %}
+</form>
+
+<script>
+function handleTargetModeChange(mode) {
+  const patternRow = document.getElementById('hostname-pattern-row');
+  patternRow.style.display = (mode === 'pattern') ? 'block' : 'none';
+
+  const groupRow = document.getElementById('asset-group-row');
+  if (groupRow) {
+    groupRow.style.display = (mode === 'group') ? 'block' : 'none';
+  }
+  
+  const checkboxes = document.querySelectorAll('.endpoint-checkbox-col');
+  checkboxes.forEach(col => {
+    col.style.opacity = (mode === 'select') ? '1' : '0.5';
+  });
+}
+
+function toggleAllEndpoints(master) {
+  const checkboxes = document.querySelectorAll('.endpoint-checkbox');
+  checkboxes.forEach(cb => cb.checked = master.checked);
+}
+</script>
+{% endif %}
 {% endblock %}

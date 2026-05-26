@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
 from sqlalchemy.orm import Session
 
-from ..auth import require_staff
+from ..auth import require_staff, require_admin
 from ..database import get_db
 from ..models import Agent, RemoteAction, RemoteActionKind, SoftwarePackage, Tenant, User
 from ..services import charts, remote_actions as ra_svc, sam
@@ -285,6 +285,8 @@ def software_product_detail(
     publisher: str,
     product: str,
     request: Request,
+    flash: str | None = None,
+    error: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -293,11 +295,26 @@ def software_product_detail(
     detail = sam.product_detail(db, user.tenant_id, publisher, product)
     if detail is None:
         raise HTTPException(status_code=404)
+        
+    catalog = (db.query(SoftwarePackage)
+                 .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                         SoftwarePackage.is_active.is_(True))
+                 .order_by(SoftwarePackage.sort_order, SoftwarePackage.name).all())
+
+    from ..models import AssetGroup
+    groups = (db.query(AssetGroup)
+                .filter(AssetGroup.tenant_id == user.tenant_id)
+                .order_by(AssetGroup.name).all())
+
     return templates.TemplateResponse(
         request=request, name="software_detail.html",
         context=_ctx(user, db,
                      detail=detail,
-                     license_labels=LICENSE_LABEL),
+                     catalog=catalog,
+                     groups=groups,
+                     license_labels=LICENSE_LABEL,
+                     flash=flash,
+                     error=error),
     )
 
 
@@ -342,4 +359,317 @@ def software_product_export(
         iter([body]),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+# ---------- Admin-only Remote Action Triggers ----------
+
+def build_dynamic_uninstall_script(software_name: str) -> str:
+    """Generates a dynamic Windows registry-scanning PowerShell script that uninstalls
+    the target application by name silently in the SYSTEM context with no user interaction.
+    """
+    return rf"""
+$name = "{software_name}"
+Write-Host "Searching for uninstall strings matching: $name"
+
+$paths = @(
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+)
+
+$apps = Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object {{ 
+    $_.DisplayName -like "*$name*" -or $_.PSChildName -like "*$name*"
+}}
+
+if (-not $apps) {{
+    Write-Host "No installed applications found matching: $name"
+    exit 0
+}}
+
+foreach ($app in $apps) {{
+    $displayName = $app.DisplayName
+    $uninstallString = $app.UninstallString
+    Write-Host "Found app: $displayName"
+    Write-Host "Uninstall string: $uninstallString"
+
+    if (-not $uninstallString) {{
+        Write-Host "No uninstall string found for $displayName"
+        continue
+    }}
+
+    if ($uninstallString -match "msiexec") {{
+        if ($uninstallString -match "\{{[A-F0-9]{{8}}-[A-F0-9]{{4}}-[A-F0-9]{{4}}-[A-F0-9]{{4}}-[A-F0-9]{{12}}\}}") {{
+            $guid = $Matches[0]
+            $cmd = "msiexec.exe /x $guid /quiet /norestart"
+            Write-Host "Executing MSI silent uninstall: $cmd"
+            Start-Process cmd.exe -ArgumentList "/c $cmd" -Wait -NoNewWindow
+        }} else {{
+            $cmd = $uninstallString -replace "/I", "/X" -replace "/i", "/x"
+            if ($cmd -notlike "*/quiet*") {{ $cmd += " /quiet /norestart" }}
+            Write-Host "Executing modified MSI uninstall: $cmd"
+            Start-Process cmd.exe -ArgumentList "/c $cmd" -Wait -NoNewWindow
+        }}
+    }} else {{
+        $cmd = $uninstallString.Trim()
+        if ($cmd -match '^"([^"]+)"\s*(.*)$') {{
+            $exe = $Matches[1]
+            $args = $Matches[2]
+        }} elseif ($cmd -match '^([^\s]+)\s*(.*)$') {{
+            $exe = $Matches[1]
+            $args = $Matches[2]
+        }} else {{
+            $exe = $cmd
+            $args = ""
+        }}
+
+        if ($exe -match "unins\d{{3}}\.exe") {{
+            $args += " /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        }} elseif ($exe -match "setup\.exe" -or $exe -match "install\.exe") {{
+            $args += " /S /v/qn"
+        }} else {{
+            $args += " /S /silent /quiet /verysilent /qn"
+        }}
+
+        Write-Host "Executing EXE silent uninstall: $exe $args"
+        Start-Process $exe -ArgumentList $args -Wait -NoNewWindow -ErrorAction SilentlyContinue
+    }}
+}}
+Write-Host "Uninstall process completed."
+""".strip()
+
+
+@router.post("/software/product/action")
+async def software_product_action(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    form = await request.form()
+    publisher = (form.get("publisher") or "").strip()
+    product = (form.get("product") or "").strip()
+    action_type = (form.get("action_type") or "install").strip()
+    target_mode = (form.get("target_mode") or "all").strip()
+    hostname_pattern = (form.get("hostname_pattern") or "%").strip()
+
+    if not publisher or not product:
+        raise HTTPException(status_code=400, detail="Publisher and Product are required")
+
+    pub_quoted = quote(publisher)
+    prod_quoted = quote(product)
+
+    # Automatically locate a matching catalog package by name
+    package = (db.query(SoftwarePackage)
+                 .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                         SoftwarePackage.is_active.is_(True),
+                         SoftwarePackage.name.ilike(product))
+                 .first())
+
+    # Build params based on action_type
+    if action_type in ("install", "update"):
+        if not package:
+            return RedirectResponse(
+                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=No+active+package+found+for+'{quote(product)}'+in+the+Software+Catalog.+Please+create+one+first+to+enable+remote+fleet+deployment.",
+                status_code=303
+            )
+        kind = RemoteActionKind.run_executable
+        params = {
+            "label": f"{action_type.capitalize()} {package.name} {package.version}",
+            "url": package.installer_url,
+            "args": package.install_args
+        }
+        label_action = f"{action_type} of {package.name}"
+    elif action_type == "uninstall":
+        if package and package.uninstall_command:
+            kind = RemoteActionKind.custom_powershell
+            params = {
+                "script": package.uninstall_command,
+                "label": f"Uninstall {package.name}"
+            }
+            label_action = f"uninstall of {package.name}"
+        else:
+            # Dynamic registry uninstaller fallback
+            kind = RemoteActionKind.custom_powershell
+            params = {
+                "script": build_dynamic_uninstall_script(product),
+                "label": f"Dynamic Uninstall: {product}"
+            }
+            label_action = f"dynamic uninstallation of {product}"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action type")
+
+    queued = 0
+    if target_mode == "all":
+        detail = sam.product_detail(db, user.tenant_id, publisher, product)
+        if not detail or not detail.get("endpoints"):
+            return RedirectResponse(
+                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=No+endpoints+found+with+this+software+installed",
+                status_code=303
+            )
+        for e in detail["endpoints"]:
+            try:
+                ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                             agent_id=e["agent_id"], kind=kind, params=params)
+                queued += 1
+            except Exception:
+                continue
+    elif target_mode == "select":
+        raw_ids = form.getlist("agent_ids") if hasattr(form, "getlist") else []
+        ids: list[int] = []
+        for s in raw_ids:
+            try:
+                ids.append(int(s))
+            except (TypeError, ValueError):
+                pass
+        if not ids:
+            return RedirectResponse(
+                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=Pick+at+least+one+endpoint+via+checkboxes",
+                status_code=303
+            )
+        owned = {a.id for a in db.query(Agent.id)
+                                  .filter(Agent.tenant_id == user.tenant_id,
+                                          Agent.id.in_(ids)).all()}
+        for aid in ids:
+            if aid in owned:
+                try:
+                    ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                                 agent_id=aid, kind=kind, params=params)
+                    queued += 1
+                except Exception:
+                    continue
+    elif target_mode == "group":
+        from ..models import AssetGroupMember
+        group_id_str = form.get("group_id") or ""
+        try:
+            group_id = int(group_id_str)
+        except ValueError:
+            return RedirectResponse(
+                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=Invalid+asset+group+selected",
+                status_code=303
+            )
+        # Query group members
+        group_agents = (
+            db.query(AssetGroupMember.agent_id)
+            .filter(AssetGroupMember.group_id == group_id)
+            .all()
+        )
+        ids = [a.agent_id for a in group_agents]
+        if not ids:
+            return RedirectResponse(
+                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=Selected+asset+group+has+no+member+machines",
+                status_code=303
+            )
+        owned = {a.id for a in db.query(Agent.id)
+                                  .filter(Agent.tenant_id == user.tenant_id,
+                                          Agent.id.in_(ids)).all()}
+        for aid in ids:
+            if aid in owned:
+                try:
+                    ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                                 agent_id=aid, kind=kind, params=params)
+                    queued += 1
+                except Exception:
+                    continue
+    elif target_mode == "pattern":
+        pattern = hostname_pattern or "%"
+        actions = ra_svc.queue_for_fleet(
+            db, tenant_id=user.tenant_id, creator=user,
+            kind=kind, params=params,
+            hostname_pattern=pattern,
+        )
+        queued = len(actions)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid target mode")
+
+    return RedirectResponse(
+        url=f"/software/product/{pub_quoted}/{prod_quoted}?flash=Successfully+queued+{label_action}+on+{queued}+endpoint(s)",
+        status_code=303
+    )
+
+
+@router.post("/asset/{agent_id}/software/action")
+async def asset_software_action(
+    agent_id: int,
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    form = await request.form()
+    software_name = (form.get("software_name") or "").strip()
+    action_type = (form.get("action_type") or "install").strip()
+
+    if not software_name:
+        return RedirectResponse(
+            url=f"/asset/{agent_id}?error=Software+name+is+required",
+            status_code=303
+        )
+
+    # Automatically search for a matching software package in catalog
+    package = (db.query(SoftwarePackage)
+                 .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                         SoftwarePackage.is_active.is_(True),
+                         SoftwarePackage.name.ilike(software_name))
+                 .first())
+
+    # Fallback to substring matching if needed
+    if not package:
+        package = (db.query(SoftwarePackage)
+                     .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                             SoftwarePackage.is_active.is_(True),
+                             (SoftwarePackage.name.ilike(f"%{software_name}%") | 
+                              SoftwarePackage.name.ilike(software_name.split()[0] + "%")))
+                     .first())
+
+    # Build params based on action_type
+    if action_type in ("install", "update"):
+        if not package:
+            return RedirectResponse(
+                url=f"/asset/{agent_id}?error=No+active+catalog+package+found+matching+'{quote(software_name)}'.+Please+add+it+to+the+Software+Catalog+to+enable+remote+updates.",
+                status_code=303
+            )
+        kind = RemoteActionKind.run_executable
+        params = {
+            "label": f"{action_type.capitalize()} {package.name} {package.version}",
+            "url": package.installer_url,
+            "args": package.install_args
+        }
+        label_action = f"{action_type} for {package.name}"
+    elif action_type == "uninstall":
+        if package and package.uninstall_command:
+            kind = RemoteActionKind.custom_powershell
+            params = {
+                "script": package.uninstall_command,
+                "label": f"Uninstall {package.name}"
+            }
+            label_action = f"uninstall of {package.name}"
+        else:
+            # Gracefully trigger dynamic registry-scanning uninstaller!
+            kind = RemoteActionKind.custom_powershell
+            params = {
+                "script": build_dynamic_uninstall_script(software_name),
+                "label": f"Dynamic Uninstall: {software_name}"
+            }
+            label_action = f"dynamic uninstallation of {software_name}"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action type")
+
+    try:
+        action = ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
+                              agent_id=agent_id, kind=kind, params=params)
+    except ValueError as e:
+        return RedirectResponse(
+            url=f"/asset/{agent_id}?error={quote(str(e))}",
+            status_code=303
+        )
+
+    return RedirectResponse(
+        url=f"/asset/{agent_id}?flash=Successfully+queued+{label_action}+%28action+%23{action.id}%29",
+        status_code=303
     )

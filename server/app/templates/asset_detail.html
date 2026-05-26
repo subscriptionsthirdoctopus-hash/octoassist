@@ -14,6 +14,9 @@
 <div class="empty"><p>No check-in received yet from this agent.</p></div>
 {% else %}
 
+{% if flash %}<div class="alert success" style="margin-bottom:16px;">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert danger" style="margin-bottom:16px;">{{ error }}</div>{% endif %}
+
 {# ────────────────  Quick Actions panel  ──────────────── #}
 <section class="card" style="margin-bottom:18px;border-left:4px solid var(--accent,#2563eb);">
   <div class="row-between" style="margin-bottom:10px;">
@@ -26,6 +29,7 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <a href="/asset/{{ agent.id }}/processes" class="button">🔎 Process list</a>
+      <a href="/asset/{{ agent.id }}/services" class="button">⚙️ Services list</a>
     </div>
   </div>
 
@@ -230,7 +234,17 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
     </a>
   </div>
   <table class="data">
-    <thead><tr><th>Name</th><th>Version</th><th>Publisher</th><th>Installed</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Version</th>
+        <th>Publisher</th>
+        <th>Installed</th>
+        {% if current_user.role == 'admin' %}
+        <th style="width: 220px;">Actions</th>
+        {% endif %}
+      </tr>
+    </thead>
     <tbody>
       {% for s in snapshot.software %}
       <tr>
@@ -238,6 +252,24 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
         <td>{{ s.version or "—" }}</td>
         <td>{{ s.publisher or "—" }}</td>
         <td>{{ s.install_date or "—" }}</td>
+        {% if current_user.role == 'admin' %}
+        <td>
+          <div style="display: flex; gap: 6px;">
+            <form method="post" action="/asset/{{ agent.id }}/software/action" style="display:inline;" onsubmit="return confirm('Uninstall {{ s.name|e }} from this machine?');">
+              <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="software_name" value="{{ s.name }}">
+              <input type="hidden" name="action_type" value="uninstall">
+              <button type="submit" class="button" style="padding: 4px 8px; font-size: 11px; background: #dc2626; color: white; border-color: #dc2626; font-weight: 600;">Uninstall</button>
+            </form>
+            <form method="post" action="/asset/{{ agent.id }}/software/action" style="display:inline;" onsubmit="return confirm('Update {{ s.name|e }} on this machine?');">
+              <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="software_name" value="{{ s.name }}">
+              <input type="hidden" name="action_type" value="update">
+              <button type="submit" class="button" style="padding: 4px 8px; font-size: 11px; background: #2563eb; color: white; border-color: #2563eb; font-weight: 600;">Update</button>
+            </form>
+          </div>
+        </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>

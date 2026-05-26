@@ -1129,3 +1129,23 @@ class CabCommitteeMember(Base):
 
     committee_id: Mapped[int] = mapped_column(ForeignKey("cab_committees.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+
+
+class AssetGroup(Base):
+    """Asset Groups — admins curate these to target software uninstalls/updates and patch deployments in bulk"""
+    __tablename__ = "asset_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class AssetGroupMember(Base):
+    """Join table linking agents to asset groups"""
+    __tablename__ = "asset_group_members"
+
+    group_id: Mapped[int] = mapped_column(ForeignKey("asset_groups.id", ondelete="CASCADE"), primary_key=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)

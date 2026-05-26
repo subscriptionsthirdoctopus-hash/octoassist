@@ -56,9 +56,19 @@ def _fire(tenant: Tenant, to: str, subject: str, body: str) -> None:
 def _cab_emails(db: Session, tenant_id: int, exclude: set[str] | None = None) -> list[str]:
     """Return active CAB-member emails for the tenant. The exclude set prevents
     sending duplicate copies to people already on the primary recipient list."""
+    from ..models import CabCommittee, CabCommitteeMember
+    committee = db.query(CabCommittee).filter(
+        CabCommittee.tenant_id == tenant_id,
+        CabCommittee.name == "Change Management"
+    ).first()
+    
+    if not committee:
+        return []
+
     rows = (db.query(User.email)
+              .join(CabCommitteeMember, User.id == CabCommitteeMember.user_id)
               .filter(User.tenant_id == tenant_id,
-                      User.is_cab_member.is_(True),
+                      CabCommitteeMember.committee_id == committee.id,
                       User.is_active.is_(True),
                       User.email.is_not(None))
               .all())
@@ -469,3 +479,59 @@ def change_submitted(db: Session, change: Change) -> None:
             _fire(tenant, cab_email,
                   f"[OctoAssist · CAB] {change.change_number} — needs your review",
                   body + f"\n— You receive this as a CAB member.\nApprove or reject at: {base_url}/changes/{change.id}\n")
+
+
+# ---------- Software Actions Completed ----------
+
+def remote_action_completed(db: Session, action) -> None:
+    from ..models import Tenant, RemoteActionStatus
+    tenant = db.get(Tenant, action.tenant_id)
+    if tenant is None or not _mail_configured(tenant):
+        return
+
+    # Check if this action is software related
+    is_software = False
+    action_name = ""
+
+    label = action.params.get("label", "") if action.params else ""
+    kind = action.kind.value
+
+    if kind == "run_executable":
+        is_software = True
+        action_name = label or f"Installation/Update of software (URL: {action.params.get('url')})"
+    elif kind == "custom_powershell" and ("Uninstall" in label or "uninstall" in label or "install" in label or "Install" in label):
+        is_software = True
+        action_name = label or "Uninstall/Software script"
+
+    if not is_software:
+        return
+
+    status_str = action.status.value.upper()
+    agent = action.agent
+
+    subject = f"[OctoAssist] Software Action {status_str} — {action_name} on {agent.hostname}"
+
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+
+    body = (
+        f"A remote software action has completed with status: {status_str}\n\n"
+        f"Action: {action_name}\n"
+        f"Agent/Machine: {agent.hostname} (ID: {agent.id})\n"
+        f"Status: {status_str}\n"
+        f"Exit Code: {action.exit_code if action.exit_code is not None else '—'}\n"
+        f"Finished At: {action.finished_at}\n\n"
+    )
+    if action.stderr:
+        body += f"Error Output (stderr):\n{action.stderr}\n\n"
+    if action.stdout:
+        body += f"Standard Output (stdout):\n{action.stdout[:1000]}\n\n"
+
+    sent = set()
+    if action.created_by and action.created_by.email:
+        _fire(tenant, action.created_by.email, subject, body)
+        sent.add(action.created_by.email)
+
+    if tenant.notification_email and tenant.notification_email not in sent:
+        _fire(tenant, tenant.notification_email, subject, body)
+

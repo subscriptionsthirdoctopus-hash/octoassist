@@ -1,0 +1,71 @@
+name: Build and Package Windows Agents
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
+
+jobs:
+  build-agents:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # ---------- 1. Build C# Asset Agent ----------
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore C# Dependencies
+      run: dotnet restore agent/OctoAssistAgent.csproj
+
+    - name: Publish C# Agent (Self-Contained Windows Executable)
+      run: |
+        dotnet publish agent/OctoAssistAgent.csproj `
+          -c Release `
+          -r win-x64 `
+          --self-contained true `
+          /p:PublishSingleFile=true `
+          /p:PublishTrimmed=false `
+          -o build/cs-agent/
+
+    # ---------- 2. Build Python Cross-Platform Agent ----------
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Python Packaging Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    - name: Package Python Agent via PyInstaller
+      run: |
+        pyinstaller --onefile --console --name=octoassist_agent agent-py/octoassist_agent.py
+
+    # ---------- 3. Collect and Upload Build Artifacts ----------
+    - name: Rename and Move Python Executable
+      run: |
+        mkdir -p build/py-agent
+        copy-item dist/octoassist_agent.exe build/py-agent/octoassist_agent.exe
+
+    - name: Upload C# Agent Executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: OctoAssistAgent-CSharp
+        path: build/cs-agent/OctoAssistAgent.exe
+        if-no-files-found: error
+
+    - name: Upload Python Agent Executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: OctoAssistAgent-Python
+        path: build/py-agent/octoassist_agent.exe
+        if-no-files-found: error

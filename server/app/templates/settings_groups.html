@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Asset Groups — Settings — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Asset Groups</h1>
+    <p class="meta"><a href="/settings">← All settings</a> · {{ groups|length }} group{{ "" if groups|length == 1 else "s" }} configured</p>
+  </div>
+</section>
+
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+
+<section class="card" style="max-width:none;margin-bottom:16px;">
+  <h3 style="margin-top:0;">What are Asset Groups?</h3>
+  <p class="meta" style="margin:0;line-height:1.55;">
+    Asset Groups allow you to group custom sets of endpoints together. Once configured:
+    <br>• Under <strong>Software (SAM)</strong>: Select a product, choose "Asset Group" target mode, select your group, and deploy installations, updates, or silent uninstalls fleet-wide.
+    <br>• Under <strong>Patches (Bulk Deploy)</strong>: Instantly select all Windows endpoints in your curated group to deploy Windows Updates in one click.
+  </p>
+</section>
+
+<div class="card form" style="max-width:none;margin-bottom:24px;">
+  <h3 style="margin-top:0;">Create New Asset Group</h3>
+  <form method="post" action="/settings/groups/new" style="display:flex; flex-direction:column; gap:12px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    <div style="display:flex; gap:12px;">
+      <label style="flex:1;">Group Name (e.g. London Office Laptops, DB Servers)
+        <input type="text" name="name" required placeholder="e.g. London Office Laptops" style="width:100%;">
+      </label>
+    </div>
+    <div>
+      <label style="width:100%;">Description (optional)
+        <textarea name="description" placeholder="Describe the purpose of this group..." style="width:100%; height:60px; padding:6px; font-family:inherit; font-size:13px; border:1px solid var(--border); border-radius:4px;"></textarea>
+      </label>
+    </div>
+    <div style="text-align:right;">
+      <button type="submit" class="primary">Create Group</button>
+    </div>
+  </form>
+</div>
+
+{% if groups %}
+<table class="data" style="margin-top:16px;">
+  <thead>
+    <tr>
+      <th style="width:25%;">Group Name</th>
+      <th style="width:40%;">Description</th>
+      <th style="width:15%;">Endpoints</th>
+      <th style="width:20%;">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for g in groups %}
+    <tr>
+      <td><strong>{{ g.name }}</strong></td>
+      <td style="color:var(--slate); font-size:13px;">{{ g.description or "—" }}</td>
+      <td><span class="role-pill" style="background:var(--navy); color:white; font-size:11px; padding:2px 8px;">{{ group_counts[g.id] }} agent{{ "" if group_counts[g.id] == 1 else "s" }}</span></td>
+      <td>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <a href="/settings/groups/{{ g.id }}/members" class="button" style="padding:4px 8px; font-size:12px;">⚙️ Manage Members</a>
+          <form method="post" action="/settings/groups/{{ g.id }}/delete" class="inline-form" onsubmit="return confirm('Delete group \'{{ g.name|e }}\'? All endpoint associations will be removed, but assets themselves will not be modified.');">
+            <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+            <button type="submit" class="link-button" style="color:#dc2626; font-size:12px;">delete</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty" style="margin-top:16px;">
+  <h2>No Asset Groups created yet</h2>
+  <p>Create your first custom group above to enable bulk operations.</p>
+</div>
+{% endif %}
+{% endblock %}

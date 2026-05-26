@@ -36,6 +36,16 @@
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
     <div>
       <h2 style="margin:0 0 8px;">Endpoints ({{ endpoints|length }} with pending)</h2>
+      <div class="card" style="max-width:none;padding:8px 12px;margin-bottom:8px;display:flex;gap:12px;align-items:center;">
+        <label style="font-size:13px;margin:0;display:flex;align-items:center;gap:6px;">Select by Asset Group:
+          <select id="group-select" onchange="selectByGroup(this.value);" style="padding:4px 8px;font-size:13px;border-radius:4px;border:1px solid var(--border,#ccc);background:var(--surface);color:var(--text);">
+            <option value="">-- Choose Group --</option>
+            {% for g in groups %}
+            <option value="{{ g.id }}">{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
       <div class="card" style="max-width:none;padding:8px 12px;margin-bottom:8px;">
         <label style="font-size:13px;">
           <input type="checkbox" onclick="document.querySelectorAll('input[name=agent_ids]').forEach(c=>c.checked=this.checked);updateCounts();">
@@ -90,6 +100,23 @@
 </form>
 
 <script>
+  const groupMap = {{ group_map_json | safe }};
+
+  function selectByGroup(groupId) {
+    if (!groupId) {
+      document.querySelectorAll('input[name=agent_ids]').forEach(c => c.checked = false);
+      updateCounts();
+      return;
+    }
+    const memberIds = groupMap[groupId] || [];
+    const idSet = new Set(memberIds);
+    document.querySelectorAll('input[name=agent_ids]').forEach(c => {
+      const aid = parseInt(c.value);
+      c.checked = idSet.has(aid);
+    });
+    updateCounts();
+  }
+
   function updateCounts() {
     const eps = document.querySelectorAll('input[name=agent_ids]:checked').length;
     const pks = document.querySelectorAll('input[name=package_names]:checked').length;

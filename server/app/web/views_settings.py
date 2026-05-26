@@ -13,9 +13,9 @@ import secrets
 from ..auth import require_admin
 from ..database import get_db
 from ..models import (
-    Agent, CabCommittee, Category, CategoryRule, Holiday, IdentityProvider,
-    IdentityProviderKind, LocationRule, ReplyTemplate, SoftwarePackage, Tenant,
-    TicketKind, TicketPriority, User, UserRole,
+    Agent, Category, CategoryRule, IdentityProvider, IdentityProviderKind, LocationRule,
+    SoftwarePackage, Tenant, TicketKind, TicketPriority, User, UserRole, ReplyTemplate,
+    CabCommittee,
 )
 from ..services.sso import EntraConfig, EntraOidc, EntraOidcError, parse_entra_config
 
@@ -63,10 +63,11 @@ def settings_home(
                                SoftwarePackage.is_active.is_(True)).scalar()) or 0
     reply_templates_count = (db.query(_f.count(ReplyTemplate.id))
                                .filter(ReplyTemplate.tenant_id == user.tenant_id).scalar()) or 0
+    from ..models import Holiday, AssetGroup
     holidays_count = (db.query(_f.count(Holiday.id))
                         .filter(Holiday.tenant_id == user.tenant_id).scalar()) or 0
-    committee_count = (db.query(_f.count(CabCommittee.id))
-                         .filter(CabCommittee.tenant_id == user.tenant_id).scalar()) or 0
+    asset_groups_count = (db.query(_f.count(AssetGroup.id))
+                            .filter(AssetGroup.tenant_id == user.tenant_id).scalar()) or 0
     return templates.TemplateResponse(
         request=request, name="settings.html",
         context={
@@ -77,10 +78,10 @@ def settings_home(
             "location_rules_count": int(location_rules_count),
             "category_rules_count": int(category_rules_count),
             "cab_count": int(cab_count),
-            "committee_count": int(committee_count),
             "catalog_count": int(catalog_count),
             "reply_templates_count": int(reply_templates_count),
             "holidays_count": int(holidays_count),
+            "asset_groups_count": int(asset_groups_count),
             "flash": flash,
         },
     )
@@ -957,8 +958,9 @@ def settings_cab_committee_new(
     )
     db.add(committee)
     db.commit()
+    msg = f"Committee '{committee.name}' created successfully."
     return RedirectResponse(
-        url=f"/settings/cab/committees?flash={quote(f'Committee \"{committee.name}\" created successfully.')}",
+        url=f"/settings/cab/committees?flash={quote(msg)}",
         status_code=303,
     )
 
@@ -976,8 +978,9 @@ def settings_cab_committee_delete(
     name = committee.name
     db.delete(committee)
     db.commit()
+    msg = f"Committee '{name}' deleted successfully."
     return RedirectResponse(
-        url=f"/settings/cab/committees?flash={quote(f'Committee \"{name}\" deleted successfully.')}",
+        url=f"/settings/cab/committees?flash={quote(msg)}",
         status_code=303,
     )
 
@@ -1362,5 +1365,203 @@ def delete_holiday(
         url=f"/settings/holidays?flash={quote(f'Deleted holiday: {name} ({date_str})')}",
         status_code=303,
     )
+
+
+# ---------------------------- Asset Groups Settings ----------------------------
+
+@router.get("/settings/groups", response_class=HTMLResponse)
+def settings_groups(
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    from ..models import AssetGroup, AssetGroupMember
+    from sqlalchemy import func as _f
+    groups_list = (
+        db.query(AssetGroup)
+        .filter(AssetGroup.tenant_id == user.tenant_id)
+        .order_by(AssetGroup.name.asc())
+        .all()
+    )
+    # Fetch member count for each group
+    group_counts = {}
+    for g in groups_list:
+        c = (db.query(_f.count(AssetGroupMember.agent_id))
+               .filter(AssetGroupMember.group_id == g.id).scalar()) or 0
+        group_counts[g.id] = c
+        
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request,
+        name="settings_groups.html",
+        context={
+            "current_user": user,
+            "tenant": tenant,
+            "groups": groups_list,
+            "group_counts": group_counts,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@router.post("/settings/groups/new")
+def create_asset_group(
+    name: str = Form(...),
+    description: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    from ..models import AssetGroup
+    
+    name_str = name.strip()
+    desc_str = description.strip()
+    if not name_str:
+        return RedirectResponse(
+            url="/settings/groups?error=Group+name+is+required.",
+            status_code=303,
+        )
+        
+    # Check duplicate
+    existing = (
+        db.query(AssetGroup)
+        .filter(AssetGroup.tenant_id == user.tenant_id, AssetGroup.name.ilike(name_str))
+        .first()
+    )
+    if existing:
+        return RedirectResponse(
+            url=f"/settings/groups?error={quote(f'Group with name {name_str} already exists.')}",
+            status_code=303,
+        )
+        
+    new_group = AssetGroup(
+        tenant_id=user.tenant_id,
+        name=name_str,
+        description=desc_str,
+    )
+    db.add(new_group)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/groups?flash={quote(f'Created asset group: {name_str}')}",
+        status_code=303,
+    )
+
+
+@router.post("/settings/groups/{group_id}/delete")
+def delete_asset_group(
+    group_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    from ..models import AssetGroup, AssetGroupMember
+    
+    g = db.get(AssetGroup, group_id)
+    if g is None or g.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+    name = g.name
+    db.query(AssetGroupMember).filter(AssetGroupMember.group_id == group_id).delete()
+    db.delete(g)
+    db.commit()
+    return RedirectResponse(
+        url=f"/settings/groups?flash={quote(f'Deleted asset group: {name}')}",
+        status_code=303,
+    )
+
+
+@router.get("/settings/groups/{group_id}/members", response_class=HTMLResponse)
+def settings_group_members(
+    group_id: int,
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+    error: str | None = None,
+):
+    from ..models import AssetGroup, AssetGroupMember, Agent
+    g = db.get(AssetGroup, group_id)
+    if g is None or g.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+        
+    # Get all agents in tenant
+    agents_list = (
+        db.query(Agent)
+        .filter(Agent.tenant_id == user.tenant_id)
+        .order_by(Agent.hostname.asc())
+        .all()
+    )
+    
+    # Get current members
+    member_ids = {
+        m.agent_id for m in db.query(AssetGroupMember)
+        .filter(AssetGroupMember.group_id == group_id)
+        .all()
+    }
+    
+    tenant = db.query(Tenant).first()
+    return templates.TemplateResponse(
+        request=request,
+        name="settings_group_members.html",
+        context={
+            "current_user": user,
+            "tenant": tenant,
+            "group": g,
+            "agents": agents_list,
+            "member_ids": member_ids,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@router.post("/settings/groups/{group_id}/members")
+async def update_group_members(
+    group_id: int,
+    request: Request,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    from ..models import AssetGroup, AssetGroupMember, Agent
+    
+    g = db.get(AssetGroup, group_id)
+    if g is None or g.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404)
+        
+    form = await request.form()
+    raw_agent_ids = form.getlist("agent_ids") if hasattr(form, "getlist") else []
+    
+    agent_ids = []
+    for aid_str in raw_agent_ids:
+        try:
+            agent_ids.append(int(aid_str))
+        except (TypeError, ValueError):
+            pass
+            
+    # Verify tenant ownership
+    valid_agents = (
+        db.query(Agent.id)
+        .filter(Agent.tenant_id == user.tenant_id, Agent.id.in_(agent_ids))
+        .all()
+    )
+    valid_agent_ids = {a.id for a in valid_agents}
+    
+    # Update memberships
+    db.query(AssetGroupMember).filter(AssetGroupMember.group_id == group_id).delete()
+    new_members = [
+        AssetGroupMember(group_id=group_id, agent_id=aid)
+        for aid in valid_agent_ids
+    ]
+    db.add_all(new_members)
+    db.commit()
+    
+    return RedirectResponse(
+        url=f"/settings/groups/{group_id}/members?flash={quote('Group membership updated successfully.')}",
+        status_code=303,
+    )
+
 
 

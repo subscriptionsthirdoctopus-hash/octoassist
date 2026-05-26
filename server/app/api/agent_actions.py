@@ -92,4 +92,12 @@ def action_result(
                      else RemoteActionStatus.failed)
     a.finished_at = datetime.now(timezone.utc)
     db.commit()
+
+    # Trigger notifications for software remote actions
+    try:
+        from ..services.notifications import remote_action_completed
+        remote_action_completed(db, a)
+    except Exception:
+        pass
+
     return {"accepted": True, "id": a.id, "status": a.status.value}

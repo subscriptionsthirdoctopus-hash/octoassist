@@ -31,13 +31,21 @@ def _add_business_minutes(db: Session, tenant_id: int, start_time: datetime, min
     # India Standard Time (IST) zone for local date calculations
     kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
     
+    from datetime import time
+    
     step_minutes = 15
     while remaining_minutes > 0:
         current_time += timedelta(minutes=step_minutes)
-        current_date_local = current_time.astimezone(kolkata).date()
+        local_dt = current_time.astimezone(kolkata)
+        current_date_local = local_dt.date()
         
         # Weekend (Saturday=5, Sunday=6) or database holiday
         if current_date_local.weekday() >= 5 or current_date_local in holidays:
+            continue
+            
+        # Working hours are 9:00 AM (09:00) to 7:00 PM (19:00) local time (IST)
+        local_time = local_dt.time()
+        if local_time <= time(9, 0) or local_time > time(19, 0):
             continue
             
         remaining_minutes -= step_minutes

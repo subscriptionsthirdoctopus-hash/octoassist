@@ -337,6 +337,8 @@ async def sync_entra_devices_endpoint(
 def asset_detail(
     agent_id: int,
     request: Request,
+    flash: str | None = None,
+    error: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -344,12 +346,22 @@ def asset_detail(
     if agent is None or agent.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Agent not found")
     snap = _latest_snapshot(db, agent.id)
+    
+    from ..models import SoftwarePackage
+    catalog = (db.query(SoftwarePackage)
+                 .filter(SoftwarePackage.tenant_id == user.tenant_id,
+                         SoftwarePackage.is_active.is_(True))
+                 .order_by(SoftwarePackage.sort_order, SoftwarePackage.name).all())
+
     return templates.TemplateResponse(
         request=request, name="asset_detail.html",
         context=_ctx(user, db,
                      agent=agent,
                      snapshot=snap.payload if snap else None,
-                     snapshot_at=snap.snapshot_at if snap else None),
+                     snapshot_at=snap.snapshot_at if snap else None,
+                     catalog=catalog,
+                     flash=flash,
+                     error=error),
     )
 
 

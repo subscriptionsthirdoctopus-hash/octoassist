@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Services — {{ agent.hostname }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <p class="meta" style="margin:0;"><a href="/asset/{{ agent.id }}">← {{ agent.hostname }}</a></p>
+      <h1>Windows Services — {{ agent.hostname }}</h1>
+      <p class="meta">
+        {% if scan_time %}
+          Last scanned: {{ scan_time | ist }}.
+        {% else %}
+          No Windows Services scan captured yet.
+        {% endif %}
+        Click <strong>Refresh</strong> to poll the current list of services.
+      </p>
+    </div>
+    <div class="actions" style="display:flex; gap:10px;">
+      <form method="post" action="/asset/{{ agent.id }}/services/refresh" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <button type="submit" class="primary">↻ Refresh services list</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+
+{% if pending_refresh %}
+<div class="alert" style="background:#fef3c7; border-left:4px solid #d97706; color:#92400e;">
+  ⏳ A services scan/refresh is currently queued (action #{{ pending_refresh.id }}, status: <strong>{{ pending_refresh.status.value }}</strong>).
+  The agent will pick it up and return the service list within 30 seconds.
+</div>
+{% endif %}
+
+<div class="card" style="max-width:none; margin-bottom:16px; display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 16px;">
+  <input type="search" id="service-filter" placeholder="Filter by service name or display name..." oninput="filterServices(this.value);"
+         style="flex:1; max-width:400px; padding:6px 10px; font-size:13px; border:1px solid var(--border); border-radius:4px;">
+  <div class="meta" style="font-size:12.5px;">
+    Showing <strong id="visible-count">0</strong> of <strong>{{ services|length }}</strong> services.
+  </div>
+</div>
+
+{% if services %}
+<table class="data" id="services-table">
+  <thead>
+    <tr>
+      <th>Display Name</th>
+      <th>Service Name</th>
+      <th>Status</th>
+      <th>Startup Type</th>
+      {% if current_user.role == 'admin' %}
+      <th style="width:220px; text-align:right;">Control Actions</th>
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in services %}
+    <tr data-search="{{ s.Name|lower }} {{ s.DisplayName|lower }}">
+      <td><strong>{{ s.DisplayName }}</strong></td>
+      <td><code>{{ s.Name }}</code></td>
+      <td>
+        {% if s.Status == 'Running' %}
+          <span class="role-pill" style="background:#dcfce7; color:#16a34a; font-size:11px; font-weight:600; padding:2px 8px; border-radius:12px;">Running</span>
+        {% elif s.Status == 'Stopped' %}
+          <span class="role-pill" style="background:#f1f5f9; color:#64748b; font-size:11px; font-weight:600; padding:2px 8px; border-radius:12px;">Stopped</span>
+        {% else %}
+          <span class="role-pill" style="background:#fef3c7; color:#d97706; font-size:11px; font-weight:600; padding:2px 8px; border-radius:12px;">{{ s.Status }}</span>
+        {% endif %}
+      </td>
+      <td style="font-size:13px; color:var(--slate);">{{ s.StartType }}</td>
+      {% if current_user.role == 'admin' %}
+      <td style="text-align:right;">
+        <div style="display:inline-flex; gap:8px; align-items:center;">
+          {% if s.Status != 'Running' %}
+          <form method="post" action="/asset/{{ agent.id }}/services/control" class="inline-form"
+                onsubmit="return confirm('Start service \'{{ s.DisplayName|e }}\' on {{ agent.hostname|e }}?');">
+            <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="name" value="{{ s.Name }}">
+            <input type="hidden" name="action" value="start">
+            <button type="submit" class="button" style="padding:2px 8px; font-size:11px; background:#f0fdf4; border-color:#bbf7d0; color:#15803d;">▶ Start</button>
+          </form>
+          {% endif %}
+          
+          {% if s.Status == 'Running' %}
+          <form method="post" action="/asset/{{ agent.id }}/services/control" class="inline-form"
+                onsubmit="return confirm('Stop service \'{{ s.DisplayName|e }}\' on {{ agent.hostname|e }}?');">
+            <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="name" value="{{ s.Name }}">
+            <input type="hidden" name="action" value="stop">
+            <button type="submit" class="button" style="padding:2px 8px; font-size:11px; background:#fef2f2; border-color:#fecaca; color:#b91c1c;">✕ Stop</button>
+          </form>
+          {% endif %}
+          
+          <form method="post" action="/asset/{{ agent.id }}/services/control" class="inline-form"
+                onsubmit="return confirm('Restart service \'{{ s.DisplayName|e }}\' on {{ agent.hostname|e }}?');">
+            <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="name" value="{{ s.Name }}">
+            <input type="hidden" name="action" value="restart">
+            <button type="submit" class="button" style="padding:2px 8px; font-size:11px; background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8;">↻ Restart</button>
+          </form>
+        </div>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <h2>No Windows Services captured yet</h2>
+  <p>Click <strong>↻ Refresh services list</strong> above to run a remote PowerShell query as SYSTEM.</p>
+</div>
+{% endif %}
+
+<script>
+  function filterServices(q) {
+    const query = (q || '').toLowerCase().trim();
+    let visible = 0;
+    const rows = document.querySelectorAll('#services-table tbody tr');
+    rows.forEach(row => {
+      const text = row.getAttribute('data-search') || '';
+      if (!query || text.indexOf(query) >= 0) {
+        row.style.display = '';
+        visible++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    document.getElementById('visible-count').textContent = visible;
+  }
+
+  // Initialize visible count
+  document.addEventListener('DOMContentLoaded', () => {
+    filterServices('');
+  });
+</script>
+{% endblock %}
