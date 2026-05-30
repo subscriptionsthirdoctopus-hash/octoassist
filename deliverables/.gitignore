@@ -12,6 +12,7 @@ shots_cropped/
 # QA renderings — produced by `pdftoppm` for visual inspection only.
 qa_deck/
 qa_sop/
+qa_infra/
 
 # Superseded by process_shots_light.js
 crop_shots.js
