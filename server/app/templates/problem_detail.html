@@ -54,7 +54,24 @@
 
 <section class="pk-head">
   <div>
-    <h1><span class="pk-num">{{ problem.problem_number }}</span>{{ problem.title }}</h1>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 6px;">
+      <h1 style="margin:0;"><span class="pk-num">{{ problem.problem_number }}</span>{{ problem.title }}</h1>
+      
+      {% set s = problem.status.value %}
+      <span style="font-size:11px; padding:4px 10px; border-radius:999px; text-transform:uppercase; font-weight:700; border:1px solid; display:inline-block; line-height:1.2;
+        {% if s == 'investigating' %}background:#dbeafe; color:#1e40af; border-color:#93c5fd;
+        {% elif s == 'workaround_in_place' %}background:#fef3c7; color:#92400e; border-color:#fcd34d;
+        {% elif s == 'known_error' %}background:#ede9fe; color:#5b21b6; border-color:#c4b5fd;
+        {% elif s == 'resolved' %}background:#dcfce7; color:#166534; border-color:#86efac;
+        {% else %}background:#cbd5e1; color:#0f172a; border-color:#64748b;{% endif %}">
+        {{ s.replace("_", " ") }}
+      </span>
+
+      {% set p = problem.priority.value %}
+      <span class="prio prio-{{ p }}" style="font-size:11px; padding:4px 10px; border-radius:999px; text-transform:uppercase; font-weight:700; display:inline-block; border:1px solid; line-height:1.2;">
+        {{ p }}
+      </span>
+    </div>
     <p class="pk-sub">
       Opened {{ problem.created_at | ist }} by <strong>{{ problem.reporter.display_name if problem.reporter else "—" }}</strong>
     </p>

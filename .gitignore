@@ -30,7 +30,13 @@ deploy/docker/.env
 *.swp
 .DS_Store
 
-# Coding agent tool configs + scratch debug (Antigravity)
+# Coding agent tool configs (Antigravity)
 .gemini/
+
+# Local scratch / debug
 scratch/
-server/test_submit.py
+server/test_*.py
+
+# Office open-document lock files + root-level Word drafts
+~$*
+/*.docx

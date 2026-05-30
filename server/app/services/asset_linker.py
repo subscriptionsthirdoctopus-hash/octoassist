@@ -3,8 +3,8 @@ in on it, using the Windows-reported logged_in_user string from the agent's
 check-in snapshot.
 
 Windows' `Get-CimInstance Win32_ComputerSystem | Select UserName` returns
-strings like `TEMAINDIA\\arun.d` (domain-joined), `LAPTOP01\\arun` (local),
-or `arun.d@temaindia.com` on AAD-joined boxes. We normalise all three to a
+strings like `THIRDOCTOPUS\\arun.d` (domain-joined), `LAPTOP01\\arun` (local),
+or `arun.d@thirdoctopus.com` on AAD-joined boxes. We normalise all three to a
 plain username and match against the email local-part of synced users.
 
 Sync timing: this runs on every check-in (every 2h slow cycle + on demand
@@ -30,8 +30,8 @@ def _normalise_username(logged_in_user: str | None) -> str | None:
 
     Examples
     --------
-    >>> _normalise_username("TEMAINDIA\\arun.d")   -> "arun.d"
-    >>> _normalise_username("arun.d@temaindia.com") -> "arun.d"
+    >>> _normalise_username("THIRDOCTOPUS\\arun.d")   -> "arun.d"
+    >>> _normalise_username("arun.d@thirdoctopus.com") -> "arun.d"
     >>> _normalise_username("arun.d")              -> "arun.d"
     >>> _normalise_username(None)                  -> None
     >>> _normalise_username("")                    -> None

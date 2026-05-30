@@ -114,6 +114,11 @@ def create_user(
     )
     db.add(new_user)
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="create_user",
+        details=f"Created user {new_user.email} (ID: {new_user.id}) with role={new_user.role.value}"
+    )
     return RedirectResponse(
         url=f"/users?created_email={email_norm}&created_password={tmp_password}",
         status_code=303,
@@ -133,6 +138,11 @@ def deactivate_user(
         raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
     target.is_active = False
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="deactivate_user",
+        details=f"Deactivated user {target.email} (ID: {target.id})"
+    )
     return RedirectResponse(url="/users", status_code=303)
 
 
@@ -147,6 +157,11 @@ def activate_user(
         raise HTTPException(status_code=404)
     target.is_active = True
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="activate_user",
+        details=f"Activated user {target.email} (ID: {target.id})"
+    )
     return RedirectResponse(url="/users", status_code=303)
 
 
@@ -182,6 +197,7 @@ async def bulk_update_users(
                  .filter(User.id.in_(ids),
                          User.tenant_id == user.tenant_id)
                  .all())
+    from ..services.audit import log_admin_action
     n = 0
     skipped = []
     for t in targets:
@@ -189,20 +205,40 @@ async def bulk_update_users(
         if t.id == user.id and action in ("demote_requester", "deactivate"):
             continue
         if action in role_map:
+            old_role = t.role.value
             t.role = role_map[action]
             n += 1
+            log_admin_action(
+                db, tenant_id=user.tenant_id, user=user, action="bulk_update_user_role",
+                details=f"Bulk updated user {t.email} role from {old_role} to {t.role.value}"
+            )
         elif action == "deactivate":
             t.is_active = False
             n += 1
+            log_admin_action(
+                db, tenant_id=user.tenant_id, user=user, action="deactivate_user",
+                details=f"Bulk deactivated user {t.email} (ID: {t.id})"
+            )
         elif action == "activate":
             t.is_active = True
             n += 1
+            log_admin_action(
+                db, tenant_id=user.tenant_id, user=user, action="activate_user",
+                details=f"Bulk activated user {t.email} (ID: {t.id})"
+            )
         elif action == "delete":
             from ..models import Ticket
             tc = db.query(Ticket).filter((Ticket.reporter_id == t.id) | (Ticket.assignee_id == t.id)).count()
             if tc > 0:
                 skipped.append((t.email, f"{tc} ticket(s) reference them")); continue
-            db.delete(t); n += 1
+            target_email = t.email
+            target_id = t.id
+            db.delete(t)
+            n += 1
+            log_admin_action(
+                db, tenant_id=user.tenant_id, user=user, action="delete_user",
+                details=f"Deleted user {target_email} (ID: {target_id})"
+            )
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
     db.commit()
@@ -238,13 +274,22 @@ async def sync_entra_users(
         )
     cfg = parse_entra_config(idp.config or {})
     report = await entra_directory.sync_users(db, tenant_id=user.tenant_id, cfg=cfg)
+    from ..services.audit import log_admin_action
     if report.errors:
         # Surface the first error in the banner (typically permission-related)
         head = report.errors[0][:240]
+        log_admin_action(
+            db, tenant_id=user.tenant_id, user=user, action="sync_entra_users_error",
+            details=f"Entra Graph sync had errors. Summary: {report.summary()} — first: {head}"
+        )
         return RedirectResponse(
             url=f"/users?error={quote(f'Sync had errors. {report.summary()} — first: {head}')}",
             status_code=303,
         )
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="sync_entra_users",
+        details=f"Synced from Entra: {report.summary()}"
+    )
     return RedirectResponse(
         url=f"/users?flash={quote(f'Synced from Entra: {report.summary()}')}",
         status_code=303,

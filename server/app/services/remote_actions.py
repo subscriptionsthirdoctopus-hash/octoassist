@@ -29,6 +29,7 @@ def queue(
     agent_id: int,
     kind: RemoteActionKind,
     params: dict[str, Any],
+    ip_address: str | None = None,
 ) -> RemoteAction:
     """Queue a single action for one agent."""
     agent = db.get(Agent, agent_id)
@@ -45,6 +46,15 @@ def queue(
     db.add(action)
     db.commit()
     db.refresh(action)
+
+    # Audit log
+    from .audit import log_admin_action
+    details = f"Queued remote action '{kind.value}' on Agent {agent.hostname} (ID: {agent_id}). Params: {params}"
+    try:
+        log_admin_action(db, tenant_id=tenant_id, user=creator, action="trigger_remote_action", details=details, ip_address=ip_address)
+    except Exception:
+        pass
+
     return action
 
 
@@ -55,11 +65,13 @@ def queue_for_fleet(
     kind: RemoteActionKind,
     params: dict[str, Any],
     hostname_pattern: str = "%",
+    ip_address: str | None = None,
 ) -> list[RemoteAction]:
     """Queue one action per matching agent. SQL LIKE pattern (% wildcard)."""
     agents = (db.query(Agent)
                 .filter(Agent.tenant_id == tenant_id,
-                        Agent.hostname.like(hostname_pattern))
+                        Agent.hostname.like(hostname_pattern),
+                        Agent.uninstall_pending.is_(False))
                 .all())
     out: list[RemoteAction] = []
     for a in agents:
@@ -77,6 +89,15 @@ def queue_for_fleet(
     db.commit()
     for a in out:
         db.refresh(a)
+
+    # Audit log
+    from .audit import log_admin_action
+    details = f"Queued fleet-wide action '{kind.value}' on pattern '{hostname_pattern}' (matched {len(out)} agents). Params: {params}"
+    try:
+        log_admin_action(db, tenant_id=tenant_id, user=creator, action="trigger_fleet_action", details=details, ip_address=ip_address)
+    except Exception:
+        pass
+
     return out
 
 

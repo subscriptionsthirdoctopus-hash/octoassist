@@ -151,7 +151,8 @@ async def asset_action_queue(
                 purpose="wallpaper", created_by_id=user.id,
             ))
             db.commit()
-            base = str(request.base_url).rstrip("/")
+            from ..config import settings
+            base = settings.base_url.rstrip("/")
             url = f"{base}/files/{file_id}{ext}"
         if not url:
             raise HTTPException(status_code=400, detail="Upload an image or paste a URL")
@@ -167,7 +168,8 @@ async def asset_action_queue(
     try:
         action = ra_svc.queue(db,
                               tenant_id=user.tenant_id, creator=user,
-                              agent_id=agent_id, kind=kind, params=params)
+                              agent_id=agent_id, kind=kind, params=params,
+                              ip_address=request.client.host if request.client else None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -237,10 +239,10 @@ if ($mod) {
 
 
 def _build_psw_install_script(request: Request) -> str:
-    """Substitute {SERVER_URL} with the request's base URL so the bundled
-    PSWindowsUpdate.zip is fetched from the same OctoAssist server the
-    endpoint is already trusting + polling."""
-    base = str(request.base_url).rstrip("/")
+    """Substitute {SERVER_URL} with the settings.base_url so the bundled
+    PSWindowsUpdate.zip is fetched from the canonical OctoAssist server."""
+    from ..config import settings
+    base = settings.base_url.rstrip("/")
     return _PSW_INSTALL_SCRIPT_TEMPLATE.replace("{SERVER_URL}", base)
 
 
@@ -265,6 +267,7 @@ def asset_fix_psw(
             agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
             params={"script": _build_psw_install_script(request),
                     "label": "Self-repair: install PSWindowsUpdate"},
+            ip_address=request.client.host if request.client else None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -345,13 +348,15 @@ def asset_processes(
 @router.post("/asset/{agent_id}/processes/refresh")
 def asset_processes_refresh(
     agent_id: int,
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     try:
         ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
                      agent_id=agent_id, kind=RemoteActionKind.list_processes,
-                     params={})
+                     params={},
+                     ip_address=request.client.host if request.client else None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return RedirectResponse(
@@ -363,6 +368,7 @@ def asset_processes_refresh(
 @router.post("/asset/{agent_id}/processes/kill")
 def asset_processes_kill(
     agent_id: int,
+    request: Request,
     name: str = Form(""),
     pid:  str = Form(""),
     user: User = Depends(require_staff),
@@ -379,7 +385,8 @@ def asset_processes_kill(
     try:
         ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
                      agent_id=agent_id, kind=RemoteActionKind.kill_process,
-                     params=params)
+                     params=params,
+                     ip_address=request.client.host if request.client else None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return RedirectResponse(
@@ -488,6 +495,7 @@ def asset_services(
 @router.post("/asset/{agent_id}/services/refresh")
 def asset_services_refresh(
     agent_id: int,
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -495,7 +503,8 @@ def asset_services_refresh(
     try:
         ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
                      agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
-                     params={"script": script, "label": "List Windows Services"})
+                     params={"script": script, "label": "List Windows Services"},
+                     ip_address=request.client.host if request.client else None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return RedirectResponse(
@@ -507,6 +516,7 @@ def asset_services_refresh(
 @router.post("/asset/{agent_id}/services/control")
 def asset_services_control(
     agent_id: int,
+    request: Request,
     name: str = Form(...),
     action: str = Form(...),
     user: User = Depends(require_admin), # Service control is strictly admin-only!
@@ -530,7 +540,8 @@ def asset_services_control(
     try:
         ra_svc.queue(db, tenant_id=user.tenant_id, creator=user,
                      agent_id=agent_id, kind=RemoteActionKind.custom_powershell,
-                     params={"script": script, "label": "List Windows Services"})
+                     params={"script": script, "label": "List Windows Services"},
+                     ip_address=request.client.host if request.client else None)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
         

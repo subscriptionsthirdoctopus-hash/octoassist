@@ -1,19 +1,44 @@
 {% extends "base.html" %}
 {% block title %}OctoAssist — ITSM, calmly.{% endblock %}
 {% block body_class %}landing-v3{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "OctoAssist",
+  "operatingSystem": "Windows, macOS, Linux",
+  "applicationCategory": "BusinessApplication, ITServiceManagement",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Third Octopus",
+    "url": "https://octoassist.thirdoctopus.com"
+  },
+  "description": "OctoAssist is an AI-first, ITIL-aligned IT Service Management platform for mid-market enterprises. Predictive ticketing, intelligent asset tracking, and automated resolution playbooks.",
+  "featureList": "AI-Powered Predictive Ticketing, Intelligent Asset Tracking, Automated Resolution Playbooks, SLA Management, Continuous Compliance Audit, Microsoft Entra ID SSO Integration"
+}
+</script>
+{% endblock %}
+
 {% block content %}
 
 {# ───────────────────────  HERO  ──────────────────────── #}
 <section class="lh-hero">
   <div class="lh-container hero-grid">
     <div class="hero-copy">
-      <p class="lh-eyebrow">OctoAssist ITSM</p>
+      <p class="lh-eyebrow">OctoAssist AI ITSM</p>
       <h1 class="lh-h1">
-        ITSM, calmly.
+        AI-Powered ITSM, calmly.
       </h1>
       <p class="lh-lede">
-        OctoAssist is an ITIL-aligned IT Service Management platform for mid-market enterprises.
-        Tickets, assets, audit trail, and self-service in one place — without the suite-vendor cost.
+        OctoAssist is an AI-first, ITIL-aligned IT Service Management platform for mid-market enterprises.
+        Predictive ticketing, intelligent asset tracking, and automated resolution playbooks — without the legacy suite costs.
       </p>
       <div class="lh-cta-row">
         <a href="/login" class="lh-button primary big">Sign in</a>
@@ -33,7 +58,7 @@
         <span>·</span>
         <span>3 years bug-fix coverage</span>
         <span>·</span>
-        <span>Unlimited end-users</span>
+        <span>AI-powered analytics</span>
       </p>
     </div>
 
@@ -44,55 +69,59 @@
           <span class="mock-dot dot-red"></span>
           <span class="mock-dot dot-amber"></span>
           <span class="mock-dot dot-green"></span>
-          <span class="mock-url">octoassist.example.com/tickets</span>
+          <span class="mock-url">octoassist.ai/dashboard</span>
         </div>
         <div class="mock-body">
           <div class="mock-topbar">
-            <strong>OctoAssist</strong>
+            <strong>OctoAssist AI</strong>
+            <span style="color: var(--accent, #3b82f6); border-bottom: 2px solid var(--accent, #3b82f6); font-weight: 600;">AI Dashboard</span>
             <span>Tickets</span>
             <span>Assets</span>
             <span>Settings</span>
           </div>
           <div class="mock-page">
-            <div class="mock-h1">Tickets</div>
-            <div class="mock-meta">128 open · 7 SLA at risk · 214 resolved this week</div>
+            <div class="mock-h1" style="display: flex; align-items: center; justify-content: space-between;">
+              <span>AI Ticketing & Operations</span>
+              <span style="font-size: 11px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); padding: 4px 10px; border-radius: 20px; font-weight: 600;">✨ AI Autopilot Active</span>
+            </div>
+            <div class="mock-meta">128 open · 3 AI auto-resolved · 98.4% classification accuracy</div>
             <table class="mock-table">
-              <thead><tr><th>#</th><th>Title</th><th>Priority</th><th>Status</th><th>Resolve by</th></tr></thead>
+              <thead><tr><th>#</th><th>Incident Title</th><th>Priority</th><th>AI Auto-Category</th><th>AI Copilot Action</th></tr></thead>
               <tbody>
                 <tr>
                   <td>INC-00214</td>
                   <td>Outlook crashing on launch — Finance dept</td>
                   <td><span class="m-prio prio-high">high</span></td>
-                  <td><span class="m-status status-in_progress">in progress</span></td>
-                  <td>3h 12m</td>
+                  <td><code>Software Issue</code></td>
+                  <td style="color:#10b981;font-weight:600;">✨ Rollback suggested (KB-127)</td>
                 </tr>
                 <tr>
                   <td>SR-00118</td>
                   <td>New laptop request — Priya Mehra</td>
                   <td><span class="m-prio prio-medium">medium</span></td>
-                  <td><span class="m-status status-open">open</span></td>
-                  <td>2d 4h</td>
+                  <td><code>Hardware Request</code></td>
+                  <td style="color:#10b981;font-weight:600;">✨ Auto-approved (within SLA)</td>
                 </tr>
                 <tr>
                   <td>INC-00213</td>
                   <td>VPN disconnects every 30 minutes</td>
                   <td><span class="m-prio prio-critical">critical</span></td>
-                  <td><span class="m-status status-in_progress">in progress</span></td>
-                  <td class="breach">-22m</td>
+                  <td><code>Network Issue</code></td>
+                  <td style="color:#f59e0b;font-weight:600;">✨ Escalated & logs analyzed</td>
                 </tr>
                 <tr>
                   <td>SR-00117</td>
                   <td>Onboarding · Rohit Singh starts Monday</td>
                   <td><span class="m-prio prio-medium">medium</span></td>
-                  <td><span class="m-status status-on_hold">on hold</span></td>
-                  <td>4d</td>
+                  <td><code>User Account</code></td>
+                  <td style="color:#3b82f6;font-weight:600;">✨ Accounts auto-provisioned</td>
                 </tr>
                 <tr>
                   <td>INC-00212</td>
                   <td>Printer offline — Mumbai HQ floor 4</td>
                   <td><span class="m-prio prio-low">low</span></td>
-                  <td><span class="m-status status-resolved">resolved</span></td>
-                  <td>—</td>
+                  <td><code>Hardware Issue</code></td>
+                  <td style="color:#10b981;font-weight:600;">✨ Auto-closed via self-healing</td>
                 </tr>
               </tbody>
             </table>
@@ -132,11 +161,10 @@
       {# Feature 1 — Ticketing #}
       <div class="feature-row">
         <div class="feature-text">
-          <h3>Tickets that don't get lost.</h3>
+          <h3>AI-driven ticketing that works.</h3>
           <p>
-            Unified incident and service-request model with auto-classification, priority routing,
-            and a configurable SLA matrix. First-response and resolution timers run continuously,
-            with breach detection that doubles as your audit evidence.
+            Unified incident and service-request model powered by dynamic AI classification, intelligent impact assessment,
+            and automated SLA timers. AI agents draft context-aware response suggestions for technicians, reducing first-response and resolution times by up to 60%.
           </p>
           <ul class="feature-bullets">
             <li>Pre-built service catalogue: laptop request, VPN access, password reset, onboarding, offboarding</li>
@@ -187,11 +215,11 @@
       {# Feature 2 — Asset agent #}
       <div class="feature-row reverse">
         <div class="feature-text">
-          <h3>Every endpoint, automatically.</h3>
+          <h3>AI-assisted endpoint discovery.</h3>
           <p>
             Lightweight Windows agent installs via MSI / GPO and auto-inventories every endpoint:
             hardware, installed software, OS version, BIOS serial, network interfaces, logged-in user.
-            Refreshes every six hours. Unlimited installs, no per-seat fee.
+            Built-in machine learning models dynamically map software dependency trees and flag anomalous configs automatically.
           </p>
           <ul class="feature-bullets">
             <li>Hardware: CPU, RAM, disks, manufacturer, model, BIOS serial</li>
@@ -230,11 +258,9 @@
       {# Feature 3 — Audit / compliance #}
       <div class="feature-row">
         <div class="feature-text">
-          <h3>Audit-ready, not audit-rushed.</h3>
+          <h3>AI-guided continuous audit.</h3>
           <p>
-            Every action — ticket creation, assignment, status change, comment, asset modification,
-            configuration edit — is appended to an immutable event log with user, timestamp, and
-            before / after values. Map directly to ISO 27001:2022, DPDP Act 2023, and SEBI CSCRF.
+            Every system event, remote command, and configuration update is parsed and mapped directly to standard compliance frameworks like ISO 27001, DPDP Act 2023, and SEBI CSCRF. AI rules flag anomalies or unauthorized security deviations in real time.
           </p>
           <ul class="feature-bullets">
             <li>Append-only — events cannot be edited or deleted</li>
@@ -383,7 +409,7 @@
           Walk-through call, sandbox access, or a costed proposal — whichever's most useful for where you are.
         </p>
         <ul class="lh-contact-list">
-          <li><span>Email</span><a href="mailto:hello@octoassist.app?subject=OctoAssist%20-%20Walk-through%20request">hello@octoassist.app</a></li>
+          <li><span>Email</span><a href="mailto:info@thirdoctopus.com?subject=OctoAssist%20-%20Walk-through%20request">info@thirdoctopus.com</a></li>
           <li><span>HQ</span>Mumbai, India</li>
         </ul>
       </div>

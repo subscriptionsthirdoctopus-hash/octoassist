@@ -124,6 +124,7 @@ def problem_detail(
 @router.post("/problems/{problem_id}/edit")
 def problem_edit(
     problem_id: int,
+    request: Request,
     title: str = Form(...),
     description: str = Form(""),
     root_cause: str = Form(""),
@@ -146,12 +147,23 @@ def problem_edit(
         pass
     p.assignee_id = int(assignee_id) if assignee_id.strip() else None
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=p.tenant_id, user=user, action="edit_problem",
+                         details=f"Edited Problem {p.problem_number}. Priority: {p.priority.value}. Assignee ID: {p.assignee_id}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
 
 
 @router.post("/problems/{problem_id}/status")
 def problem_status(
     problem_id: int,
+    request: Request,
     new_status: str = Form(...),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
@@ -163,13 +175,25 @@ def problem_status(
         ns = ProblemStatus(new_status)
     except ValueError:
         raise HTTPException(status_code=400)
+    old = p.status.value
     problem_svc.transition_status(db, problem=p, new_status=ns)
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=p.tenant_id, user=user, action="transition_problem_status",
+                         details=f"Transitioned Problem {p.problem_number} status: {old} -> {ns.value}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
 
 
 @router.post("/problems/{problem_id}/link")
 def problem_link_ticket(
     problem_id: int,
+    request: Request,
     ticket_id: int = Form(...),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
@@ -179,6 +203,16 @@ def problem_link_ticket(
     if p is None or t is None or p.tenant_id != user.tenant_id or t.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
     problem_svc.link_ticket(db, problem=p, ticket=t, by=user)
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=p.tenant_id, user=user, action="link_problem_ticket",
+                         details=f"Linked Ticket {t.ticket_number} to Problem {p.problem_number}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
 
 
@@ -186,6 +220,7 @@ def problem_link_ticket(
 def problem_unlink(
     problem_id: int,
     ticket_id: int,
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -193,18 +228,41 @@ def problem_unlink(
     if p is None or p.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
     problem_svc.unlink_ticket(db, problem_id=problem_id, ticket_id=ticket_id)
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=p.tenant_id, user=user, action="unlink_problem_ticket",
+                         details=f"Unlinked Ticket ID: {ticket_id} from Problem {p.problem_number}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/problems/{problem_id}", status_code=303)
 
 
 @router.post("/problems/{problem_id}/delete")
 def delete_problem(
     problem_id: int,
+    request: Request,
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     p = db.get(Problem, problem_id)
     if p is None or p.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
+    p_num = p.problem_number
+    p_title = p.title
     db.delete(p)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="delete_problem",
+                         details=f"Permanently deleted Problem {p_num} ('{p_title}')",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url="/problems", status_code=303)

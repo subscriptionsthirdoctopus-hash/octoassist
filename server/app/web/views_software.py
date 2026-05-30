@@ -117,8 +117,9 @@ def software_deploy_form(
     error: str | None = None,
 ):
     agents = (db.query(Agent)
-                .filter(Agent.tenant_id == user.tenant_id)
+                .filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False))
                 .order_by(Agent.hostname).all())
+
     actions = ra_svc.recent(db, tenant_id=user.tenant_id,
                             kind=RemoteActionKind.run_executable, limit=50)
     catalog = (db.query(SoftwarePackage)
@@ -197,7 +198,8 @@ async def software_deploy_submit(
         db.commit()
 
         # Build absolute URL the agent will fetch
-        base = str(request.base_url).rstrip("/")
+        from ..config import settings
+        base = settings.base_url.rstrip("/")
         url = f"{base}/files/{file_id}{ext}"
 
     params = {
@@ -418,28 +420,62 @@ foreach ($app in $apps) {{
             Start-Process cmd.exe -ArgumentList "/c $cmd" -Wait -NoNewWindow
         }}
     }} else {{
+        # Handle unquoted paths with spaces in the registry UninstallString
         $cmd = $uninstallString.Trim()
+        $exe = ""
+        $args = ""
         if ($cmd -match '^"([^"]+)"\s*(.*)$') {{
             $exe = $Matches[1]
             $args = $Matches[2]
-        }} elseif ($cmd -match '^([^\s]+)\s*(.*)$') {{
-            $exe = $Matches[1]
-            $args = $Matches[2]
         }} else {{
-            $exe = $cmd
-            $args = ""
+            # Split by space and find the longest prefix that represents an existing file
+            $parts = $cmd -split ' '
+            $found = $false
+            for ($i = $parts.Count; $i -gt 0; $i--) {{
+                $testExe = ($parts[0..($i-1)] -join ' ').Trim()
+                $testExe = $testExe -replace '^"', '' -replace '"$', ''
+                if (Test-Path $testExe -PathType Leaf) {{
+                    $exe = $testExe
+                    $args = ($parts[$i..$parts.Count] -join ' ').Trim()
+                    $found = $true
+                    break
+                }}
+            }}
+            if (-not $found) {{
+                # Fallback to splitting on the first space
+                if ($cmd -match '^([^\s]+)\s*(.*)$') {{
+                    $exe = $Matches[1]
+                    $args = $Matches[2]
+                }} else {{
+                    $exe = $cmd
+                    $args = ""
+                }}
+            }}
         }}
 
-        if ($exe -match "unins\d{{3}}\.exe") {{
-            $args += " /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
-        }} elseif ($exe -match "setup\.exe" -or $exe -match "install\.exe") {{
-            $args += " /S /v/qn"
+        $lowerExe = $exe.ToLower()
+        $silentArgs = ""
+        
+        # Smart silent argument detection based on installer type
+        if ($lowerExe -match "unins\d{{3}}\.exe" -or $lowerExe -contains "inno") {{
+            $silentArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        }} elseif ($lowerExe -match "uninstall\.exe" -or $lowerExe -match "uninst\.exe" -or $lowerExe -contains "nsis") {{
+            $silentArgs = "/S"
+        }} elseif ($lowerExe -match "setup\.exe" -or $lowerExe -match "install\.exe") {{
+            $silentArgs = "/s /S /quiet /qn /norestart /VERYSILENT /SUPPRESSMSGBOXES"
         }} else {{
-            $args += " /S /silent /quiet /verysilent /qn"
+            $silentArgs = "/S /s /quiet /qn /norestart /VERYSILENT"
+        }}
+        
+        $finalArgs = ""
+        if ($args) {{
+            $finalArgs = "$args $silentArgs"
+        }} else {{
+            $finalArgs = $silentArgs
         }}
 
-        Write-Host "Executing EXE silent uninstall: $exe $args"
-        Start-Process $exe -ArgumentList $args -Wait -NoNewWindow -ErrorAction SilentlyContinue
+        Write-Host "Executing EXE silent uninstall: $exe $finalArgs"
+        Start-Process $exe -ArgumentList $finalArgs -Wait -NoNewWindow -ErrorAction SilentlyContinue
     }}
 }}
 Write-Host "Uninstall process completed."

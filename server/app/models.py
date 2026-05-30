@@ -70,6 +70,10 @@ class Agent(Base):
     agent_token: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, default=_new_token)
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    uninstall_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+
 
     # Phase B asset → user enrichment. Populated on every check-in by
     # services.asset_linker from the agent's reported logged_in_user. Location
@@ -218,6 +222,7 @@ class PatchWindow(Base):
         nullable=True,
     )
     hostname_pattern: Mapped[str] = mapped_column(String(120), nullable=False, default="%")
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("asset_groups.id", ondelete="SET NULL"), nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     # Phase 6 — agent-driven auto-execution.
@@ -234,6 +239,7 @@ class PatchWindow(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_by: Mapped["User | None"] = relationship()
+    group: Mapped["AssetGroup | None"] = relationship()
     targets: Mapped[list["PatchWindowTarget"]] = relationship(
         back_populates="window", cascade="all, delete-orphan",
         order_by="PatchWindowTarget.id",
@@ -1149,3 +1155,18 @@ class AssetGroupMember(Base):
     group_id: Mapped[int] = mapped_column(ForeignKey("asset_groups.id", ondelete="CASCADE"), primary_key=True)
     agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class AuditLog(Base):
+    """Structured record of administrative or helpdesk actions for security audit logs."""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action: Mapped[str] = mapped_column(String(120), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ip_address: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    user: Mapped["User | None"] = relationship()

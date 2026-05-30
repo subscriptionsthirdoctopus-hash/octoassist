@@ -88,6 +88,7 @@ def compute(db: Session, user: User) -> dict:
         crit = (db.query(func.count(PatchObservation.id))
                   .join(Agent, Agent.id == PatchObservation.agent_id)
                   .filter(Agent.tenant_id == tid,
+                          Agent.uninstall_pending.is_(False),
                           PatchObservation.resolved_at.is_(None),
                           PatchObservation.severity == PatchSeverity.critical)
                   .scalar()) or 0

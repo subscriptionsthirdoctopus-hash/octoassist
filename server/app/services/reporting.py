@@ -328,7 +328,7 @@ def asset_os_breakdown(db: Session, tenant_id: int) -> list[tuple[str, int]]:
     snaps = (db.query(AssetSnapshot.payload)
                .join(sub, (AssetSnapshot.agent_id == sub.c.agent_id) & (AssetSnapshot.snapshot_at == sub.c.latest))
                .join(Agent, Agent.id == AssetSnapshot.agent_id)
-               .filter(Agent.tenant_id == tenant_id).all())
+               .filter(Agent.tenant_id == tenant_id, Agent.uninstall_pending.is_(False)).all())
     counts: dict[str, int] = {}
     for (payload,) in snaps:
         caption = ((payload or {}).get("os") or {}).get("caption") or "Unknown"
@@ -344,7 +344,7 @@ def asset_software_top(db: Session, tenant_id: int, *, top: int = 20) -> list[tu
     snaps = (db.query(AssetSnapshot.payload)
                .join(sub, (AssetSnapshot.agent_id == sub.c.agent_id) & (AssetSnapshot.snapshot_at == sub.c.latest))
                .join(Agent, Agent.id == AssetSnapshot.agent_id)
-               .filter(Agent.tenant_id == tenant_id).all())
+               .filter(Agent.tenant_id == tenant_id, Agent.uninstall_pending.is_(False)).all())
     counts: dict[str, int] = {}
     for (payload,) in snaps:
         for sw in (payload or {}).get("software", []):
@@ -363,7 +363,7 @@ def asset_ram_distribution(db: Session, tenant_id: int) -> list[tuple[str, int]]
     snaps = (db.query(AssetSnapshot.payload)
                .join(sub, (AssetSnapshot.agent_id == sub.c.agent_id) & (AssetSnapshot.snapshot_at == sub.c.latest))
                .join(Agent, Agent.id == AssetSnapshot.agent_id)
-               .filter(Agent.tenant_id == tenant_id).all())
+               .filter(Agent.tenant_id == tenant_id, Agent.uninstall_pending.is_(False)).all())
     buckets = {"≤8 GB": 0, "16 GB": 0, "32 GB": 0, ">32 GB": 0}
     for (payload,) in snaps:
         ram = (payload or {}).get("memory", {}).get("total_gb")

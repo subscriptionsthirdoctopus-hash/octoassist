@@ -1,10 +1,7 @@
-"""Audit log helper — every write to a ticket should append an event."""
+"""Audit logging and log helper services for ticketing and admin actions."""
 from datetime import datetime, timezone
-
 from sqlalchemy.orm import Session
-
-from ..models import Ticket, TicketEvent, TicketEventKind, User
-
+from ..models import Ticket, TicketEvent, TicketEventKind, User, AuditLog
 
 def record(
     db: Session,
@@ -27,3 +24,26 @@ def record(
     )
     db.add(ev)
     return ev
+
+
+def log_admin_action(
+    db: Session, *,
+    tenant_id: int,
+    user: User,
+    action: str,
+    details: str,
+    ip_address: str | None = None
+) -> None:
+    # Capture only administrative or helpdesk staff actions (role 'admin' or 'agent')
+    if user.role.value not in ("admin", "agent"):
+        return
+    
+    log = AuditLog(
+        tenant_id=tenant_id,
+        user_id=user.id,
+        action=action,
+        details=details[:5000],
+        ip_address=ip_address,
+    )
+    db.add(log)
+    db.commit()

@@ -100,4 +100,16 @@ def action_result(
     except Exception:
         pass
 
+    # If this is the self-uninstall action and it was executed, delete the agent from database cleanly
+    is_uninstall = (
+        a.kind.value == "custom_powershell"
+        and isinstance(a.params, dict)
+        and a.params.get("label") == "Self-Uninstall OctoAssist Agent"
+    )
+    if is_uninstall:
+        db.delete(agent)
+        db.commit()
+        return {"accepted": True, "id": action_id, "status": "deleted"}
+
     return {"accepted": True, "id": a.id, "status": a.status.value}
+

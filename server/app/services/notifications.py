@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from .email import EmailError, send_email
 from ..models import (
-    Change, PatchWindow, Tenant, Ticket, TicketComment, TicketEventKind, User,
+    Change, PatchWindow, Tenant, Ticket, TicketComment, TicketEventKind, User, Problem,
 )
 
 log = logging.getLogger("octoassist.notify")
@@ -397,8 +397,6 @@ def patch_window_started(db: Session, window: PatchWindow) -> None:
     prefs = tenant.notification_settings or {}
     if not prefs.get("notify_patch_window_started", True):
         return
-    if not tenant.notification_email:
-        return
     from ..config import settings
     base_url = settings.base_url.rstrip("/")
     n_targets = len(window.targets)
@@ -411,9 +409,15 @@ def patch_window_started(db: Session, window: PatchWindow) -> None:
         f"\n{window.description or ''}\n"
         f"\nView patch deployment portal: {base_url}/patches\n"
     )
-    _fire(tenant, tenant.notification_email,
-          f"[OctoAssist] Patch window started — {window.name}",
-          body)
+    recipients = set()
+    if tenant.notification_email:
+        recipients.add(tenant.notification_email)
+    if window.created_by and window.created_by.email:
+        recipients.add(window.created_by.email)
+    for to in recipients:
+        _fire(tenant, to,
+              f"[OctoAssist] Patch window started — {window.name}",
+              body)
 
 
 def patch_window_completed(db: Session, window: PatchWindow) -> None:
@@ -422,8 +426,6 @@ def patch_window_completed(db: Session, window: PatchWindow) -> None:
         return
     prefs = tenant.notification_settings or {}
     if not prefs.get("notify_patch_window_completed", True):
-        return
-    if not tenant.notification_email:
         return
     from ..config import settings
     base_url = settings.base_url.rstrip("/")
@@ -438,9 +440,15 @@ def patch_window_completed(db: Session, window: PatchWindow) -> None:
         f"  skipped:   {counts['skipped']}\n"
         f"\nView complete results: {base_url}/patches\n"
     )
-    _fire(tenant, tenant.notification_email,
-          f"[OctoAssist] Patch window completed — {window.name}",
-          body)
+    recipients = set()
+    if tenant.notification_email:
+        recipients.add(tenant.notification_email)
+    if window.created_by and window.created_by.email:
+        recipients.add(window.created_by.email)
+    for to in recipients:
+        _fire(tenant, to,
+              f"[OctoAssist] Patch window completed — {window.name}",
+              body)
 
 
 # ---------- Changes ----------
@@ -452,6 +460,13 @@ def change_submitted(db: Session, change: Change) -> None:
     prefs = tenant.notification_settings or {}
     from ..config import settings
     base_url = settings.base_url.rstrip("/")
+    
+    disclaimer = (
+        "\n________________________________\n"
+        "This email (including any attachment(s) hereto) contains confidential or privileged information intended solely for the designated individual or entity to whom it is addressed. If you are not the intended recipient, please delete this message permanently and notify the sender immediately. Any unauthorized use, disclosure or distribution is strictly prohibited. TEMA India Pvt Ltd is not liable for the improper transmission of this message or any damage sustained as a result of it.\n"
+        "________________________________\n"
+    )
+    
     body = (
         f"Change submitted for CAB review: {change.change_number}\n"
         f"Title: {change.title}\n"
@@ -459,18 +474,19 @@ def change_submitted(db: Session, change: Change) -> None:
         f"Requester: {change.requester.display_name if change.requester else '—'}\n"
         f"\n{change.description or ''}\n"
     )
+    
     sent: set[str] = set()
     if prefs.get("notify_change_submitted_requester", True):
         if change.requester and change.requester.email:
             _fire(tenant, change.requester.email,
                   f"[OctoAssist] {change.change_number} — Change Request Submitted",
-                  body + f"\nView details: {base_url}/changes/{change.id}\n")
+                  body + f"\nView details: {base_url}/changes/{change.id}\n" + disclaimer)
             sent.add(change.requester.email)
         # Also notify tenant.notification_email if configured
         if tenant.notification_email and tenant.notification_email not in sent:
             _fire(tenant, tenant.notification_email,
                   f"[OctoAssist] {change.change_number} — under CAB review",
-                  body + f"\nView details: {base_url}/changes/{change.id}\n")
+                  body + f"\nView details: {base_url}/changes/{change.id}\n" + disclaimer)
             sent.add(tenant.notification_email)
             
     if prefs.get("notify_change_submitted_cab", True):
@@ -478,7 +494,8 @@ def change_submitted(db: Session, change: Change) -> None:
         for cab_email in _cab_emails(db, change.tenant_id, exclude=sent):
             _fire(tenant, cab_email,
                   f"[OctoAssist · CAB] {change.change_number} — needs your review",
-                  body + f"\n— You receive this as a CAB member.\nApprove or reject at: {base_url}/changes/{change.id}\n")
+                  body + f"\nView details: {base_url}/changes/{change.id}\n\n— You receive this as a CAB member.\n" + disclaimer)
+
 
 
 # ---------- Software Actions Completed ----------
@@ -534,4 +551,233 @@ def remote_action_completed(db: Session, action) -> None:
 
     if tenant.notification_email and tenant.notification_email not in sent:
         _fire(tenant, tenant.notification_email, subject, body)
+
+
+def patch_window_created(db: Session, window: PatchWindow) -> None:
+    tenant = window.tenant if hasattr(window, "tenant") else db.get(Tenant, window.tenant_id)
+    if tenant is None or not _mail_configured(tenant):
+        return
+    prefs = tenant.notification_settings or {}
+    if not prefs.get("notify_patch_window_created", True):
+        return
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+    n_targets = len(window.targets)
+    n_pkgs = len(window.selected_packages or [])
+    sch_for = "—"
+    if window.scheduled_for:
+        sch_for = window.scheduled_for.strftime("%Y-%m-%d %H:%M UTC")
+    body = (
+        f"A new patch window has been scheduled: {window.name}\n"
+        f"Scheduled for: {sch_for}\n"
+        f"Targets: {n_targets} endpoint{'s' if n_targets != 1 else ''}\n"
+        f"Approved packages: {n_pkgs}\n"
+        f"Auto-execute: {'on' if window.auto_execute else 'off (manual tracking)'}\n"
+        f"\n{window.description or ''}\n"
+        f"\nView details: {base_url}/patches/windows/{window.id}\n"
+    )
+    recipients = set()
+    if tenant.notification_email:
+        recipients.add(tenant.notification_email)
+    if window.created_by and window.created_by.email:
+        recipients.add(window.created_by.email)
+    for to in recipients:
+        _fire(tenant, to,
+              f"[OctoAssist] Patch window scheduled — {window.name}",
+              body)
+
+
+def change_status_changed(db: Session, change: Change, old_status: str, actor: User, note: str = "") -> None:
+    tenant = change.tenant if hasattr(change, "tenant") else db.get(Tenant, change.tenant_id)
+    if tenant is None or not _mail_configured(tenant):
+        return
+    prefs = tenant.notification_settings or {}
+    if not prefs.get("notify_change_status_changed", True):
+        return
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+    body = (
+        f"Change Request Status Transition: {change.change_number}\n"
+        f"Title: {change.title}\n"
+        f"Transition: {old_status} → {change.status.value}\n"
+        f"Updated by: {actor.display_name if actor else 'System'}\n"
+    )
+    if note and note.strip():
+        body += f"Note: {note.strip()}\n"
+    body += f"\nView Change details: {base_url}/changes/{change.id}\n"
+
+    recipients = set()
+    if tenant.notification_email:
+        recipients.add(tenant.notification_email)
+    if change.requester and change.requester.email:
+        recipients.add(change.requester.email)
+    if change.implementer and change.implementer.email:
+        recipients.add(change.implementer.email)
+    for to in recipients:
+        _fire(tenant, to,
+              f"[OctoAssist] Change {change.change_number} — Status is {change.status.value}",
+              body)
+
+
+def problem_created(db: Session, problem: Problem) -> None:
+    tenant = problem.tenant if hasattr(problem, "tenant") else db.get(Tenant, problem.tenant_id)
+    if tenant is None or not _mail_configured(tenant):
+        return
+    prefs = tenant.notification_settings or {}
+    if not prefs.get("notify_problem_created", True):
+        return
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+    body = (
+        f"A new Problem record has been opened: {problem.problem_number}\n"
+        f"Title: {problem.title}\n"
+        f"Priority: {problem.priority.value}\n"
+        f"Reporter: {problem.reporter.display_name if problem.reporter else '—'}\n"
+        f"Assignee: {problem.assignee.display_name if problem.assignee else 'Unassigned'}\n"
+        f"\nDescription:\n{problem.description or ''}\n"
+        f"\nView Problem details: {base_url}/problems/{problem.id}\n"
+    )
+    recipients = set()
+    if tenant.notification_email:
+        recipients.add(tenant.notification_email)
+    if problem.reporter and problem.reporter.email:
+        recipients.add(problem.reporter.email)
+    if problem.assignee and problem.assignee.email:
+        recipients.add(problem.assignee.email)
+    for to in recipients:
+        _fire(tenant, to,
+              f"[OctoAssist] New Problem Opened — {problem.problem_number}",
+              body)
+
+
+def problem_status_changed(db: Session, problem: Problem, old_status: str) -> None:
+    tenant = problem.tenant if hasattr(problem, "tenant") else db.get(Tenant, problem.tenant_id)
+    if tenant is None or not _mail_configured(tenant):
+        return
+    prefs = tenant.notification_settings or {}
+    if not prefs.get("notify_problem_status_changed", True):
+        return
+    from ..config import settings
+    base_url = settings.base_url.rstrip("/")
+    body = (
+        f"Problem Status Update: {problem.problem_number}\n"
+        f"Title: {problem.title}\n"
+        f"Transition: {old_status} → {problem.status.value}\n"
+        f"Reporter: {problem.reporter.display_name if problem.reporter else '—'}\n"
+        f"Assignee: {problem.assignee.display_name if problem.assignee else 'Unassigned'}\n"
+    )
+    if problem.root_cause:
+        body += f"\nRoot Cause:\n{problem.root_cause}\n"
+    if problem.workaround:
+        body += f"\nWorkaround:\n{problem.workaround}\n"
+    body += f"\nView Problem details: {base_url}/problems/{problem.id}\n"
+    recipients = set()
+    if tenant.notification_email:
+        recipients.add(tenant.notification_email)
+    if problem.reporter and problem.reporter.email:
+        recipients.add(problem.reporter.email)
+    if problem.assignee and problem.assignee.email:
+        recipients.add(problem.assignee.email)
+    for to in recipients:
+        _fire(tenant, to,
+              f"[OctoAssist] Problem {problem.problem_number} — Status is {problem.status.value}",
+              body)
+
+
+def send_daily_admin_audit_digest(db: Session) -> None:
+    """Consolidate the last 24 hours of admin logs daily and email a structured plaintext digest strictly to Arun at arun.d@temaindia.com."""
+    from datetime import datetime, timezone, timedelta
+    from ..models import AuditLog, Tenant
+
+    recipient = "arun.d@temaindia.com"
+
+    # Get any tenant to use for mail configuration settings
+    tenant = db.query(Tenant).first()
+    if tenant is None:
+        log.warning("No tenant found; skipping daily admin audit digest.")
+        return
+
+    if not _mail_configured(tenant):
+        log.warning("Mail is not configured for the primary tenant; daily admin audit digest skipped.")
+        return
+
+    # Calculate last 24 hours (UTC)
+    now_utc = datetime.now(timezone.utc)
+    twenty_four_hours_ago = now_utc - timedelta(hours=24)
+
+    # Query logs in last 24 hours
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.created_at >= twenty_four_hours_ago)
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
+
+    # Format report in plain text
+    IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+    subject = f"[OctoAssist] Daily Admin Audit Digest — {now_utc.astimezone(IST).strftime('%d-%b-%Y')}"
+
+    if not logs:
+        body = (
+            "============================================================\n"
+            "                OCTOASSIST ADMIN AUDIT DIGEST               \n"
+            "============================================================\n\n"
+            "No administrator actions were recorded in the last 24 hours.\n\n"
+            "============================================================\n"
+        )
+    else:
+        body = (
+            "============================================================\n"
+            "                OCTOASSIST ADMIN AUDIT DIGEST               \n"
+            "============================================================\n\n"
+            f"Digest Period (Last 24 Hours): {twenty_four_hours_ago.astimezone(IST).strftime('%d-%b-%Y %I:%M %p IST')} to {now_utc.astimezone(IST).strftime('%d-%b-%Y %I:%M %p IST')}\n"
+            f"Total Actions Captured: {len(logs)}\n\n"
+            "------------------------- DETAILS -------------------------\n\n"
+        )
+        for i, l in enumerate(logs, 1):
+            log_time = l.created_at
+            if log_time.tzinfo is None:
+                log_time = log_time.replace(tzinfo=timezone.utc)
+            time_ist = log_time.astimezone(IST).strftime("%d-%b-%Y %I:%M:%S %p IST")
+            actor = l.user.email if l.user else "System/Unknown"
+
+            body += (
+                f"{i}. [{time_ist}]\n"
+                f"   Admin/Actor: {actor}\n"
+                f"   IP Address:  {l.ip_address or '—'}\n"
+                f"   Action:      {l.action}\n"
+                f"   Details:     {l.details}\n"
+                "------------------------------------------------------------\n"
+            )
+        body += "============================================================\n"
+
+    # Send the email strictly to arun.d@temaindia.com using the helper
+    _fire(tenant, recipient, subject, body)
+
+
+def agent_uninstallation_triggered(db: Session, agent: Agent) -> None:
+    """Notify Arun strictly that an agent uninstallation has been triggered on asset deletion."""
+    tenant = agent.tenant
+    if tenant is None or not _mail_configured(tenant):
+        return
+    
+    recipient = "arun.d@temaindia.com"
+    subject = f"[OctoAssist] Endpoint Uninstallation Triggered — {agent.hostname}"
+    
+    body = (
+        "============================================================\n"
+        "               OCTOASSIST ENDPOINT UNINSTALLATION           \n"
+        "============================================================\n\n"
+        f"Endpoint Hostname:  {agent.hostname}\n"
+        f"Machine ID:         {agent.machine_id}\n"
+        f"Uninstallation:     Started Immediately (Remote Command Queued)\n"
+        f"Status:             Deleted from Dashboard (Uninstall Pending)\n\n"
+        "The background scheduled task 'OctoAssistAgent' on the endpoint\n"
+        "will unregister itself and delete all local agent directory files\n"
+        "on its next check-in (~30 seconds).\n\n"
+        "============================================================\n"
+    )
+    _fire(tenant, recipient, subject, body)
+
+
 

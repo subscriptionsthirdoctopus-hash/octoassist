@@ -248,7 +248,8 @@ def new_ticket_form(
             ]
 
     # Get workstations/assets for user selection
-    assets = db.query(Agent).filter(Agent.tenant_id == user.tenant_id).order_by(Agent.hostname).all()
+    assets = db.query(Agent).filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False)).order_by(Agent.hostname).all()
+
 
     return templates.TemplateResponse(
         request=request, name="portal_ticket_new.html",

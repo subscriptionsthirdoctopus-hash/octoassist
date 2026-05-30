@@ -27,6 +27,8 @@ log = logging.getLogger("octoassist.scheduler")
 TICK_SECONDS = 60
 _STARTED = False
 _LOCK = threading.Lock()
+_LAST_DIGEST_SENT_DATE = None
+
 
 
 def _due_windows(db) -> list[PatchWindow]:
@@ -41,6 +43,20 @@ def _due_windows(db) -> list[PatchWindow]:
 def _tick_once() -> int:
     db = SessionLocal()
     try:
+        # Trigger daily admin audit digest around 18:00 UTC daily (23:30 IST, end of the day)
+        global _LAST_DIGEST_SENT_DATE
+        now_utc = datetime.now(timezone.utc)
+        if now_utc.hour == 18 and now_utc.minute >= 0:
+            current_date_str = now_utc.strftime("%Y-%m-%d")
+            if _LAST_DIGEST_SENT_DATE != current_date_str:
+                from .notifications import send_daily_admin_audit_digest
+                try:
+                    log.info("Triggering daily admin audit digest for date %s", current_date_str)
+                    send_daily_admin_audit_digest(db)
+                    _LAST_DIGEST_SENT_DATE = current_date_str
+                except Exception as e:
+                    log.exception("Failed to send daily admin audit digest: %s", e)
+
         windows = _due_windows(db)
         promoted = 0
         for w in windows:
@@ -51,6 +67,7 @@ def _tick_once() -> int:
         return promoted
     finally:
         db.close()
+
 
 
 def _run() -> None:

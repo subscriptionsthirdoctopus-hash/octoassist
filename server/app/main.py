@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -156,6 +156,19 @@ def _startup() -> None:
     db = SessionLocal()
     try:
         db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS notification_settings JSONB DEFAULT '{}'::jsonb"))
+        db.execute(text("ALTER TABLE patch_windows ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES asset_groups(id) ON DELETE SET NULL"))
+        db.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_pending BOOLEAN NOT NULL DEFAULT FALSE"))
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                action VARCHAR(120) NOT NULL,
+                details TEXT NOT NULL DEFAULT '',
+                ip_address VARCHAR(50),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+            )
+        """))
         db.commit()
         seed.run(db)
     finally:
@@ -217,3 +230,45 @@ def contact_submit(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/robots.txt", response_class=Response)
+def robots() -> Response:
+    content = """User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /auth/
+Disallow: /api/
+Disallow: /asset/
+Disallow: /tickets/
+Disallow: /problems/
+Disallow: /changes/
+Disallow: /kb/
+Disallow: /settings/
+Disallow: /reports/
+Disallow: /portal/
+
+Sitemap: https://octoassist.thirdoctopus.com/sitemap.xml
+"""
+    return Response(content=content, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", response_class=Response)
+def sitemap() -> Response:
+    content = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://octoassist.thirdoctopus.com/</loc>
+    <lastmod>2026-05-27</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://octoassist.thirdoctopus.com/login</loc>
+    <lastmod>2026-05-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>
+"""
+    return Response(content=content, media_type="application/xml")

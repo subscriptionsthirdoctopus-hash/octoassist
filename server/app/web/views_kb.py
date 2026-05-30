@@ -116,6 +116,11 @@ def kb_create(
     db.add(art)
     db.commit()
     db.refresh(art)
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="create_kb_article",
+        details=f"Created KB Article '{art.title}' (ID: {art.id}) with status={art.status.value}, visibility={art.visibility.value}"
+    )
     return RedirectResponse(url=f"/kb/{art.id}", status_code=303)
 
 
@@ -152,6 +157,11 @@ def kb_category_create(
     )
     db.add(cat)
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="create_kb_category",
+        details=f"Created KB Category '{cat.name}' (ID: {cat.id})"
+    )
     return RedirectResponse(url="/kb/categories", status_code=303)
 
 
@@ -164,8 +174,14 @@ def kb_category_delete(
     cat = db.get(KbCategory, category_id)
     if cat is None or cat.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
+    cat_name = cat.name
     db.delete(cat)
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="delete_kb_category",
+        details=f"Deleted KB Category '{cat_name}' (ID: {category_id})"
+    )
     return RedirectResponse(url="/kb/categories", status_code=303)
 
 
@@ -235,6 +251,11 @@ def kb_edit_save(
         transition_status(db, article=art, new_status=new_status)
     art.updated_at = datetime.now(timezone.utc)
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="edit_kb_article",
+        details=f"Edited KB Article '{art.title}' (ID: {art.id}) with status={art.status.value}, visibility={art.visibility.value}"
+    )
     return RedirectResponse(url=f"/kb/{art.id}", status_code=303)
 
 
@@ -251,6 +272,11 @@ def kb_publish_toggle(
            if art.status == KbArticleStatus.published
            else KbArticleStatus.published)
     transition_status(db, article=art, new_status=new)
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="publish_kb_article",
+        details=f"Toggled publish status of KB Article '{art.title}' (ID: {art.id}) to {new.value}"
+    )
     return RedirectResponse(url=f"/kb/{art.id}", status_code=303)
 
 
@@ -263,8 +289,14 @@ def kb_delete(
     art = db.get(KbArticle, article_id)
     if art is None or art.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404)
+    art_title = art.title
     db.delete(art)
     db.commit()
+    from ..services.audit import log_admin_action
+    log_admin_action(
+        db, tenant_id=user.tenant_id, user=user, action="delete_kb_article",
+        details=f"Deleted KB Article '{art_title}' (ID: {article_id})"
+    )
     return RedirectResponse(url="/kb", status_code=303)
 
 

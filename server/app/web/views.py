@@ -67,7 +67,8 @@ def assets_index(
         return "online"
 
     needle = (q or "").strip().lower()
-    agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id).order_by(Agent.hostname).all()
+    agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False)).order_by(Agent.hostname).all()
+
     managed_hostnames = {a.hostname.strip().lower() for a in agents if a.hostname}
 
     def _matches(*fields: str | None) -> bool:
@@ -196,10 +197,8 @@ async def bulk_delete_managed(
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Delete selected OctoAssist agents (Agent + cascaded snapshots/actions).
-    The endpoint's next check-in will RE-register if the OctoAssist agent is
-    still installed — so this is effectively "forget this laptop for now".
-    For permanent removal, uninstall the agent on the laptop first.
+    """Initiate self-uninstallation of selected OctoAssist agents and soft-delete them from UI.
+    Dispatches a detached self-uninstall powershell command on check-in and emails Arun strictly.
     """
     form = await request.form()
     raw_ids = form.getlist("agent_ids")
@@ -209,14 +208,51 @@ async def bulk_delete_managed(
         raise HTTPException(status_code=400, detail="Bad agent_ids")
     if not ids:
         return RedirectResponse(url="/assets?error=No+endpoints+selected", status_code=303)
-    n = (db.query(Agent)
-           .filter(Agent.id.in_(ids), Agent.tenant_id == user.tenant_id)
-           .delete(synchronize_session=False))
+        
+    agents = db.query(Agent).filter(Agent.id.in_(ids), Agent.tenant_id == user.tenant_id).all()
+    n = 0
+    from ..models import RemoteAction, RemoteActionKind, RemoteActionStatus
+    from ..services.notifications import agent_uninstallation_triggered
+    from urllib.parse import quote
+    
+    # Detached self-uninstall PowerShell payload
+    uninstall_script = (
+        "$cmd = \"Start-Sleep -Seconds 5; Unregister-ScheduledTask -TaskName 'OctoAssistAgent' -Confirm:`$false; "
+        "Remove-Item -Recurse -Force '$env:ProgramFiles\\OctoAssist Agent', '$env:ProgramData\\OctoAssist'\"\n"
+        "Start-Process powershell.exe -ArgumentList \"-NoProfile -Command `\"$cmd`\"\" -WindowStyle Hidden"
+    )
+    
+    for agent in agents:
+        agent.uninstall_pending = True
+        
+        # Queue the uninstallation remote action
+        action = RemoteAction(
+            tenant_id=user.tenant_id,
+            agent_id=agent.id,
+            kind=RemoteActionKind.custom_powershell,
+            params={
+                "label": "Self-Uninstall OctoAssist Agent",
+                "script": uninstall_script
+            },
+            status=RemoteActionStatus.pending,
+            created_by_id=user.id
+        )
+        db.add(action)
+        
+        # Dispatch email alert to arun.d@temaindia.com
+        try:
+            agent_uninstallation_triggered(db, agent)
+        except Exception:
+            pass
+            
+        n += 1
+        
     db.commit()
     return RedirectResponse(
-        url=f"/assets?flash={quote(f'Deleted {n} managed endpoint(s). Snapshots + actions cascaded.')}",
+        url=f"/assets?flash={quote(f'Triggered uninstallation on {n} managed endpoint(s). Notification sent.')}",
         status_code=303,
     )
+
 
 
 @router.post("/assets/bulk-delete-discovered")

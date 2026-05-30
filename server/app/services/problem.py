@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models import (
     Problem, ProblemStatus, ProblemTicketLink, Ticket, TicketPriority, User,
 )
+from . import notifications
 
 
 def next_problem_number(db: Session, tenant_id: int) -> str:
@@ -35,12 +36,17 @@ def create_problem(
     db.add(p)
     db.commit()
     db.refresh(p)
+    try:
+        notifications.problem_created(db, p)
+    except Exception:
+        pass
     return p
 
 
 def transition_status(db: Session, *, problem: Problem, new_status: ProblemStatus) -> Problem:
     if problem.status == new_status:
         return problem
+    old_status = problem.status.value
     now = datetime.now(timezone.utc)
     problem.status = new_status
     if new_status == ProblemStatus.resolved and problem.resolved_at is None:
@@ -50,6 +56,10 @@ def transition_status(db: Session, *, problem: Problem, new_status: ProblemStatu
     problem.updated_at = now
     db.commit()
     db.refresh(problem)
+    try:
+        notifications.problem_status_changed(db, problem, old_status)
+    except Exception:
+        pass
     return problem
 
 

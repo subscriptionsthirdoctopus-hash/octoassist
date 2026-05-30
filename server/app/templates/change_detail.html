@@ -267,12 +267,33 @@
           
           <label style="display: block; margin-bottom: 12px;">
             <span style="display: block; font-size: 11.5px; font-weight: 600; color: var(--text-3); margin-bottom: 4px;">Comment / Justification</span>
-            <textarea name="comment" rows="2" placeholder="Explain your vote..." style="width: 100%; border-radius: 6px; border: 1px solid var(--line); padding: 8px; font-family: inherit; font-size: 13px;">{{ user_vote.comment or "" }}</textarea>
+            <textarea name="comment" id="cab_comment" rows="2" placeholder="Explain your vote..." style="width: 100%; border-radius: 6px; border: 1px solid var(--line); padding: 8px; font-family: inherit; font-size: 13px;">{{ user_vote.comment or "" }}</textarea>
           </label>
           
           <button type="submit" class="wf-btn primary" style="width: auto; padding: 8px 16px;">Submit Vote</button>
         </form>
       </div>
+      <script>
+        document.addEventListener("DOMContentLoaded", function() {
+          var appRadio = document.querySelector('input[name="approve"][value="1"]');
+          var rejRadio = document.querySelector('input[name="approve"][value="0"]');
+          var commField = document.getElementById("cab_comment");
+          if (appRadio && rejRadio && commField) {
+            function updateRequired() {
+              if (rejRadio.checked) {
+                commField.required = true;
+                commField.placeholder = "Explain your vote (required for rejection)...";
+              } else {
+                commField.required = false;
+                commField.placeholder = "Explain your vote...";
+              }
+            }
+            appRadio.addEventListener("change", updateRequired);
+            rejRadio.addEventListener("change", updateRequired);
+            updateRequired();
+          }
+        });
+      </script>
       {% endif %}
       
       {# List of votes and comments #}
@@ -345,7 +366,7 @@
         </form>
         <form method="post" action="/changes/{{ change.id }}/reject" class="wf-note">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-          <textarea name="note" placeholder="Reason for rejection"></textarea>
+          <textarea name="note" placeholder="Reason for rejection (required)" required></textarea>
           <button type="submit" class="wf-btn danger">✕ Reject</button>
         </form>
         {% else %}

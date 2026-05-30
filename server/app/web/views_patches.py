@@ -291,19 +291,24 @@ def window_new_form(
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    from ..models import AssetGroup
+    groups = db.query(AssetGroup).filter(AssetGroup.tenant_id == user.tenant_id).order_by(AssetGroup.name).all()
     return templates.TemplateResponse(
         request=request, name="patches_window_new.html",
         context=_ctx(user, db,
+                     groups=groups,
                      severities=[s.value for s in PatchSeverity]),
     )
 
 
 @router.post("/patches/windows/new")
 def window_create(
+    request: Request,
     name: str = Form(...),
     description: str = Form(""),
     severity_filter: str = Form(""),
     hostname_pattern: str = Form("%"),
+    group_id: str = Form(""),
     scheduled_for: str = Form(""),
     notes: str = Form(""),
     auto_execute: int = Form(0),
@@ -316,17 +321,36 @@ def window_create(
             sev = PatchSeverity(severity_filter.strip())
         except ValueError:
             sev = None
+
+    g_id = None
+    if group_id.strip():
+        try:
+            g_id = int(group_id.strip())
+        except ValueError:
+            g_id = None
+
     win = patches_svc.create_window(
         db,
         tenant_id=user.tenant_id, creator=user,
         name=name, description=description,
         severity_filter=sev,
         hostname_pattern=hostname_pattern or "%",
+        group_id=g_id,
         scheduled_for=_parse_dt(scheduled_for),
         notes=notes,
     )
     win.auto_execute = bool(auto_execute)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="create_patch_window",
+                         details=f"Created patch window '{win.name}' (ID: {win.id}). Auto-execute: {win.auto_execute}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/patches/windows/{win.id}/edit", status_code=303)
 
 
@@ -397,6 +421,7 @@ def window_detail(
 @router.post("/patches/windows/{window_id}/transition")
 def window_transition(
     window_id: int,
+    request: Request,
     new_status: str = Form(...),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
@@ -408,13 +433,25 @@ def window_transition(
         ns = PatchWindowStatus(new_status)
     except ValueError:
         raise HTTPException(status_code=400)
+    old = win.status.value
     patches_svc.transition_window(db, window=win, new_status=ns)
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=win.tenant_id, user=user, action="transition_patch_window",
+                         details=f"Transitioned patch window '{win.name}' (ID: {win.id}) status: {old} -> {ns.value}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/patches/windows/{window_id}", status_code=303)
 
 
 @router.post("/patches/windows/{window_id}/delete")
 def window_delete(
     window_id: int,
+    request: Request,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -443,8 +480,19 @@ def window_delete(
             url=f"/patches/windows/{window_id}?error={quote(msg)}",
             status_code=303,
         )
+    w_name = win.name
     db.delete(win)  # cascades to targets + attempts
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="delete_patch_window",
+                         details=f"Permanently deleted patch window '{w_name}' (ID: {window_id})",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url="/patches/windows?flash=Window+deleted", status_code=303)
 
 

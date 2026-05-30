@@ -18,9 +18,29 @@
 
   <h3 style="margin:8px 0 4px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Target selection</h3>
 
-  <label>Hostname pattern <span class="meta">(SQL LIKE — use % as wildcard. <code>%</code> = all endpoints; <code>LT-FIN-%</code> = Finance laptops only)</span>
-    <input type="text" name="hostname_pattern" value="%" required>
+  <label>Target Mode <span class="meta">(choose how you target endpoints for this maintenance wave)</span>
+    <select name="target_mode" id="target-mode-select" onchange="handleTargetModeChange(this.value)" required>
+      <option value="pattern" selected>Hostname Pattern</option>
+      <option value="group">Asset Group</option>
+    </select>
   </label>
+
+  <div id="hostname-pattern-row" style="margin-bottom:12px;">
+    <label>Hostname pattern <span class="meta">(SQL LIKE — use % as wildcard. <code>%</code> = all endpoints; <code>LT-FIN-%</code> = Finance laptops only)</span>
+      <input type="text" id="hostname_pattern_input" name="hostname_pattern" value="%">
+    </label>
+  </div>
+
+  <div id="asset-group-row" style="display:none; margin-bottom:12px;">
+    <label>Asset Group Target <span class="meta">(curated custom group of endpoints)</span>
+      <select name="group_id">
+        <option value="">-- Choose Asset Group --</option>
+        {% for g in groups %}
+        <option value="{{ g.id }}">{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
 
   <label>Severity filter <span class="meta">(target only patches at or above this severity; blank = all severities)</span>
     <select name="severity_filter">
@@ -53,4 +73,25 @@
     <a href="/patches/windows" class="link-button">Cancel</a>
   </div>
 </form>
+
+<script>
+function handleTargetModeChange(mode) {
+  const patternRow = document.getElementById('hostname-pattern-row');
+  const patternInput = document.getElementById('hostname_pattern_input');
+  const groupRow = document.getElementById('asset-group-row');
+
+  if (mode === 'pattern') {
+    patternRow.style.display = 'block';
+    groupRow.style.display = 'none';
+    if (!patternInput.value) {
+      patternInput.value = '%';
+    }
+  } else if (mode === 'group') {
+    patternRow.style.display = 'none';
+    groupRow.style.display = 'block';
+    // Clear pattern value or let it default so backend doesn't filter on pattern if group_id is provided
+    patternInput.value = '%';
+  }
+}
+</script>
 {% endblock %}

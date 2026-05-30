@@ -560,7 +560,37 @@ public class Worker : BackgroundService
             }
             else
             {
-                var res = await RunProcessAsync(targetPath, args, 3600000);
+                var finalArgs = args;
+                if (string.IsNullOrWhiteSpace(finalArgs))
+                {
+                    var fnameLower = fname.ToLowerInvariant();
+                    if (fnameLower.Contains("npp") || fnameLower.Contains("notepad"))
+                    {
+                        finalArgs = "/S";
+                    }
+                    else if (fnameLower.Contains("vlc"))
+                    {
+                        finalArgs = "/S";
+                    }
+                    else if (fnameLower.Contains("7z") || fnameLower.Contains("7-zip"))
+                    {
+                        finalArgs = "/S";
+                    }
+                    else if (fnameLower.Contains("zoom"))
+                    {
+                        finalArgs = "/silent";
+                    }
+                    else if (fnameLower.Contains("git"))
+                    {
+                        finalArgs = "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES";
+                    }
+                    else
+                    {
+                        // Generic fallback silent arguments for EXEs
+                        finalArgs = "/S /s /silent /quiet /qn /norestart /VERYSILENT /SUPPRESSMSGBOXES";
+                    }
+                }
+                var res = await RunProcessAsync(targetPath, finalArgs, 3600000);
                 exitCode = res.ExitCode;
                 stdout = res.Stdout;
                 stderr = res.Stderr;

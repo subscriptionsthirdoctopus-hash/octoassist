@@ -184,7 +184,7 @@ def reports_drilldown_api(
                         "Description & Rollback": f"Description: {c.description or 'No description'}\nRollback Plan: {c.rollback_plan or 'None'}",
                         "CAB Votes": [
                             {"author": v.user.full_name or v.user.email, "approve": "APPROVE" if v.approve else "REJECT", "comment": v.comment or ""}
-                            for v in c.votes
+                            for v in c.cab_votes
                         ]
                     }
                 } for c in rows
@@ -215,7 +215,11 @@ def reports_drilldown_api(
         }
         
     elif kpi == "patch_compliance":
-        rows = db.query(PatchObservation).filter(PatchObservation.tenant_id == tenant_id, PatchObservation.resolved_at.is_(None)).order_by(PatchObservation.severity.desc()).limit(100).all()
+        rows = (db.query(PatchObservation)
+                  .join(Agent, Agent.id == PatchObservation.agent_id)
+                  .filter(Agent.tenant_id == tenant_id, PatchObservation.resolved_at.is_(None))
+                  .order_by(PatchObservation.severity.desc())
+                  .limit(100).all())
         return {
             "type": "patches",
             "columns": ["Asset", "Patch Title", "Severity", "CVE ID", "Detected"],
@@ -313,7 +317,7 @@ def report_assets(
     os_breakdown = reporting.asset_os_breakdown(db, tenant_id)
     sw_top = reporting.asset_software_top(db, tenant_id, top=20)
     ram = reporting.asset_ram_distribution(db, tenant_id)
-    total = (db.query(Agent).filter(Agent.tenant_id == tenant_id).count())
+    total = (db.query(Agent).filter(Agent.tenant_id == tenant_id, Agent.uninstall_pending.is_(False)).count())
 
     return templates.TemplateResponse(
         request=request, name="report_assets.html",
@@ -404,7 +408,7 @@ def export_tickets_csv(user: User = Depends(require_staff), db: Session = Depend
 def export_assets_csv(user: User = Depends(require_staff), db: Session = Depends(get_db)):
     """Export the latest snapshot for each registered agent."""
     agents = (db.query(Agent)
-                .filter(Agent.tenant_id == user.tenant_id)
+                .filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False))
                 .order_by(Agent.hostname).all())
     def gen():
         for a in agents:
@@ -930,7 +934,7 @@ def iso_assets(
     db: Session = Depends(get_db),
 ):
     rows = (db.query(Agent)
-              .filter(Agent.tenant_id == user.tenant_id)
+              .filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False))
               .order_by(Agent.hostname).all())
     return templates.TemplateResponse(
         request=request, name="reports_run.html",
@@ -953,7 +957,7 @@ def iso_assets_csv(
 ):
     """Reuses the existing export_assets_csv logic but with ISO-friendly filename."""
     agents = (db.query(Agent)
-                .filter(Agent.tenant_id == user.tenant_id)
+                .filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False))
                 .order_by(Agent.hostname).all())
     def gen():
         for a in agents:
@@ -1807,6 +1811,7 @@ def lib_stale_assets(
     from sqlalchemy import or_
     rows = (db.query(Agent)
               .filter(Agent.tenant_id == user.tenant_id,
+                      Agent.uninstall_pending.is_(False),
                       or_(Agent.last_seen_at.is_(None),
                           Agent.last_seen_at < cutoff))
               .order_by(Agent.last_seen_at.asc().nullsfirst()).limit(500).all())
@@ -1832,6 +1837,7 @@ def lib_stale_assets_csv(
     from sqlalchemy import or_
     rows = (db.query(Agent)
               .filter(Agent.tenant_id == user.tenant_id,
+                      Agent.uninstall_pending.is_(False),
                       or_(Agent.last_seen_at.is_(None),
                           Agent.last_seen_at < cutoff))
               .order_by(Agent.last_seen_at.asc().nullsfirst()).all())

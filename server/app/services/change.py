@@ -11,8 +11,17 @@ from . import notifications
 
 
 def next_change_number(db: Session, tenant_id: int) -> str:
-    n = db.query(func.count(Change.id)).filter(Change.tenant_id == tenant_id).scalar() or 0
-    return f"CHG-{n + 1:05d}"
+    import re
+    rows = db.query(Change.change_number).filter(Change.tenant_id == tenant_id).all()
+    max_num = 0
+    for (cn,) in rows:
+        m = re.match(r"CHG-(\d+)", cn)
+        if m:
+            num = int(m.group(1))
+            if num > max_num:
+                max_num = num
+    return f"CHG-{max_num + 1:05d}"
+
 
 
 def _record(
@@ -98,11 +107,15 @@ def submit_for_review(db: Session, *, change: Change, actor: User) -> Change:
         
     db.commit()
     db.refresh(change)
-    notifications.change_submitted(db, change)
+    try:
+        notifications.change_submitted(db, change)
+    except Exception:
+        pass
     return change
 
 
 def approve(db: Session, *, change: Change, actor: User, note: str = "") -> Change:
+    old = change.status.value
     change.status = ChangeStatus.approved
     change.cab_approver_id = actor.id
     change.cab_decision_at = datetime.now(timezone.utc)
@@ -111,10 +124,22 @@ def approve(db: Session, *, change: Change, actor: User, note: str = "") -> Chan
     _record(db, change=change, actor=actor, kind=ChangeEventKind.approved, note=note or None)
     db.commit()
     db.refresh(change)
+    try:
+        notifications.change_status_changed(db, change, old, actor, note)
+    except Exception:
+        pass
+    # Audit log
+    from .audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=change.tenant_id, user=actor, action="approve_change",
+                         details=f"Approved Change Request {change.change_number} ('{change.title}'). Note: {note}")
+    except Exception:
+        pass
     return change
 
 
 def reject(db: Session, *, change: Change, actor: User, note: str = "") -> Change:
+    old = change.status.value
     change.status = ChangeStatus.rejected
     change.cab_approver_id = actor.id
     change.cab_decision_at = datetime.now(timezone.utc)
@@ -123,12 +148,24 @@ def reject(db: Session, *, change: Change, actor: User, note: str = "") -> Chang
     _record(db, change=change, actor=actor, kind=ChangeEventKind.rejected, note=note or None)
     db.commit()
     db.refresh(change)
+    try:
+        notifications.change_status_changed(db, change, old, actor, note)
+    except Exception:
+        pass
+    # Audit log
+    from .audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=change.tenant_id, user=actor, action="reject_change",
+                         details=f"Rejected Change Request {change.change_number} ('{change.title}'). Note: {note}")
+    except Exception:
+        pass
     return change
 
 
 def start_implementation(db: Session, *, change: Change, actor: User) -> Change:
     if change.status != ChangeStatus.approved:
         return change
+    old = change.status.value
     change.status = ChangeStatus.in_progress
     change.actual_start = datetime.now(timezone.utc)
     change.updated_at = change.actual_start
@@ -137,33 +174,80 @@ def start_implementation(db: Session, *, change: Change, actor: User) -> Change:
     _record(db, change=change, actor=actor, kind=ChangeEventKind.started)
     db.commit()
     db.refresh(change)
+    try:
+        notifications.change_status_changed(db, change, old, actor)
+    except Exception:
+        pass
+    # Audit log
+    from .audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=change.tenant_id, user=actor, action="start_change_implementation",
+                         details=f"Started implementation for Change Request {change.change_number} ('{change.title}').")
+    except Exception:
+        pass
     return change
 
 
 def complete(db: Session, *, change: Change, actor: User, note: str = "") -> Change:
+    old = change.status.value
     change.status = ChangeStatus.completed
     change.actual_end = datetime.now(timezone.utc)
     change.updated_at = change.actual_end
     _record(db, change=change, actor=actor, kind=ChangeEventKind.completed, note=note or None)
     db.commit()
     db.refresh(change)
+    try:
+        notifications.change_status_changed(db, change, old, actor, note)
+    except Exception:
+        pass
+    # Audit log
+    from .audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=change.tenant_id, user=actor, action="complete_change",
+                         details=f"Completed Change Request {change.change_number} ('{change.title}'). Note: {note}")
+    except Exception:
+        pass
     return change
 
 
 def fail(db: Session, *, change: Change, actor: User, note: str = "") -> Change:
+    old = change.status.value
     change.status = ChangeStatus.failed
     change.actual_end = datetime.now(timezone.utc)
     change.updated_at = change.actual_end
     _record(db, change=change, actor=actor, kind=ChangeEventKind.failed, note=note or None)
     db.commit()
     db.refresh(change)
+    try:
+        notifications.change_status_changed(db, change, old, actor, note)
+    except Exception:
+        pass
+    # Audit log
+    from .audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=change.tenant_id, user=actor, action="fail_change",
+                         details=f"Marked Change Request {change.change_number} ('{change.title}') as FAILED. Note: {note}")
+    except Exception:
+        pass
     return change
 
 
 def cancel(db: Session, *, change: Change, actor: User, note: str = "") -> Change:
+    old = change.status.value
     change.status = ChangeStatus.cancelled
     change.updated_at = datetime.now(timezone.utc)
     _record(db, change=change, actor=actor, kind=ChangeEventKind.cancelled, note=note or None)
     db.commit()
     db.refresh(change)
+    try:
+        notifications.change_status_changed(db, change, old, actor, note)
+    except Exception:
+        pass
+    # Audit log
+    from .audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=change.tenant_id, user=actor, action="cancel_change",
+                         details=f"Cancelled Change Request {change.change_number} ('{change.title}'). Note: {note}")
+    except Exception:
+        pass
     return change

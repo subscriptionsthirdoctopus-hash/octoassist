@@ -18,6 +18,7 @@ from ..models import (
     PatchWindowTarget,
     PatchWindowTargetStatus,
     User,
+    AssetGroupMember,
 )
 
 
@@ -354,6 +355,7 @@ def create_window(
     description: str = "",
     severity_filter: PatchSeverity | None = None,
     hostname_pattern: str = "%",
+    group_id: int | None = None,
     scheduled_for: datetime | None = None,
     notes: str = "",
 ) -> PatchWindow:
@@ -363,6 +365,7 @@ def create_window(
         description=description.strip(),
         severity_filter=severity_filter,
         hostname_pattern=(hostname_pattern.strip() or "%")[:120],
+        group_id=group_id,
         scheduled_for=scheduled_for,
         notes=notes.strip(),
         created_by_id=creator.id,
@@ -373,20 +376,38 @@ def create_window(
     _materialise_targets(db, win)
     db.commit()
     db.refresh(win)
+
+    # Phase 8: notify when patch window is created/scheduled
+    from . import notifications
+    try:
+        notifications.patch_window_created(db, win)
+    except Exception:
+        pass
+
     return win
 
 
 def _materialise_targets(db: Session, win: PatchWindow) -> int:
     """Snapshot the matching endpoints + missing-patch counts at planning time."""
-    agents = (db.query(Agent)
-                .filter(Agent.tenant_id == win.tenant_id,
-                        Agent.hostname.like(win.hostname_pattern))
-                .all())
+    if win.group_id is not None:
+        agents = (db.query(Agent)
+                    .join(AssetGroupMember, AssetGroupMember.agent_id == Agent.id)
+                    .filter(Agent.tenant_id == win.tenant_id,
+                            AssetGroupMember.group_id == win.group_id,
+                            Agent.uninstall_pending.is_(False))
+                    .all())
+    else:
+        agents = (db.query(Agent)
+                    .filter(Agent.tenant_id == win.tenant_id,
+                            Agent.hostname.like(win.hostname_pattern),
+                            Agent.uninstall_pending.is_(False))
+                    .all())
 
     counts: dict[int, int] = {}
     q = (db.query(PatchObservation.agent_id, func.count(PatchObservation.id))
            .join(Agent, Agent.id == PatchObservation.agent_id)
            .filter(Agent.tenant_id == win.tenant_id,
+                   Agent.uninstall_pending.is_(False),
                    PatchObservation.resolved_at.is_(None)))
     if win.severity_filter is not None:
         q = q.filter(PatchObservation.severity == win.severity_filter)

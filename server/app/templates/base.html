@@ -4,6 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}OctoAssist{% endblock %}</title>
+
+  <!-- SEO and Search Engine Discovery -->
+  {% if tenant and tenant.notification_settings %}
+    {% if tenant.notification_settings.get('google_site_verification') %}
+      <meta name="google-site-verification" content="{{ tenant.notification_settings.get('google_site_verification') }}">
+    {% endif %}
+    {% if tenant.notification_settings.get('seo_description') %}
+      <meta name="description" content="{{ tenant.notification_settings.get('seo_description') }}">
+    {% else %}
+      <meta name="description" content="OctoAssist is an AI-first, ITIL-aligned IT Service Management platform for mid-market enterprises. Built by Third Octopus.">
+    {% endif %}
+    {% if tenant.notification_settings.get('seo_keywords') %}
+      <meta name="keywords" content="{{ tenant.notification_settings.get('seo_keywords') }}">
+    {% else %}
+      <meta name="keywords" content="ITSM, RMM, IT service management, AI ITSM, Third Octopus, OctoAssist, ITIL, asset tracking, remote management">
+    {% endif %}
+  {% else %}
+    <meta name="description" content="OctoAssist is an AI-first, ITIL-aligned IT Service Management platform for mid-market enterprises. Built by Third Octopus.">
+    <meta name="keywords" content="ITSM, RMM, IT service management, AI ITSM, Third Octopus, OctoAssist, ITIL, asset tracking, remote management">
+  {% endif %}
+  <meta name="author" content="Third Octopus">
+
+  <!-- OpenGraph Meta Tags for Google Discover and Social Sharing Cards -->
+  <meta property="og:title" content="{% block og_title %}OctoAssist — AI-Powered ITSM, calmly.{% endblock %}">
+  {% if tenant and tenant.notification_settings and tenant.notification_settings.get('seo_description') %}
+    <meta property="og:description" content="{{ tenant.notification_settings.get('seo_description') }}">
+  {% else %}
+    <meta property="og:description" content="OctoAssist is an AI-first, ITIL-aligned IT Service Management platform for mid-market enterprises. Predictive ticketing, asset tracking, and automated playbooks by Third Octopus.">
+  {% endif %}
+  <meta property="og:url" content="{{ request.base_url|string|trim('/') if request else 'https://octoassist.thirdoctopus.com/' }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Third Octopus OctoAssist">
+
+  {% block extra_head %}{% endblock %}
+
   <!-- Theme applied BEFORE first paint to avoid flash. Reads localStorage,
        sets data-theme="light" on <html> if user previously picked it. Dark
        is the default — no attribute set means dark. -->
@@ -19,7 +54,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/static/styles.css?v=1.0.2">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2300f2fe'/%3E%3Cstop offset='50%25' stop-color='%23f35626'/%3E%3Cstop offset='100%25' stop-color='%23fe9b00'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='9' fill='none' stroke='url(%23g)' stroke-width='3.5'/%3E%3Ctext x='12' y='15.5' font-family='system-ui, -apple-system, sans-serif' font-weight='900' font-size='10.5' fill='%23ffffff' text-anchor='middle' letter-spacing='-0.5'%3ETO%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
@@ -145,8 +180,10 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <span>&copy; 2026 OctoAssist ITSM &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes</span>
+    <span>&copy; 2026 OctoAssist ITSM &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes &middot; Built by <a href="https://thirdoctopus.com" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">Third Octopus</a></span>
+    {% if current_user %}
     <span class="meta" style="font-size:11px;">v0.2 &middot; tenant: {{ tenant.name if tenant else "—" }}</span>
+    {% endif %}
   </footer>
 </body>
 </html>

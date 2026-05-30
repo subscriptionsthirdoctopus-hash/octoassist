@@ -42,6 +42,40 @@
   </dl>
 </div>
 
+<!-- Google Search Console & Search Engine Optimization (SEO) Settings -->
+<div class="card" style="margin-top:16px; border-left:4px solid var(--accent, #2563eb);">
+  <h3 style="margin:0 0 10px; display:flex; align-items:center; gap:8px;">
+    <span style="font-size:20px;">🔍</span> Search Engine Discovery &amp; Google Indexing
+  </h3>
+  <p class="meta" style="margin:0 0 16px;">
+    Configure metadata, descriptions, and site verification codes to ensure OctoAssist is discoverable, optimized, and beautifully indexed on Google Search pages.
+  </p>
+  <form method="post" action="/settings/tenant/seo" style="display:flex; flex-direction:column; gap:16px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+    
+    <label style="font-weight:700; display:flex; flex-direction:column; gap:6px;">
+      Google Search Console Verification Key
+      <input type="text" name="google_site_verification" value="{{ tenant.notification_settings.get('google_site_verification', '') if tenant.notification_settings else '' }}" placeholder="e.g. dGhpcyBpcyBhIHZlcmlmaWNhdGlvbiBrZXk" style="font-family:monospace; font-size:13px;">
+      <span class="meta" style="font-weight:normal; font-size:11.5px;">Allows ownership verification on Google Search Console. Places a <code>&lt;meta name="google-site-verification" content="..."&gt;</code> in the landing header.</span>
+    </label>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+      <label style="font-weight:700; display:flex; flex-direction:column; gap:6px;">
+        SEO Description
+        <textarea name="seo_description" rows="3" placeholder="Compelling product synopsis for search engine result snippet." style="font-size:13px; line-height:1.4;">{{ tenant.notification_settings.get('seo_description', '') if tenant.notification_settings else '' }}</textarea>
+      </label>
+      <label style="font-weight:700; display:flex; flex-direction:column; gap:6px;">
+        SEO Keywords
+        <textarea name="seo_keywords" rows="3" placeholder="Comma-separated keywords (e.g. ITSM, RMM, AI Helpdesk, Third Octopus)." style="font-size:13px; line-height:1.4;">{{ tenant.notification_settings.get('seo_keywords', '') if tenant.notification_settings else '' }}</textarea>
+      </label>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="submit" class="primary">Save SEO Settings</button>
+    </div>
+  </form>
+</div>
+
 <!-- TEMA India Licensing Overview -->
 <div class="card" style="margin-top:16px;border-left:4px solid var(--green,#10b981);">
   <h3 style="margin:0 0 14px;display:flex;align-items:center;gap:8px;">

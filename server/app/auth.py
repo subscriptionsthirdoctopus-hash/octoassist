@@ -23,7 +23,16 @@ def authenticate_agent(
     agent = db.query(Agent).filter(Agent.agent_token == token).first()
     if agent is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent token")
+    
+    # Update last_seen_at if it's not set or older than 60 seconds (throttled for DB performance)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    if not agent.last_seen_at or (now - agent.last_seen_at).total_seconds() > 60:
+        agent.last_seen_at = now
+        db.commit()
+
     return agent
+
 
 
 # ---------------------------------------------------------------------------

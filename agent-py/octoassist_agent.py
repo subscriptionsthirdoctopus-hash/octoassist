@@ -1681,8 +1681,30 @@ def _action_run_executable(params: dict, cfg: dict) -> dict:
         # msiexec must run msi files
         cmd = ["msiexec", "/i", str(target)] + (args.split() if args else ["/quiet", "/norestart"])
     else:
-        # Treat as a generic installer / exe
-        cmd = [str(target)] + (args.split() if args else [])
+        # Treat as a generic installer / exe.
+        # If args are empty, try to automatically detect and append silent installation flags.
+        run_args = args.split() if args else []
+        if not run_args:
+            fname_lower = fname.lower()
+            if "npp" in fname_lower or "notepad" in fname_lower:
+                # Notepad++ (NSIS installer) - requires case-sensitive /S
+                run_args = ["/S"]
+            elif "vlc" in fname_lower:
+                # VLC Media Player (NSIS installer) - requires case-sensitive /S
+                run_args = ["/S"]
+            elif "7z" in fname_lower or "7-zip" in fname_lower:
+                # 7-Zip (EXE installer) - requires /S
+                run_args = ["/S"]
+            elif "zoom" in fname_lower:
+                # Zoom (EXE installer) - requires /silent
+                run_args = ["/silent"]
+            elif "git" in fname_lower:
+                # Git for Windows (Inno Setup) - /VERYSILENT /NORESTART /SUPPRESSMSGBOXES
+                run_args = ["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"]
+            else:
+                # Generic fallback for other EXEs - try common silent flags
+                run_args = ["/S", "/s", "/silent", "/quiet", "/qn", "/norestart", "/VERYSILENT", "/SUPPRESSMSGBOXES"]
+        cmd = [str(target)] + run_args
 
     proc = _run(cmd, capture_output=True, text=True, timeout=3600)
 

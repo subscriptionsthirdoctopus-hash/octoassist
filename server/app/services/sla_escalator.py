@@ -84,7 +84,7 @@ def _tick_once() -> int:
                     note=note_str
                 )
                 
-                # 4. Fire email alert via Helpdesk@temaindia.com using the decrypted SMTP credentials
+                # 4. Fire email alert via helpdesk@thirdoctopus.com using the decrypted SMTP credentials
                 tenant = db.get(Tenant, t.tenant_id)
                 if tenant and tenant.smtp_host and tenant.smtp_from:
                     # Let's find admins to notify

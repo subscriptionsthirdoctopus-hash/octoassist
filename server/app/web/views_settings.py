@@ -443,6 +443,7 @@ def delete_idp(
 
 @router.post("/settings/tenant/regenerate-enrolment-key")
 def regenerate_enrolment_key(
+    request: Request,
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -457,10 +458,21 @@ def regenerate_enrolment_key(
         raise HTTPException(status_code=404)
     tenant.enrolment_key = secrets.token_urlsafe(32)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="regenerate_enrolment_key",
+                         details="Regenerated tenant enrollment key",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(
         url="/settings?flash=New+enrolment+key+generated.+Existing+agents+keep+working;+only+new+MSI+installs+need+the+new+key.",
         status_code=303,
     )
+
 
 
 # Allowed domains for the notification email — Microsoft accounts only,
@@ -489,6 +501,7 @@ def _is_microsoft_email(email: str) -> bool:
 
 @router.post("/settings/tenant/smtp")
 def save_smtp_config(
+    request: Request,
     smtp_host: str = Form(""),
     smtp_port: str = Form("587"),
     smtp_username: str = Form(""),
@@ -513,11 +526,23 @@ def save_smtp_config(
     tenant.smtp_from = (smtp_from or "").strip() or None
     tenant.smtp_use_tls = bool(smtp_use_tls)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="save_smtp_config",
+                         details=f"Updated SMTP settings (Host: {tenant.smtp_host}, Port: {tenant.smtp_port}, From: {tenant.smtp_from})",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url="/settings?flash=SMTP+settings+saved.", status_code=303)
+
 
 
 @router.post("/settings/tenant/mail-provider")
 def set_mail_provider(
+    request: Request,
     mail_provider: str = Form("smtp"),
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -529,14 +554,26 @@ def set_mail_provider(
         raise HTTPException(status_code=400, detail="Invalid provider")
     tenant.mail_provider = mail_provider
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="set_mail_provider",
+                         details=f"Set mail provider to: {mail_provider}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(
         url=f"/settings?flash=Mail+provider+set+to+{mail_provider}.",
         status_code=303,
     )
 
 
+
 @router.post("/settings/tenant/graph")
 def save_graph_config(
+    request: Request,
     graph_tenant_id: str = Form(""),
     graph_client_id: str = Form(""),
     graph_client_secret: str = Form(""),
@@ -554,7 +591,18 @@ def save_graph_config(
         tenant.graph_client_secret = encrypt(graph_client_secret)
     tenant.graph_from = (graph_from or "").strip() or None
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="save_graph_config",
+                         details=f"Updated Microsoft Graph config (Tenant ID: {tenant.graph_tenant_id}, Client ID: {tenant.graph_client_id}, From: {tenant.graph_from})",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url="/settings?flash=Graph+settings+saved.", status_code=303)
+
 
 
 @router.post("/settings/tenant/smtp/test")
@@ -1246,6 +1294,7 @@ def delete_reply_template(
 
 @router.post("/settings/tenant/rename")
 def rename_tenant(
+    request: Request,
     name: str = Form(""),
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -1257,9 +1306,55 @@ def rename_tenant(
     name_str = name.strip()
     if not name_str:
         return RedirectResponse(url="/settings/tenant?error=Tenant+name+cannot+be+empty.", status_code=303)
+    old_name = tenant.name
     tenant.name = name_str
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="rename_tenant",
+                         details=f"Renamed tenant from '{old_name}' to '{name_str}'",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(url=f"/settings/tenant?flash={quote('Organisation name updated successfully.')}", status_code=303)
+
+
+@router.post("/settings/tenant/seo")
+def update_tenant_seo(
+    request: Request,
+    google_site_verification: str = Form(""),
+    seo_description: str = Form(""),
+    seo_keywords: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from urllib.parse import quote
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404)
+        
+    settings = tenant.notification_settings or {}
+    settings["google_site_verification"] = google_site_verification.strip()
+    settings["seo_description"] = seo_description.strip()
+    settings["seo_keywords"] = seo_keywords.strip()
+    
+    tenant.notification_settings = settings
+    db.commit()
+    
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="update_tenant_seo",
+                         details="Updated SEO and Google Site Verification settings",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+        
+    return RedirectResponse(url=f"/settings/tenant?flash={quote('SEO and Google Search Console settings updated successfully.')}", status_code=303)
+
 
 
 # ---------------------------- Holidays Settings ----------------------------
@@ -1409,6 +1504,7 @@ def settings_groups(
 
 @router.post("/settings/groups/new")
 def create_asset_group(
+    request: Request,
     name: str = Form(...),
     description: str = Form(""),
     user: User = Depends(require_admin),
@@ -1444,15 +1540,27 @@ def create_asset_group(
     )
     db.add(new_group)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="create_asset_group",
+                         details=f"Created asset group '{name_str}' (ID: {new_group.id})",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(
         url=f"/settings/groups?flash={quote(f'Created asset group: {name_str}')}",
         status_code=303,
     )
 
 
+
 @router.post("/settings/groups/{group_id}/delete")
 def delete_asset_group(
     group_id: int,
+    request: Request,
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -1466,10 +1574,21 @@ def delete_asset_group(
     db.query(AssetGroupMember).filter(AssetGroupMember.group_id == group_id).delete()
     db.delete(g)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="delete_asset_group",
+                         details=f"Deleted asset group '{name}' (ID: {group_id})",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
+
     return RedirectResponse(
         url=f"/settings/groups?flash={quote(f'Deleted asset group: {name}')}",
         status_code=303,
     )
+
 
 
 @router.get("/settings/groups/{group_id}/members", response_class=HTMLResponse)
@@ -1489,10 +1608,11 @@ def settings_group_members(
     # Get all agents in tenant
     agents_list = (
         db.query(Agent)
-        .filter(Agent.tenant_id == user.tenant_id)
+        .filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False))
         .order_by(Agent.hostname.asc())
         .all()
     )
+
     
     # Get current members
     member_ids = {
@@ -1557,11 +1677,21 @@ async def update_group_members(
     ]
     db.add_all(new_members)
     db.commit()
+
+    # Audit log
+    from ..services.audit import log_admin_action
+    try:
+        log_admin_action(db, tenant_id=user.tenant_id, user=user, action="update_group_members",
+                         details=f"Updated memberships for asset group '{g.name}' (ID: {group_id}). Members agent count: {len(valid_agent_ids)}",
+                         ip_address=request.client.host if request.client else None)
+    except Exception:
+        pass
     
     return RedirectResponse(
         url=f"/settings/groups/{group_id}/members?flash={quote('Group membership updated successfully.')}",
         status_code=303,
     )
+
 
 
 

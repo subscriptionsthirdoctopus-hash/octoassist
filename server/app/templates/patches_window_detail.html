@@ -81,7 +81,11 @@
   <div class="card">
     <h3>Filter</h3>
     <dl>
+      {% if window.group_id and window.group %}
+      <dt>Asset Group</dt><dd><strong>{{ window.group.name }}</strong></dd>
+      {% else %}
       <dt>Hostname pattern</dt><dd><code>{{ window.hostname_pattern }}</code></dd>
+      {% endif %}
       <dt>Severity filter</dt><dd>{{ window.severity_filter.value if window.severity_filter else "all severities" }}</dd>
       <dt>Targets matched</dt><dd>{{ progress.total }} endpoint{{ "" if progress.total == 1 else "s" }}</dd>
     </dl>
