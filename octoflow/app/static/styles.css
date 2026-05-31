@@ -504,6 +504,37 @@ button.small { padding: 4px 10px; font-size: 12px; }
 [data-theme="dark"] .filter-field select { color: var(--text); }
 [data-theme="dark"] .filter-summary strong { color: var(--text); }
 
+/* ─── Line chart (SVG) ─── */
+.line-chart {
+  width: 100%; height: auto; max-height: 320px;
+  display: block;
+  font-family: inherit;
+}
+.lc-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
+.lc-axis { stroke: var(--slate); stroke-width: 1; }
+.lc-y-label, .lc-x-label {
+  fill: var(--slate); font-size: 11px; font-weight: 600;
+  font-family: "SF Mono", "Consolas", monospace;
+}
+[data-theme="dark"] .lc-y-label, [data-theme="dark"] .lc-x-label { fill: var(--muted); }
+[data-theme="dark"] .lc-grid { stroke: var(--line); }
+
+.lc-line {
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.lc-line-billable    { stroke: #1E88E5; }   /* blue */
+.lc-line-nonbillable { stroke: #FF8F00; }   /* orange */
+.lc-dot-billable     { fill: #1E88E5; stroke: var(--white); stroke-width: 1.5; }
+.lc-dot-nonbillable  { fill: #FF8F00; stroke: var(--white); stroke-width: 1.5; }
+.lc-dot:hover        { r: 5.5; cursor: crosshair; }
+
+/* Legend swatches for line chart variants */
+.legend-swatch.swatch-billable-line    { background: #1E88E5; }
+.legend-swatch.swatch-nonbillable-line { background: #FF8F00; }
+
 /* ─── Chart cards (reports/billable-split + future reports) ─── */
 .chart-card { padding: 22px 24px; }
 .chart-card-head {

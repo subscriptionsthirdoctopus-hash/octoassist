@@ -225,10 +225,14 @@ def billable_split(request: Request, days: int = 30, format: str = "html",
         return _csv_response("billable_split.csv", rows, cols)
     ctx = _filter_context(db, user.tenant_id, d, sd, ed, user_id=uid,
                           show_user=True, base_path="/reports/billable-split")
+    bucket_mode, ts_points = rep.billable_timeseries(
+        db, user.tenant_id, d, start=sd, end=ed, user_id=uid)
     return templates.TemplateResponse(
         request=request, name="report_billable_split.html",
         context={"current_user": user, "rows": rows, "days": d,
-                 "valid_days": VALID_DAYS, **ctx},
+                 "valid_days": VALID_DAYS,
+                 "ts_points": ts_points, "ts_bucket": bucket_mode,
+                 **ctx},
     )
 
 

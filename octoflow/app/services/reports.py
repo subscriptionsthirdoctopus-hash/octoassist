@@ -248,6 +248,87 @@ def billable_split(db: Session, tenant_id: int, days: int = 30,
 
 # ─── TS-137 · Basic utilisation ──────────────────────────────────────
 
+# ─── Billable vs non-billable time series ───────────────────────────
+
+def _bucket_key(d: date, mode: str) -> date:
+    if mode == "day":   return d
+    if mode == "week":  return d - timedelta(days=d.weekday())
+    if mode == "month": return d.replace(day=1)
+    return d
+
+
+def _bucket_label(d: date, mode: str) -> str:
+    if mode == "day":   return d.strftime("%d %b")
+    if mode == "week":  return d.strftime("%d %b")
+    if mode == "month": return d.strftime("%b %y")
+    return str(d)
+
+
+def _all_bucket_keys(start: date, end: date, mode: str) -> list[date]:
+    keys: list[date] = []
+    if mode == "day":
+        d = start
+        while d <= end:
+            keys.append(d); d += timedelta(days=1)
+    elif mode == "week":
+        d = start - timedelta(days=start.weekday())
+        while d <= end:
+            keys.append(d); d += timedelta(days=7)
+    elif mode == "month":
+        d = start.replace(day=1)
+        while d <= end:
+            keys.append(d)
+            d = (date(d.year + 1, 1, 1) if d.month == 12
+                 else date(d.year, d.month + 1, 1))
+    return keys
+
+
+def billable_timeseries(db: Session, tenant_id: int, days: int = 30,
+                        start: date | None = None, end: date | None = None,
+                        user_id: int | None = None,
+                        client_id: int | None = None) -> tuple[str, list[dict]]:
+    """Return (bucket_mode, points) where points = [{label, billable, non_billable}].
+
+    Bucket size is chosen automatically from the window length:
+      span ≤ 21 days  → daily
+      span ≤ 120 days → weekly  (Mondays)
+      otherwise       → monthly (1st of month)
+    """
+    s, e = resolve_window(days, start, end)
+    span = (e - s).days + 1
+    if span <= 21:     mode = "day"
+    elif span <= 120:  mode = "week"
+    else:              mode = "month"
+
+    base = _entries_q(db, tenant_id, days, start=s, end=e,
+                      user_id=user_id, client_id=client_id)
+    rows = (base.with_entities(
+                TimeEntry.entry_date,
+                TimeEntry.is_billable,
+                func.sum(TimeEntry.hours).label("hours"))
+            .group_by(TimeEntry.entry_date, TimeEntry.is_billable).all())
+
+    buckets: dict[date, dict[str, float]] = {}
+    for r in rows:
+        key = _bucket_key(r.entry_date, mode)
+        b = buckets.setdefault(key, {"billable": 0.0, "non_billable": 0.0})
+        if r.is_billable: b["billable"]     += float(r.hours or 0)
+        else:             b["non_billable"] += float(r.hours or 0)
+
+    all_keys = _all_bucket_keys(s, e, mode)
+    points: list[dict] = []
+    for k in all_keys:
+        b = buckets.get(k, {"billable": 0.0, "non_billable": 0.0})
+        points.append({
+            "label":        _bucket_label(k, mode),
+            "billable":     round(b["billable"], 1),
+            "non_billable": round(b["non_billable"], 1),
+        })
+    return mode, points
+
+
+# ─── TS-137 · Basic utilisation ──────────────────────────────────────
+
 def utilisation(db: Session, tenant_id: int, days: int = 30,
                 daily_hours: float = 8.0,
                 start: date | None = None, end: date | None = None,
