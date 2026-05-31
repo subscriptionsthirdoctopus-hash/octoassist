@@ -56,8 +56,9 @@
   </div>
 </section>
 
-{# ─── KPI strip — single row, role-adaptive ──────────────────────── #}
+{# ─── My activity — personal KPI strip ──────────────────────────── #}
 {% set pending_total = data.pending_approvals_count + data.expense_pending_count %}
+<h2 class="dash-section-label"><span class="dash-section-tag">MY ACTIVITY</span> for {{ data.range_label }}</h2>
 <div class="kpi-row dash-kpis">
 
   <div class="kpi">
@@ -133,7 +134,62 @@
   {% endif %}
 </div>
 
+{# ─── Practice pulse — tenant-wide KPIs (admin / manager) ─────────── #}
+{% if data.practice %}
+<h2 class="dash-section-label"><span class="dash-section-tag dash-section-tag-accent">PRACTICE PULSE</span> tenant-wide for {{ data.range_label }}</h2>
+<div class="kpi-row dash-kpis">
+
+  <div class="kpi kpi-tone-navy">
+    <div class="kpi-label">Active consultants</div>
+    <div class="kpi-val">{{ data.practice.active_users }}</div>
+    <div class="kpi-sub">on the bench + on engagements</div>
+  </div>
+
+  <div class="kpi kpi-tone-navy">
+    <div class="kpi-label">Active clients</div>
+    <div class="kpi-val">{{ data.practice.active_clients }}</div>
+    <div class="kpi-sub">in the book of business</div>
+  </div>
+
+  <div class="kpi kpi-tone-navy">
+    <div class="kpi-label">Active engagements</div>
+    <div class="kpi-val">{{ data.practice.active_projects }}</div>
+    <div class="kpi-sub">in delivery right now</div>
+  </div>
+
+  <div class="kpi kpi-tone-teal">
+    <div class="kpi-label">Tenant hours</div>
+    <div class="kpi-val">{{ '%.0f' % data.practice.tenant_total }}<span class="kpi-val-sub">h</span></div>
+    <div class="kpi-sub">{{ '%.0f' % data.practice.tenant_billable }}h billable
+      <span class="meta">· {{ data.practice.tenant_bill_pct }}%</span>
+    </div>
+  </div>
+
+  <div class="kpi kpi-tone-teal">
+    <div class="kpi-label">Tenant expenses</div>
+    <div class="kpi-val">INR {{ '{:,.0f}'.format(data.practice.exp_value) }}</div>
+    <div class="kpi-sub">{{ data.practice.exp_count }} expense{{ '' if data.practice.exp_count == 1 else 's' }} filed
+      {% if data.practice.exp_reimb_pending %}
+        <span class="meta">· INR {{ '{:,.0f}'.format(data.practice.exp_reimb_pending) }} to pay</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="kpi kpi-tone-green">
+    <div class="kpi-label">Projects on-track</div>
+    <div class="kpi-val">{{ data.practice.rag_on_track_pct }}<span class="kpi-val-sub">%</span></div>
+    <div class="kpi-sub">
+      <span style="color: var(--green); font-weight: 700;">{{ data.practice.rag_green }}</span> green ·
+      <span style="color: var(--amber); font-weight: 700;">{{ data.practice.rag_amber }}</span> amber ·
+      <span style="color: var(--red);   font-weight: 700;">{{ data.practice.rag_red }}</span> red
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
 {# ─── Main 2-column grid — personal · team ──────────────────────── #}
+<h2 class="dash-section-label"><span class="dash-section-tag dash-section-tag-mute">DELIVERY VIEW</span> projects, approvals, team</h2>
 <div class="dash-grid dash-grid-equal">
 
   <section class="card dash-card">

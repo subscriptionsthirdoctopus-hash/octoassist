@@ -22,7 +22,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from ..models import (
-    Engagement, Expense, ExpenseStatus, Milestone, MilestoneStatus,
+    Client, Engagement, Expense, ExpenseStatus, Milestone, MilestoneStatus,
     ProjectStatus, RagStatus, StatusUpdate, TimeEntry, Timesheet,
     TimesheetPeriod, TimesheetStatus, User, UserRole,
 )
@@ -79,6 +79,9 @@ class DashboardData:
     # Admin additions
     tenant_utilisation: dict | None = None
     projects_rag:       list = field(default_factory=list)
+
+    # Practice pulse — tenant-wide rollups (admin + manager see these)
+    practice: dict | None = None
 
 
 def _resolve_window(anchor: date, view: ViewMode) -> tuple[date, date, str, date, date]:
@@ -242,6 +245,77 @@ def compute(db: Session, user: User,
         pending_exp = exp_pending(db, user)
         data.expense_pending_count = len(pending_exp)
         data.expense_pending_top   = pending_exp[:5]
+
+        # ─── Practice pulse — tenant-wide rollups over the chosen window ──
+        # Active counts
+        active_users    = (db.query(func.count(User.id))
+                             .filter(User.tenant_id == user.tenant_id,
+                                     User.is_active.is_(True),
+                                     User.role != UserRole.admin).scalar() or 0)
+        active_clients  = (db.query(func.count(Client.id))
+                             .filter(Client.tenant_id == user.tenant_id,
+                                     Client.is_active.is_(True)).scalar() or 0)
+        active_projects = (db.query(func.count(Engagement.id))
+                             .filter(Engagement.tenant_id == user.tenant_id,
+                                     Engagement.status == ProjectStatus.active).scalar() or 0)
+
+        # Tenant hours (window) — sum across all consultants in the tenant
+        hour_rows = (db.query(
+                        func.coalesce(func.sum(TimeEntry.hours), 0).label("total"),
+                        func.coalesce(func.sum(case((TimeEntry.is_billable.is_(True),
+                                                    TimeEntry.hours), else_=0)), 0).label("billable"),
+                     )
+                     .join(Timesheet, Timesheet.id == TimeEntry.timesheet_id)
+                     .filter(Timesheet.tenant_id == user.tenant_id,
+                             TimeEntry.entry_date >= range_start,
+                             TimeEntry.entry_date <= range_end).first())
+        tenant_total    = float(hour_rows.total or 0)
+        tenant_billable = float(hour_rows.billable or 0)
+        tenant_bill_pct = round(100 * tenant_billable / tenant_total, 1) if tenant_total else 0
+
+        # Tenant-wide expenses in window: count + value (any status)
+        exp_window_rows = (db.query(Expense.status, func.count(Expense.id),
+                                    func.coalesce(func.sum(Expense.amount), 0))
+                             .filter(Expense.tenant_id == user.tenant_id,
+                                     Expense.expense_date >= range_start,
+                                     Expense.expense_date <= range_end)
+                             .group_by(Expense.status).all())
+        exp_total_n = sum(r[1] for r in exp_window_rows)
+        exp_total_v = sum(float(r[2]) for r in exp_window_rows)
+        exp_reimb_pending_v = sum(float(r[2]) for r in exp_window_rows
+                                   if r[0] == ExpenseStatus.approved)
+
+        # Projects on track from latest RAG per active engagement
+        green = amber = red = none_n = 0
+        for e in (db.query(Engagement)
+                    .filter(Engagement.tenant_id == user.tenant_id,
+                            Engagement.status == ProjectStatus.active).all()):
+            latest = (db.query(StatusUpdate)
+                        .filter(StatusUpdate.engagement_id == e.id)
+                        .order_by(StatusUpdate.period_start.desc(),
+                                  StatusUpdate.created_at.desc()).first())
+            tag = latest.rag.value if latest else "none"
+            if   tag == "green": green += 1
+            elif tag == "amber": amber += 1
+            elif tag == "red":   red   += 1
+            else:                none_n += 1
+
+        data.practice = {
+            "active_users":    active_users,
+            "active_clients":  active_clients,
+            "active_projects": active_projects,
+            "tenant_total":    round(tenant_total, 1),
+            "tenant_billable": round(tenant_billable, 1),
+            "tenant_bill_pct": tenant_bill_pct,
+            "exp_count":       exp_total_n,
+            "exp_value":       round(exp_total_v, 0),
+            "exp_reimb_pending": round(exp_reimb_pending_v, 0),
+            "rag_green":       green,
+            "rag_amber":       amber,
+            "rag_red":         red,
+            "rag_none":        none_n,
+            "rag_on_track_pct": round(100 * green / (green + amber + red), 0) if (green + amber + red) else 0,
+        }
 
     # ─── Admin: tenant-wide utilisation + projects RAG ───
     if user.role == UserRole.admin:

@@ -504,6 +504,31 @@ button.small { padding: 4px 10px; font-size: 12px; }
 [data-theme="dark"] .filter-field select { color: var(--text); }
 [data-theme="dark"] .filter-summary strong { color: var(--text); }
 
+/* Dashboard section labels — clear separation between MY / PRACTICE / DELIVERY */
+.dash-section-label {
+  font-size: 13px; font-weight: 600; color: var(--slate);
+  margin: 22px 0 10px;
+  display: flex; align-items: center; gap: 10px;
+  letter-spacing: 0.2px;
+}
+.dash-section-tag {
+  font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 1.6px;
+  padding: 3px 10px; border-radius: 4px;
+  background: var(--navy); color: var(--white);
+}
+.dash-section-tag-accent { background: var(--teal); }
+.dash-section-tag-mute   { background: var(--slate); }
+[data-theme="dark"] .dash-section-tag { background: var(--teal); }
+[data-theme="dark"] .dash-section-tag-accent { background: var(--teal-2); color: var(--navy); }
+[data-theme="dark"] .dash-section-tag-mute { background: var(--row-alt); color: var(--text); }
+
+/* KPI tones — distinguish personal vs practice cards by border accent */
+.kpi.kpi-tone-navy  { border-top-color: var(--navy); }
+.kpi.kpi-tone-teal  { border-top-color: var(--teal); }
+.kpi.kpi-tone-green { border-top-color: var(--green); }
+.kpi.kpi-tone-amber { border-top-color: var(--amber); }
+
 /* Dashboard range picker — Week/Month toggle + date jump */
 .dash-range {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
