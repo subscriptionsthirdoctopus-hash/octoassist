@@ -317,6 +317,13 @@ def compute(db: Session, user: User,
             "rag_on_track_pct": round(100 * green / (green + amber + red), 0) if (green + amber + red) else 0,
         }
 
+        # Tenant-wide billable vs non-billable trend line for the same window
+        from .reports import billable_timeseries
+        ts_bucket, ts_points = billable_timeseries(
+            db, user.tenant_id, 30, start=range_start, end=range_end)
+        data.practice["ts_bucket"] = ts_bucket
+        data.practice["ts_points"] = ts_points
+
     # ─── Admin: tenant-wide utilisation + projects RAG ───
     if user.role == UserRole.admin:
         from .reports import utilisation

@@ -186,6 +186,25 @@
   </div>
 
 </div>
+
+{# ─── Tenant billable vs non-billable trend (compact line chart) ─── #}
+{% if data.practice.ts_points %}
+{% set ts_points = data.practice.ts_points %}
+{% set ts_bucket = data.practice.ts_bucket %}
+<section class="card chart-card dash-trend-card">
+  <header class="chart-card-head">
+    <h3>Billable vs non-billable — trend
+      <span class="meta" style="font-weight: normal;">· {{ ts_bucket }}-by-{{ ts_bucket }} · {{ data.range_label }}</span>
+    </h3>
+    <div class="chart-legend">
+      <span class="legend-item"><span class="legend-swatch swatch-billable-line"></span> Billable</span>
+      <span class="legend-item"><span class="legend-swatch swatch-nonbillable-line"></span> Non-billable</span>
+      <a href="/reports/billable-split?days=90" class="weeklink" style="margin-left: 12px;">Full report →</a>
+    </div>
+  </header>
+  {% with vb_h = 240 %}{% include "_billable_line_chart.html" %}{% endwith %}
+</section>
+{% endif %}
 {% endif %}
 
 {# ─── Main 2-column grid — personal · team ──────────────────────── #}

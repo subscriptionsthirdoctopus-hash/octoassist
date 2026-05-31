@@ -22,24 +22,6 @@
 
 {# ─── Trend line chart — billable vs non-billable over time ─────── #}
 {% if ts_points %}
-{% set max_y_raw = (ts_points | map(attribute='billable') | list + ts_points | map(attribute='non_billable') | list) | max %}
-{% set max_y = max_y_raw if max_y_raw > 0 else 1 %}
-{# round Y axis up to a sensible round number #}
-{% if max_y <= 10 %}{% set y_top = ((max_y / 2) | round(0, 'ceil')) * 2 %}
-{% elif max_y <= 50 %}{% set y_top = ((max_y / 10) | round(0, 'ceil')) * 10 %}
-{% elif max_y <= 200 %}{% set y_top = ((max_y / 25) | round(0, 'ceil')) * 25 %}
-{% else %}{% set y_top = ((max_y / 100) | round(0, 'ceil')) * 100 %}{% endif %}
-{% set vb_w = 900 %}
-{% set vb_h = 280 %}
-{% set pad_l = 48 %}
-{% set pad_r = 16 %}
-{% set pad_t = 16 %}
-{% set pad_b = 36 %}
-{% set chart_w = vb_w - pad_l - pad_r %}
-{% set chart_h = vb_h - pad_t - pad_b %}
-{% set n = ts_points | length %}
-{% set step = (chart_w / (n - 1)) if n > 1 else chart_w %}
-
 <section class="card chart-card">
   <header class="chart-card-head">
     <h3>Trend — billable vs non-billable
@@ -50,62 +32,7 @@
       <span class="legend-item"><span class="legend-swatch swatch-nonbillable-line"></span> Non-billable</span>
     </div>
   </header>
-
-  <svg class="line-chart" viewBox="0 0 {{ vb_w }} {{ vb_h }}" preserveAspectRatio="none"
-       xmlns="http://www.w3.org/2000/svg" role="img"
-       aria-label="Billable vs non-billable hours over time">
-    {# gridlines + Y labels #}
-    {% for i in range(5) %}
-      {% set gy = pad_t + (chart_h * i / 4) %}
-      {% set val = y_top * (4 - i) / 4 %}
-      <line x1="{{ pad_l }}" y1="{{ gy }}" x2="{{ pad_l + chart_w }}" y2="{{ gy }}" class="lc-grid"/>
-      <text x="{{ pad_l - 8 }}" y="{{ gy + 4 }}" class="lc-y-label" text-anchor="end">{{ '%g' % val }}h</text>
-    {% endfor %}
-    {# x baseline #}
-    <line x1="{{ pad_l }}" y1="{{ pad_t + chart_h }}" x2="{{ pad_l + chart_w }}" y2="{{ pad_t + chart_h }}" class="lc-axis"/>
-
-    {# x labels — thin them out if there are too many buckets #}
-    {% set label_every = 1 if n <= 12 else (2 if n <= 24 else (4 if n <= 60 else 8)) %}
-    {% for p in ts_points %}
-      {% if loop.index0 % label_every == 0 or loop.last %}
-      {% set xx = pad_l + (loop.index0 * step) %}
-      <text x="{{ xx }}" y="{{ pad_t + chart_h + 22 }}" class="lc-x-label" text-anchor="middle">{{ p.label }}</text>
-      {% endif %}
-    {% endfor %}
-
-    {# Non-billable polyline (orange) — drawn first so billable sits on top #}
-    {% set nb_points = [] %}
-    {% for p in ts_points %}
-      {% set xx = pad_l + (loop.index0 * step) %}
-      {% set yy = pad_t + chart_h - (chart_h * p.non_billable / y_top) %}
-      {% set _ = nb_points.append('%.1f,%.1f' % (xx, yy)) %}
-    {% endfor %}
-    <polyline class="lc-line lc-line-nonbillable" points="{{ nb_points | join(' ') }}" fill="none"/>
-    {% for p in ts_points %}
-      {% set xx = pad_l + (loop.index0 * step) %}
-      {% set yy = pad_t + chart_h - (chart_h * p.non_billable / y_top) %}
-      <circle cx="{{ '%.1f' % xx }}" cy="{{ '%.1f' % yy }}" r="3.5" class="lc-dot lc-dot-nonbillable">
-        <title>{{ p.label }} · Non-billable: {{ p.non_billable }}h</title>
-      </circle>
-    {% endfor %}
-
-    {# Billable polyline (blue) #}
-    {% set b_points = [] %}
-    {% for p in ts_points %}
-      {% set xx = pad_l + (loop.index0 * step) %}
-      {% set yy = pad_t + chart_h - (chart_h * p.billable / y_top) %}
-      {% set _ = b_points.append('%.1f,%.1f' % (xx, yy)) %}
-    {% endfor %}
-    <polyline class="lc-line lc-line-billable" points="{{ b_points | join(' ') }}" fill="none"/>
-    {% for p in ts_points %}
-      {% set xx = pad_l + (loop.index0 * step) %}
-      {% set yy = pad_t + chart_h - (chart_h * p.billable / y_top) %}
-      <circle cx="{{ '%.1f' % xx }}" cy="{{ '%.1f' % yy }}" r="3.5" class="lc-dot lc-dot-billable">
-        <title>{{ p.label }} · Billable: {{ p.billable }}h</title>
-      </circle>
-    {% endfor %}
-  </svg>
-
+  {% include "_billable_line_chart.html" %}
   <p class="meta" style="margin: 6px 0 0; text-align: right;">
     X axis: {{ ts_bucket }} buckets · Y axis: hours · hover a dot for the exact number
   </p>

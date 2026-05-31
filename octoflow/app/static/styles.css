@@ -535,6 +535,10 @@ button.small { padding: 4px 10px; font-size: 12px; }
 .legend-swatch.swatch-billable-line    { background: #1E88E5; }
 .legend-swatch.swatch-nonbillable-line { background: #FF8F00; }
 
+/* Compact dashboard trend card */
+.dash-trend-card { max-height: 360px; padding: 18px 22px; }
+.dash-trend-card .line-chart { max-height: 260px; }
+
 /* ─── Chart cards (reports/billable-split + future reports) ─── */
 .chart-card { padding: 22px 24px; }
 .chart-card-head {
