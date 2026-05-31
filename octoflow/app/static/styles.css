@@ -138,16 +138,22 @@ button, .button {
   font-family: inherit; font-size: 14px; font-weight: 600;
   padding: 9px 18px; border-radius: var(--r-sm);
   border: 1px solid transparent; cursor: pointer;
-  transition: filter 0.12s ease;
+  transition: filter 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  display: inline-block; text-decoration: none; line-height: 1.4;
 }
-button.primary, .button.primary {
+button.primary, .button.primary, a.button.primary {
   background: var(--teal); color: var(--white);
 }
-button.primary:hover { filter: brightness(1.08); }
-button.secondary {
+button.primary:hover, a.button.primary:hover { filter: brightness(1.08); }
+button.secondary, .button.secondary, a.button.secondary {
   background: var(--white); color: var(--navy); border-color: var(--line);
 }
+button.secondary:hover, a.button.secondary:hover { background: var(--bg); border-color: var(--teal); }
 button.big { padding: 13px 28px; font-size: 15px; }
+[data-theme="dark"] a.button.secondary,
+[data-theme="dark"] button.secondary { background: var(--white); color: var(--text); }
+[data-theme="dark"] a.button.secondary:hover,
+[data-theme="dark"] button.secondary:hover { border-color: var(--teal-2); background: var(--row-alt); }
 
 /* ───── Alerts ───── */
 .alert {
@@ -650,30 +656,153 @@ button.small { padding: 4px 10px; font-size: 12px; }
   text-shadow: 0 0 4px rgba(255,255,255,0.7);
 }
 
-/* ─────────────────────────────── Dashboard layout ──────────────────────────── */
+/* ═════════════════════════════ Dashboard ═════════════════════════════════════
+   A 4-zone layout:
+     ① page-head with primary CTA on the right
+     ② single role-adaptive KPI strip (5-6 cards in a uniform auto-fit grid)
+     ③ 2-column equal-height grid for personal + team cards
+     ④ admin-only full-width strips (utilisation + projects RAG)
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.dash-head { align-items: flex-start; }
+.dash-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dash-head-actions .button { padding: 9px 16px; font-size: 13.5px; }
+
+.dash-kpis {
+  margin-top: 4px; margin-bottom: 20px;
+  grid-auto-rows: 1fr;   /* equal-height KPI cards even on wrap */
+}
+.kpi-val-sub { font-size: 16px; font-weight: 600; color: var(--slate); margin-left: 2px; }
+.kpi-val-pill { margin: 6px 0 4px; }
+.kpi-accent { border-top-color: var(--amber); }
+
 .dash-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  margin-top: 6px;
+  gap: 20px;
+  margin: 0 0 20px;
+  align-items: start;            /* cards align at top, not stretched */
 }
-.dash-col { display: flex; flex-direction: column; gap: 16px; }
+.dash-grid-equal { grid-auto-rows: 1fr; }       /* equal row heights */
+.dash-grid-equal > .card { height: 100%; display: flex; flex-direction: column; }
+.dash-col { display: flex; flex-direction: column; gap: 16px; } /* legacy support */
 
-.dash-list {
-  list-style: none; padding: 0; margin: 8px 0 0;
+/* The card variant used by dashboard tiles — flatter, header bar, body grows */
+.dash-card { padding: 18px 22px; }
+.dash-card-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; margin-bottom: 12px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
 }
+.dash-card-head h3 {
+  margin: 0;
+  font-size: 13px; font-weight: 700; color: var(--navy);
+  text-transform: uppercase; letter-spacing: 1.2px;
+}
+.dash-card-head .weeklink { font-size: 12px; white-space: nowrap; }
+.dash-card-foot { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
+
+/* Dashboard list rows — two-line layout, title above, meta inline below */
+.dash-list { list-style: none; padding: 0; margin: 0; }
 .dash-list-item {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  padding: 9px 0;
+  display: block;
+  padding: 10px 0;
   border-bottom: 1px solid var(--line);
   font-size: 13.5px;
 }
-.dash-list-item:last-child { border-bottom: 0; }
+.dash-list-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.dash-list-item:first-child { padding-top: 2px; }
+
+.dash-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dash-row-title { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.dash-row-meta  {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--slate);
+  flex: 0 0 auto;
+}
+.dash-row-meta .meta-mono { font-size: 12px; color: var(--slate); }
+.dash-row-meta .status-pill { font-size: 10.5px; padding: 3px 9px; }
+
+.dash-compliance .status-pill { letter-spacing: 0.5px; }
+
+.dash-table { margin-top: 0; font-size: 13px; }
+.dash-table th { font-size: 11px; padding: 8px 12px; }
+.dash-table td { padding: 8px 12px; }
+
+.dash-empty { margin: 10px 0 4px; font-style: italic; }
+.dash-wide  { margin-bottom: 20px; }
+
+/* Utilisation strip — horizontal stats inside the wide card */
+.util-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+  padding: 6px 0 2px;
+}
+.util-stat {
+  padding: 12px 16px;
+  background: var(--row-alt);
+  border-radius: var(--r-sm);
+  border-left: 3px solid var(--teal);
+}
+.util-stat-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--slate);
+}
+.util-stat-val   {
+  font-size: 26px; font-weight: 800; color: var(--navy);
+  margin-top: 6px; line-height: 1;
+}
+.util-stat-sub {
+  font-size: 11.5px; color: var(--slate); margin-top: 4px;
+  font-style: italic;
+}
+
+/* Projects RAG snapshot — tile grid, not a list */
+.rag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  padding: 4px 0;
+}
+.rag-tile {
+  display: block;
+  padding: 14px 16px;
+  background: var(--row-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  text-decoration: none; color: inherit;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+.rag-tile:hover { border-color: var(--teal); transform: translateY(-1px); }
+.rag-tile-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rag-tile-title {
+  font-weight: 700; font-size: 13.5px; color: var(--navy);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rag-tile-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: var(--slate); margin-bottom: 8px;
+}
+.dash-rag-bar { width: 100%; margin: 4px 0 0; height: 5px; }
+
+/* Compliance row already used elsewhere — keep legacy compat */
 .compliance-row { padding: 7px 0; }
 
 @media (max-width: 960px) {
   .dash-grid { grid-template-columns: 1fr; }
+  .dash-head { flex-direction: column; align-items: flex-start; }
+  .dash-head-actions { width: 100%; }
 }
+
+/* Dark-mode adjustments specific to the new dashboard pieces */
+[data-theme="dark"] .dash-card-head h3 { color: var(--text); }
+[data-theme="dark"] .rag-tile-title    { color: var(--text); }
+[data-theme="dark"] .util-stat         { background: #182030; }
+[data-theme="dark"] .util-stat-val     { color: var(--text); }
+[data-theme="dark"] .dash-mini-val     { color: var(--teal-2); }
+[data-theme="dark"] .rag-tile          { background: #182030; }
+[data-theme="dark"] .rag-tile:hover    { border-color: var(--teal-2); }
 
 /* ────────────────────────────────────────────────────────────────
    Theme toggle button (lives in topbar; same in both modes)
