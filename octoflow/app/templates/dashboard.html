@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Welcome back, {{ current_user.display_name.split(' ')[0] }}</h1>
+    <p class="meta">
+      Week of <strong>{{ data.week_start.strftime('%d %b') }} → {{ data.week_end.strftime('%d %b %Y') }}</strong>
+      · signed in as <code class="code-pill">{{ data.role }}</code>
+      · {{ current_user.tenant.name }}
+    </p>
+  </div>
+</section>
+
+<!-- ─── KPI strip: my week ─── -->
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">This week — total</div>
+    <div class="kpi-val">{{ '%.1f' % data.my_total }}</div>
+    <div class="kpi-sub">hours logged so far</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">This week — billable</div>
+    <div class="kpi-val" style="color: var(--green);">{{ '%.1f' % data.my_billable }}</div>
+    <div class="kpi-sub">{{ '%.0f' % (100 * data.my_billable / data.my_total) if data.my_total else 0 }}% of total</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Days with entries</div>
+    <div class="kpi-val">{{ data.my_days_logged }}/7</div>
+    <div class="kpi-sub">of the week</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">My sheet status</div>
+    <div class="kpi-val" style="font-size: 22px; padding-top: 8px;">
+      <span class="status-pill status-{{ data.my_status }}">{{ data.my_status | capitalize }}</span>
+    </div>
+    <div class="kpi-sub">
+      {% if data.my_status == 'draft' %}
+        <a href="/timesheet" class="weeklink">Continue editing →</a>
+      {% elif data.my_status == 'submitted' %}awaiting approval
+      {% elif data.my_status == 'approved' %}locked + closed
+      {% elif data.my_status == 'rejected' %}<a href="/timesheet" class="weeklink">Address feedback →</a>
+      {% else %}<a href="/timesheet" class="weeklink">Start logging →</a>{% endif %}
+    </div>
+  </div>
+  {% if data.role in ('admin', 'manager') %}
+  <div class="kpi" style="border-top-color: var(--amber);">
+    <div class="kpi-label">Awaiting your approval</div>
+    <div class="kpi-val" style="color: {{ 'var(--amber)' if data.pending_approvals_count else 'var(--slate)' }};">{{ data.pending_approvals_count }}</div>
+    <div class="kpi-sub">{% if data.pending_approvals_count %}<a href="/approvals" class="weeklink">Review queue →</a>{% else %}nothing pending{% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ─── 2-column layout: left (mine), right (manager/admin extras) ─── -->
+<div class="dash-grid">
+  <!-- Left column — always shown -->
+  <div class="dash-col">
+    <section class="card">
+      <h3>Active projects</h3>
+      {% if data.active_projects %}
+      <ul class="dash-list">
+        {% for e in data.active_projects %}
+        <li class="dash-list-item">
+          <a href="/projects/{{ e.id }}" class="link-strong">{{ e.name }}</a>
+          <span class="meta">· {{ e.client.name }} · <code class="code-pill">{{ e.code }}</code></span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="meta">No active projects assigned to you.
+        {% if data.role == 'admin' %}Add one in <a href="/settings/clients" class="weeklink">Settings → Clients</a>.{% endif %}
+      </p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h3>My recent timesheets</h3>
+      {% if data.my_recent %}
+      <table class="data" style="margin-top: 4px;">
+        <thead><tr><th>Week</th><th>Status</th><th style="text-align:right;">Hours</th><th></th></tr></thead>
+        <tbody>
+          {% for s in data.my_recent %}
+          <tr>
+            <td><span class="meta-mono">{{ s.period.start_date }} → {{ s.period.end_date }}</span></td>
+            <td><span class="status-pill status-{{ s.status.value }}">{{ s.status.value | capitalize }}</span></td>
+            <td style="text-align:right;"><span class="meta-mono">{{ '%.2f' % (s.entries | sum(attribute='hours') if s.entries else 0) }}</span></td>
+            <td><a href="/timesheet?week={{ s.period.start_date.isoformat() }}" class="weeklink">Open →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="meta">No timesheets yet — your first will appear after you log time.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <!-- Right column — manager / admin only -->
+  <div class="dash-col">
+    {% if data.role in ('admin', 'manager') %}
+    <section class="card">
+      <h3>Top of the approval queue</h3>
+      {% if data.pending_approvals_top %}
+      <ul class="dash-list">
+        {% for s in data.pending_approvals_top %}
+        <li class="dash-list-item">
+          <a href="/approvals/{{ s.id }}" class="link-strong">{{ s.user.display_name }}</a>
+          <span class="meta">· week of {{ s.period.start_date }}
+            · {{ '%.1f' % (s.entries | sum(attribute='hours') if s.entries else 0) }}h
+            · submitted {{ s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else '' }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if data.pending_approvals_count > 5 %}
+      <p class="meta" style="margin-top: 8px;"><a href="/approvals" class="weeklink">+ {{ data.pending_approvals_count - 5 }} more →</a></p>
+      {% endif %}
+      {% else %}
+      <p class="meta">All clear — nothing waiting for your approval.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h3>Team submission compliance — this week</h3>
+      {% if data.team_compliance %}
+      <ul class="dash-list">
+        {% for r in data.team_compliance %}
+        <li class="dash-list-item compliance-row">
+          <span class="link-strong">{{ r.user.display_name }}</span>
+          <span class="meta">· {{ r.user.practice or '—' }}</span>
+          <span style="margin-left: auto;">
+            {% if r.status == 'not_started' %}
+              <span class="status-pill" style="background:#FEE2E2;color:var(--red);">Not started</span>
+            {% else %}
+              <span class="status-pill status-{{ r.status }}">{{ r.status | replace('_',' ') | capitalize }}</span>
+              <span class="meta-mono" style="margin-left:6px;">{{ '%.1f' % r.hours }}h</span>
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="meta" style="margin-top: 8px;"><a href="/reports/compliance" class="weeklink">Full compliance report →</a></p>
+      {% else %}
+      <p class="meta">No direct reports in your tenant yet. Add users in <a href="/settings/users" class="weeklink">Settings → Users</a>.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if data.role == 'admin' and data.tenant_utilisation %}
+    <section class="card">
+      <h3>Tenant utilisation — last 30 days</h3>
+      <div class="kpi-row" style="margin: 8px 0 14px;">
+        <div class="kpi">
+          <div class="kpi-label">Consultants</div>
+          <div class="kpi-val">{{ data.tenant_utilisation.consultant_count }}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Average util.</div>
+          <div class="kpi-val" style="color: {% if data.tenant_utilisation.avg_pct < 40 %}var(--red){% elif data.tenant_utilisation.avg_pct < 70 %}var(--amber){% else %}var(--green){% endif %};">{{ data.tenant_utilisation.avg_pct }}%</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Available per consultant</div>
+          <div class="kpi-val">{{ '%.0f' % data.tenant_utilisation.available }}h</div>
+        </div>
+      </div>
+      <p class="meta" style="margin-top: 8px;"><a href="/reports/utilisation" class="weeklink">Per-person breakdown →</a></p>
+    </section>
+    {% endif %}
+
+    {% if data.role == 'admin' and data.projects_rag %}
+    <section class="card">
+      <h3>Projects — RAG snapshot</h3>
+      <ul class="dash-list">
+        {% for r in data.projects_rag %}
+        <li class="dash-list-item">
+          <span class="rag-dot rag-{{ r.rag if r.rag != 'none' else 'none' }}"></span>
+          <a href="/projects/{{ r.engagement.id }}" class="link-strong" style="margin-left: 8px;">{{ r.engagement.name }}</a>
+          <span class="meta">· {{ r.engagement.client.code }}</span>
+          {% if r.ms_total %}
+          <span style="margin-left: auto;" class="meta-mono">{{ r.ms_met }}/{{ r.ms_total }} milestones · {{ r.ms_pct }}%</span>
+          {% else %}
+          <span style="margin-left: auto;" class="meta">no milestones set</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="meta" style="margin-top: 8px;"><a href="/projects" class="weeklink">Open PMO dashboard →</a></p>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

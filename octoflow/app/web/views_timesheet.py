@@ -30,9 +30,7 @@ def _parse_date(s: str | None) -> date:
         return date.today()
 
 
-@router.get("/", response_class=HTMLResponse)
-def home(request: Request, user: User = Depends(require_user)):
-    return RedirectResponse(url="/timesheet", status_code=303)
+# Root / is now owned by views_dashboard (redirects to /dashboard).
 
 
 @router.get("/timesheet", response_class=HTMLResponse)

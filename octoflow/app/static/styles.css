@@ -649,3 +649,28 @@ button.small { padding: 4px 10px; font-size: 12px; }
   font-size: 12px; font-weight: 700; color: var(--navy);
   text-shadow: 0 0 4px rgba(255,255,255,0.7);
 }
+
+/* ─────────────────────────────── Dashboard layout ──────────────────────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 6px;
+}
+.dash-col { display: flex; flex-direction: column; gap: 16px; }
+
+.dash-list {
+  list-style: none; padding: 0; margin: 8px 0 0;
+}
+.dash-list-item {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.dash-list-item:last-child { border-bottom: 0; }
+.compliance-row { padding: 7px 0; }
+
+@media (max-width: 960px) {
+  .dash-grid { grid-template-columns: 1fr; }
+}
