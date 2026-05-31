@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Audit log · Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Audit log</h1>
+    <p class="meta"><a href="/settings" class="weeklink">← Settings</a> · most recent 200 entries</p>
+  </div>
+</section>
+
+<table class="data">
+  <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Resource</th><th>Detail</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><span class="meta-mono">{{ r.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></td>
+      <td>{{ actors.get(r.actor_id, "—") }}</td>
+      <td><code class="code-pill">{{ r.action }}</code></td>
+      <td>{{ r.resource or "—" }}</td>
+      <td>{{ r.detail or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

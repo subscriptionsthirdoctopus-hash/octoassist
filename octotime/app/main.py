@@ -14,6 +14,7 @@ from . import seed, models  # noqa: F401 -- import models so create_all sees the
 from .web.views_login import router as login_router
 from .web.views_timesheet import router as timesheet_router
 from .web.views_stub import router as stub_router
+from .web.views_settings import router as settings_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +40,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Routes
 app.include_router(login_router)
 app.include_router(timesheet_router)
-app.include_router(stub_router)
+app.include_router(settings_router)  # real settings — replaces the /settings stub
+app.include_router(stub_router)      # stubs for /approvals, /reports
 
 
 @app.exception_handler(NotAuthenticated)

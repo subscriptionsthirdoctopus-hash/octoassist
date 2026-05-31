@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }} · Engagements{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ client.name }}</h1>
+    <p class="meta"><a href="/settings/clients" class="weeklink">← Clients</a> · code <code class="code-pill">{{ client.code }}</code> · {{ engagements|length }} engagement{{ "" if engagements|length == 1 else "s" }}</p>
+  </div>
+</section>
+
+<details class="card" {% if engagements|length == 0 %}open{% endif %}>
+  <summary>➕ Add engagement</summary>
+  <form method="post" action="/settings/clients/{{ client.id }}/engagements/new" class="crud-form">
+    <div class="grid-2">
+      <label>Short code<input type="text" name="code" required maxlength="40" placeholder="e.g. CSCRF26"></label>
+      <label>Project name<input type="text" name="name" required placeholder="e.g. CSCRF Compliance Programme"></label>
+    </div>
+    <label>Description<textarea name="description" rows="2" placeholder="One-line scope"></textarea></label>
+    <div class="grid-3">
+      <label>Owner / approver
+        <select name="owner_id">
+          <option value="">—</option>
+          {% for s in staff %}<option value="{{ s.id }}">{{ s.display_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Start<input type="date" name="start_date"></label>
+      <label>End<input type="date" name="end_date"></label>
+    </div>
+    <div class="form-actions"><button type="submit" class="primary">Add engagement</button></div>
+  </form>
+</details>
+
+<table class="data">
+  <thead><tr><th>Code</th><th>Name</th><th>Status</th><th>Owner</th><th>Dates</th><th>Tasks</th><th>Assigned</th></tr></thead>
+  <tbody>
+    {% for e in engagements %}
+    <tr>
+      <td><code class="code-pill">{{ e.code }}</code></td>
+      <td><a href="/settings/clients/{{ client.id }}/engagements/{{ e.id }}" class="link-strong">{{ e.name }}</a></td>
+      <td><span class="status-pill status-{{ 'approved' if e.status.value == 'active' else ('draft' if e.status.value == 'on_hold' else 'rejected') }}">{{ e.status.value | replace('_',' ') }}</span></td>
+      <td>{{ e.owner.display_name if e.owner else "—" }}</td>
+      <td>{{ e.start_date or "—" }} → {{ e.end_date or "—" }}</td>
+      <td>{{ e.tasks|length }}</td>
+      <td>{{ e.assignments|length }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

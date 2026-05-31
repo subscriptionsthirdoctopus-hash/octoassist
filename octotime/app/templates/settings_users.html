@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Users · Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Users</h1>
+    <p class="meta"><a href="/settings" class="weeklink">← Settings</a> · {{ rows|length }} total</p>
+  </div>
+</section>
+
+<details class="card" {% if rows|length <= 1 %}open{% endif %}>
+  <summary>➕ Add user</summary>
+  <form method="post" action="/settings/users/new" class="crud-form">
+    <div class="grid-2">
+      <label>Full name<input type="text" name="display_name" required></label>
+      <label>Email<input type="email" name="email" required></label>
+    </div>
+    <div class="grid-3">
+      <label>Role
+        <select name="role">
+          {% for r in roles %}<option value="{{ r.value }}">{{ r.value }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Practice<input type="text" name="practice" placeholder="e.g. Cybersecurity"></label>
+      <label>Reports to
+        <select name="manager_id">
+          <option value="">—</option>
+          {% for m in managers %}<option value="{{ m.id }}">{{ m.display_name }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <label>Initial password<input type="text" name="password" required minlength="8"></label>
+    <div class="form-actions"><button type="submit" class="primary">Add user</button></div>
+  </form>
+</details>
+
+<table class="data">
+  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Practice</th><th>Reports to</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for u in rows %}
+    <tr {% if not u.is_active %}class="row-inactive"{% endif %}>
+      <td><strong>{{ u.display_name }}</strong></td>
+      <td>{{ u.email }}</td>
+      <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
+      <td>{{ u.practice or "—" }}</td>
+      <td>{{ u.manager.display_name if u.manager else "—" }}</td>
+      <td>{% if u.is_active %}<span class="status-pill status-approved">Active</span>{% else %}<span class="status-pill status-draft">Inactive</span>{% endif %}</td>
+      <td><details class="inline-edit"><summary class="link-summary">Edit</summary>
+        <form method="post" action="/settings/users/{{ u.id }}/edit" class="crud-form inline">
+          <div class="grid-2">
+            <label>Name<input type="text" name="display_name" value="{{ u.display_name }}"></label>
+            <label>Role
+              <select name="role">
+                {% for r in roles %}<option value="{{ r.value }}" {% if r == u.role %}selected{% endif %}>{{ r.value }}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="grid-2">
+            <label>Practice<input type="text" name="practice" value="{{ u.practice or '' }}"></label>
+            <label>Reports to
+              <select name="manager_id">
+                <option value="">—</option>
+                {% for m in managers %}<option value="{{ m.id }}" {% if m.id == u.manager_id %}selected{% endif %}>{{ m.display_name }}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" name="is_active" value="1" {% if u.is_active %}checked{% endif %}> Active</label>
+          <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+        </form>
+        <form method="post" action="/settings/users/{{ u.id }}/password" class="crud-form inline">
+          <label>Reset password to<input type="text" name="password" required minlength="8" placeholder="new password (min 8)"></label>
+          <div class="form-actions"><button type="submit" class="secondary">Reset password</button></div>
+        </form>
+      </details></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

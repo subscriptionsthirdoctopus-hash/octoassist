@@ -39,9 +39,4 @@ def reports(request: Request, user: User = Depends(require_user)):
         body="The seven Phase 1 reports (TS-132 to TS-138): my timesheet history, submission compliance, hours by project, hours by client, billable split, basic utilisation, Excel/CSV export.")
 
 
-@router.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, user: User = Depends(require_user)):
-    return _stub(request, user,
-        title="Settings",
-        subtitle="Clients, engagements, tasks, activities, users, periods, holidays, audit log",
-        body="Admin configuration: client + engagement master, task breakdown, activity codes, user lifecycle, working calendar, holidays, audit log. The full Phase 1 admin tile grid lands here.")
+# /settings is now served by views_settings (real admin surface).

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="meta">Configure {{ tenant.name }} — users, clients, engagements, activities, holidays.</p>
+  </div>
+</section>
+
+<div class="tile-grid">
+  <a href="/settings/users" class="tile">
+    <span class="tile-icon">👤</span>
+    <p class="tile-title">Users</p>
+    <p class="tile-sub">Consultants, managers, admins — onboard, edit role, reset password.</p>
+    <p class="tile-meta">{{ counts.users }} active user{{ "" if counts.users == 1 else "s" }}</p>
+  </a>
+
+  <a href="/settings/clients" class="tile">
+    <span class="tile-icon">🏢</span>
+    <p class="tile-title">Clients</p>
+    <p class="tile-sub">Client register — HCAL, TEMA, IMMAST. Each links into its engagements.</p>
+    <p class="tile-meta">{{ counts.clients }} active client{{ "" if counts.clients == 1 else "s" }}</p>
+  </a>
+
+  <a href="/settings/clients" class="tile">
+    <span class="tile-icon">📋</span>
+    <p class="tile-title">Engagements</p>
+    <p class="tile-sub">Projects under each client, with tasks, status, dates and consultant assignments.</p>
+    <p class="tile-meta">{{ counts.engagements }} total</p>
+  </a>
+
+  <a href="/settings/activities" class="tile">
+    <span class="tile-icon">🏷️</span>
+    <p class="tile-title">Activity codes</p>
+    <p class="tile-sub">Advisory, Implementation, Travel, Internal — drive default billable flags.</p>
+    <p class="tile-meta">{{ counts.activities }} active</p>
+  </a>
+
+  <a href="/settings/holidays" class="tile">
+    <span class="tile-icon">📅</span>
+    <p class="tile-title">Holidays</p>
+    <p class="tile-sub">Public holidays so missing-time reports don't flag non-working days.</p>
+    <p class="tile-meta">{{ counts.holidays }} configured</p>
+  </a>
+
+  <a href="/settings/audit" class="tile">
+    <span class="tile-icon">📜</span>
+    <p class="tile-title">Audit log</p>
+    <p class="tile-sub">Immutable trail of every config + workflow action.</p>
+    <p class="tile-meta">{{ counts.audit }} entries (most recent 200 shown)</p>
+  </a>
+</div>
+{% endblock %}

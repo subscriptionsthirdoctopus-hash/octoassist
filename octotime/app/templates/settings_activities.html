@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Activity codes · Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Activity codes</h1>
+    <p class="meta"><a href="/settings" class="weeklink">← Settings</a> · {{ rows|length }} total</p>
+  </div>
+</section>
+
+<details class="card">
+  <summary>➕ Add activity</summary>
+  <form method="post" action="/settings/activities/new" class="crud-form">
+    <div class="grid-2">
+      <label>Code<input type="text" name="code" required maxlength="20" placeholder="e.g. ADV"></label>
+      <label>Name<input type="text" name="name" required maxlength="80" placeholder="e.g. Advisory"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="is_billable_default" value="1" checked> Billable by default</label>
+    <div class="form-actions"><button type="submit" class="primary">Add activity</button></div>
+  </form>
+</details>
+
+<table class="data">
+  <thead><tr><th>Code</th><th>Name</th><th>Billable by default</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for a in rows %}
+    <tr {% if not a.is_active %}class="row-inactive"{% endif %}>
+      <td><code class="code-pill">{{ a.code }}</code></td>
+      <td>{{ a.name }}</td>
+      <td>{% if a.is_billable_default %}✓ billable{% else %}— non-billable{% endif %}</td>
+      <td>{% if a.is_active %}<span class="status-pill status-approved">Active</span>{% else %}<span class="status-pill status-draft">Inactive</span>{% endif %}</td>
+      <td><details class="inline-edit"><summary class="link-summary">Edit</summary>
+        <form method="post" action="/settings/activities/{{ a.id }}/edit" class="crud-form inline">
+          <div class="grid-2">
+            <label>Code<input type="text" name="code" value="{{ a.code }}"></label>
+            <label>Name<input type="text" name="name" value="{{ a.name }}"></label>
+          </div>
+          <label class="check"><input type="checkbox" name="is_billable_default" value="1" {% if a.is_billable_default %}checked{% endif %}> Billable by default</label>
+          <label class="check"><input type="checkbox" name="is_active" value="1" {% if a.is_active %}checked{% endif %}> Active</label>
+          <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+        </form>
+      </details></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

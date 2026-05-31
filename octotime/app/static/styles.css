@@ -292,3 +292,152 @@ button.big { padding: 13px 28px; font-size: 15px; }
   border-left: 4px solid var(--teal);
 }
 .submit-section .meta { margin: 0; }
+
+/* ─────────────────────────────── Settings tile grid ───────────────────────────── */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 4px;
+}
+.tile {
+  display: block;
+  padding: 20px 18px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--teal);
+  border-radius: var(--r-md);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-left-color 0.12s ease;
+}
+.tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(27,42,74,0.08);
+  border-left-color: var(--navy);
+}
+.tile-icon { font-size: 26px; line-height: 1; margin-bottom: 8px; display: block; }
+.tile-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; color: var(--navy); }
+.tile-sub   { font-size: 12.5px; color: var(--slate); margin: 0; line-height: 1.45; }
+.tile-meta  { font-size: 11px; color: var(--teal); font-weight: 700; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* ─────────────────────────────── Data table (CRUD lists) ──────────────────────── */
+table.data {
+  width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  margin-top: 16px;
+  font-size: 13.5px;
+}
+table.data th {
+  background: var(--navy); color: var(--white);
+  padding: 10px 14px; text-align: left; font-size: 12px;
+  font-weight: 600; letter-spacing: 0.3px;
+}
+table.data td {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+table.data tbody tr:nth-child(even) { background: var(--row-alt); }
+table.data tr.row-inactive { opacity: 0.55; }
+.link-strong { color: var(--navy); font-weight: 700; text-decoration: none; }
+.link-strong:hover { color: var(--teal); text-decoration: underline; }
+.meta-mono { font-family: "SF Mono", "Consolas", monospace; font-size: 12px; color: var(--slate); }
+
+/* ─────────────────────────────── Pills + chips ────────────────────────────────── */
+.role-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+}
+.role-admin      { background: #FEE2E2; color: var(--red); }
+.role-manager    { background: #DBEAFE; color: #1E40AF; }
+.role-consultant { background: #DCFCE7; color: var(--green); }
+.role-finance    { background: #FEF3C7; color: #92400E; }
+
+.code-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--bg); color: var(--teal); font-weight: 700;
+  font-family: "SF Mono", "Consolas", monospace; font-size: 12px;
+}
+
+/* ─────────────────────────────── CRUD forms ───────────────────────────────────── */
+details.card { transition: background 0.12s ease; }
+details.card summary {
+  cursor: pointer; font-weight: 700; color: var(--navy); font-size: 14px;
+  padding: 4px 0;
+  list-style: none;
+}
+details.card summary::-webkit-details-marker { display: none; }
+details.card summary::before {
+  content: "▸"; color: var(--teal); margin-right: 8px; display: inline-block;
+  transition: transform 0.15s ease;
+}
+details.card[open] summary::before { transform: rotate(90deg); }
+
+.crud-form {
+  display: flex; flex-direction: column; gap: 12px;
+  margin-top: 14px;
+}
+.crud-form.inline { margin-top: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.crud-form label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--slate);
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.crud-form label.check {
+  flex-direction: row; align-items: center; gap: 8px;
+  text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text);
+}
+.crud-form input[type="text"],
+.crud-form input[type="email"],
+.crud-form input[type="password"],
+.crud-form input[type="date"],
+.crud-form input[type="number"],
+.crud-form textarea,
+.crud-form select {
+  padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-size: 13px; font-family: inherit; background: var(--white);
+}
+.crud-form input:focus, .crud-form textarea:focus, .crud-form select:focus {
+  outline: 2px solid var(--teal); outline-offset: -1px; border-color: var(--teal);
+}
+.crud-form .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.crud-form .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.crud-form .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+.form-actions { display: flex; gap: 10px; align-items: center; }
+
+details.inline-edit summary { cursor: pointer; font-size: 12.5px; color: var(--teal); font-weight: 600; }
+details.inline-edit summary::-webkit-details-marker { display: none; }
+.link-summary { display: inline; }
+
+.inline-form { display: inline; margin: 0; }
+button.small { padding: 4px 10px; font-size: 12px; }
+
+/* Task list inside engagement detail */
+.task-list { list-style: none; padding: 0; margin: 12px 0; }
+.task-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  margin-bottom: 6px;
+  background: var(--white);
+}
+.task-row.is-inactive { opacity: 0.55; }
+.task-name { font-size: 13.5px; color: var(--navy); }
+
+/* Assignment checkbox grid */
+.check-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 16px; margin: 12px 0;
+}
+.check-grid label.check {
+  flex-direction: row; align-items: center; gap: 8px;
+  text-transform: none; letter-spacing: 0; font-size: 13px;
+  color: var(--text); cursor: pointer;
+  padding: 4px 0;
+}

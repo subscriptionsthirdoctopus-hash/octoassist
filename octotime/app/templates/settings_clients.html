@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Clients · Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Clients</h1>
+    <p class="meta"><a href="/settings" class="weeklink">← Settings</a> · {{ rows|length }} total</p>
+  </div>
+</section>
+
+<details class="card" {% if rows|length == 0 %}open{% endif %}>
+  <summary>➕ Add client</summary>
+  <form method="post" action="/settings/clients/new" class="crud-form">
+    <div class="grid-2">
+      <label>Short code<input type="text" name="code" required maxlength="20" placeholder="e.g. HCAL, TEMA"></label>
+      <label>Full name<input type="text" name="name" required maxlength="160" placeholder="e.g. HDFC Capital"></label>
+    </div>
+    <div class="form-actions"><button type="submit" class="primary">Add client</button></div>
+  </form>
+</details>
+
+<table class="data">
+  <thead><tr><th>Code</th><th>Name</th><th>Engagements</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for c in rows %}
+    <tr {% if not c.is_active %}class="row-inactive"{% endif %}>
+      <td><code class="code-pill">{{ c.code }}</code></td>
+      <td><a href="/settings/clients/{{ c.id }}" class="link-strong">{{ c.name }}</a></td>
+      <td>{{ eng_counts.get(c.id, 0) }}</td>
+      <td>{% if c.is_active %}<span class="status-pill status-approved">Active</span>{% else %}<span class="status-pill status-draft">Inactive</span>{% endif %}</td>
+      <td><details class="inline-edit"><summary class="link-summary">Edit</summary>
+        <form method="post" action="/settings/clients/{{ c.id }}/edit" class="crud-form inline">
+          <div class="grid-2">
+            <label>Code<input type="text" name="code" value="{{ c.code }}"></label>
+            <label>Name<input type="text" name="name" value="{{ c.name }}"></label>
+          </div>
+          <label class="check"><input type="checkbox" name="is_active" value="1" {% if c.is_active %}checked{% endif %}> Active</label>
+          <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+        </form>
+      </details></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

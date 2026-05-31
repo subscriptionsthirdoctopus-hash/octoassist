@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ engagement.name }} · {{ client.code }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ engagement.name }}</h1>
+    <p class="meta">
+      <a href="/settings/clients/{{ client.id }}" class="weeklink">← {{ client.name }}</a>
+      · code <code class="code-pill">{{ engagement.code }}</code>
+    </p>
+  </div>
+  <div class="page-head-right">
+    <span class="status-pill status-{{ 'approved' if engagement.status.value == 'active' else ('draft' if engagement.status.value == 'on_hold' else 'rejected') }}">{{ engagement.status.value | replace('_',' ') }}</span>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Engagement details</h3>
+  <form method="post" action="/settings/clients/{{ client.id }}/engagements/{{ engagement.id }}/edit" class="crud-form">
+    <label>Project name<input type="text" name="name" value="{{ engagement.name }}" required></label>
+    <label>Description<textarea name="description" rows="2">{{ engagement.description }}</textarea></label>
+    <div class="grid-4">
+      <label>Status
+        <select name="status">
+          {% for s in statuses %}<option value="{{ s.value }}" {% if s == engagement.status %}selected{% endif %}>{{ s.value | replace('_',' ') }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Owner
+        <select name="owner_id">
+          <option value="">—</option>
+          {% for s in staff %}<option value="{{ s.id }}" {% if s.id == engagement.owner_id %}selected{% endif %}>{{ s.display_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Start<input type="date" name="start_date" value="{{ engagement.start_date or '' }}"></label>
+      <label>End<input type="date" name="end_date" value="{{ engagement.end_date or '' }}"></label>
+    </div>
+    <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Tasks ({{ engagement.tasks|length }})</h3>
+  <p class="meta">Tasks appear as rows on the timesheet grid for any consultant assigned to this engagement.</p>
+  <ul class="task-list">
+    {% for t in engagement.tasks %}
+    <li class="task-row {% if not t.is_active %}is-inactive{% endif %}">
+      <span class="task-name">{{ t.name }}</span>
+      <form method="post" action="/settings/clients/{{ client.id }}/engagements/{{ engagement.id }}/tasks/{{ t.id }}/toggle" class="inline-form">
+        <button type="submit" class="secondary small">{% if t.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+      </form>
+    </li>
+    {% else %}
+    <li class="meta">No tasks yet.</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/settings/clients/{{ client.id }}/engagements/{{ engagement.id }}/tasks/new" class="crud-form inline">
+    <label>New task<input type="text" name="name" required placeholder="e.g. Stakeholder workshops"></label>
+    <div class="form-actions"><button type="submit" class="primary">Add task</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Assigned consultants ({{ assigned_ids|length }})</h3>
+  <p class="meta">Tick everyone allowed to log time against this engagement. Click Save assignments.</p>
+  <form method="post" action="/settings/clients/{{ client.id }}/engagements/{{ engagement.id }}/assign">
+    <div class="check-grid">
+      {% for s in staff %}
+        <label class="check">
+          <input type="checkbox" name="assigned" value="{{ s.id }}" {% if s.id in assigned_ids %}checked{% endif %}>
+          {{ s.display_name }} <span class="meta">· {{ s.role.value }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="form-actions"><button type="submit" class="primary">Save assignments</button></div>
+  </form>
+</section>
+{% endblock %}
