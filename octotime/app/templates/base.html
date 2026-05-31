@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}OctoTime{% endblock %} · OctoTime</title>
+  <link rel="stylesheet" href="/static/styles.css?v=0.1.0">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <a href="/timesheet" class="brand-link">
+      <span class="brand-mark">OctoTime</span>
+      <span class="brand-sub">by Third Octopus</span>
+    </a>
+  </div>
+
+  {% if current_user %}
+  <nav class="nav">
+    <a href="/timesheet" class="nav-item">Timesheet</a>
+    <a href="/approvals" class="nav-item">Approvals</a>
+    <a href="/reports"   class="nav-item">Reports</a>
+    <a href="/settings"  class="nav-item">Settings</a>
+  </nav>
+
+  <div class="user-pill">
+    <span class="user-name">{{ current_user.display_name }}</span>
+    <span class="user-role">{{ current_user.role.value }}</span>
+    <form method="post" action="/logout" class="logout-form">
+      <button type="submit" class="logout-btn" title="Sign out">↩</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+
+<main class="content">
+  {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  <span>© 2026 Third Octopus · OctoTime v0.1</span>
+  <span class="tagline">Modern Cloud · Trusted Security · Managed Outcomes</span>
+</footer>
+
+</body>
+</html>

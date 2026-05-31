@@ -1,0 +1,65 @@
+# OctoTime Docker Compose stack
+# Co-hosts on the hrms-erp droplet alongside HRMS and OctoAssist.
+# Exposed on TCP/8089 (next free port after 8088 used by OctoAssist).
+name: octotime
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: octotime-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: octotime
+      POSTGRES_USER: octotime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U octotime -d octotime"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - octotime-network
+
+  app:
+    image: octotime-server:latest
+    container_name: octotime-app
+    restart: unless-stopped
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      OCTOTIME_DATABASE_URL: postgresql+psycopg://octotime:${POSTGRES_PASSWORD}@octotime-postgres:5432/octotime
+      OCTOTIME_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@thirdoctopus.local}
+      OCTOTIME_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OCTOTIME_SESSION_SECRET: ${SESSION_SECRET}
+      OCTOTIME_TENANT_NAME: ${TENANT_NAME:-Third Octopus}
+      OCTOTIME_BASE_URL: ${BASE_URL:-http://localhost:8089}
+    ports:
+      - "8089:8080"
+    networks:
+      - octotime-network
+      - hrms-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8080/health', timeout=3); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  octotime-network:
+    driver: bridge
+  hrms-network:
+    external: true
+    name: hrms-erp_hrms-network
+
+volumes:
+  postgres_data:
+    driver: local

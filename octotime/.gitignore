@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Docker — generated secrets, never commit
+deploy/docker/.env
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

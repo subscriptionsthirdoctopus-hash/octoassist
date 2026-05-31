@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ title }}</h1>
+    <p class="meta">{{ subtitle or "Coming in the next iteration." }}</p>
+  </div>
+</section>
+<div class="card">
+  <h3>What lands here</h3>
+  <p>{{ body }}</p>
+  <p class="meta">See the OctoTime Product Feature Specification for the full scope.</p>
+</div>
+{% endblock %}
