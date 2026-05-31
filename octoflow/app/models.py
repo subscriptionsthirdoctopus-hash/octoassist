@@ -1,4 +1,4 @@
-"""Phase 1 data model for OctoTime.
+"""Phase 1 data model for OctoFlow.
 
 The model is intentionally tight: just enough to support the 43 MVP
 features (capture, project structure, approvals, users, basic reporting).
@@ -299,3 +299,102 @@ class AuditLog(Base):
                                                     doc="Free-form, e.g. timesheet:123")
     detail:      Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+# ═══════════════════════════════ Project Management ═══════════════════════════
+
+class StageStatus(str, enum.Enum):
+    not_started = "not_started"
+    in_progress = "in_progress"
+    completed   = "completed"
+    skipped     = "skipped"
+
+
+class MilestoneStatus(str, enum.Enum):
+    planned     = "planned"
+    in_progress = "in_progress"
+    met         = "met"
+    missed      = "missed"
+
+
+class DeliverableStatus(str, enum.Enum):
+    planned     = "planned"
+    in_progress = "in_progress"
+    delivered   = "delivered"
+    accepted    = "accepted"
+
+
+class RagStatus(str, enum.Enum):
+    green = "green"
+    amber = "amber"
+    red   = "red"
+
+
+class EngagementStage(Base):
+    """Stages a project moves through (Proposal → Discovery → Build → Test → Close).
+    Ordered list per engagement; each stage tracks its own status + dates."""
+    __tablename__ = "engagement_stages"
+
+    id:            Mapped[int] = mapped_column(Integer, primary_key=True)
+    engagement_id: Mapped[int] = mapped_column(ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False)
+    name:          Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order:    Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status:        Mapped[StageStatus] = mapped_column(Enum(StageStatus), nullable=False, default=StageStatus.not_started)
+    start_date:    Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date:      Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    engagement:    Mapped["Engagement"] = relationship()
+
+
+class Milestone(Base):
+    """Date-bound checkpoints — independent of stages."""
+    __tablename__ = "milestones"
+
+    id:            Mapped[int] = mapped_column(Integer, primary_key=True)
+    engagement_id: Mapped[int] = mapped_column(ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False)
+    name:          Mapped[str] = mapped_column(String(160), nullable=False)
+    due_date:      Mapped[date] = mapped_column(Date, nullable=False)
+    status:        Mapped[MilestoneStatus] = mapped_column(Enum(MilestoneStatus), nullable=False, default=MilestoneStatus.planned)
+    met_at:        Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes:         Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    engagement:    Mapped["Engagement"] = relationship()
+
+
+class StatusUpdate(Base):
+    """Weekly project status — RAG + summary + blockers + next week."""
+    __tablename__ = "status_updates"
+    __table_args__ = (Index("ix_status_eng_period", "engagement_id", "period_start"),)
+
+    id:            Mapped[int] = mapped_column(Integer, primary_key=True)
+    engagement_id: Mapped[int] = mapped_column(ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False)
+    author_id:     Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    period_start:  Mapped[date] = mapped_column(Date, nullable=False, doc="Monday of the week being reported")
+    rag:           Mapped[RagStatus] = mapped_column(Enum(RagStatus), nullable=False, default=RagStatus.green)
+    summary:       Mapped[str] = mapped_column(Text, nullable=False, default="")
+    blockers:      Mapped[str] = mapped_column(Text, nullable=False, default="")
+    next_week:     Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    engagement:    Mapped["Engagement"] = relationship()
+    author:        Mapped["User"] = relationship()
+
+
+class Deliverable(Base):
+    """Things the engagement produces — a document, code drop, sign-off, etc."""
+    __tablename__ = "deliverables"
+
+    id:            Mapped[int] = mapped_column(Integer, primary_key=True)
+    engagement_id: Mapped[int] = mapped_column(ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False)
+    name:          Mapped[str] = mapped_column(String(200), nullable=False)
+    description:   Mapped[str] = mapped_column(Text, nullable=False, default="")
+    due_date:      Mapped[date | None] = mapped_column(Date, nullable=True)
+    status:        Mapped[DeliverableStatus] = mapped_column(Enum(DeliverableStatus), nullable=False, default=DeliverableStatus.planned)
+    delivered_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes:         Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    engagement:    Mapped["Engagement"] = relationship()

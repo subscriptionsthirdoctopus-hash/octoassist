@@ -1,15 +1,15 @@
 """Runtime configuration, sourced from environment variables.
 
-Each var is prefixed with OCTOTIME_ so it cannot collide with HRMS or
+Each var is prefixed with OCTOFLOW_ so it cannot collide with HRMS or
 OctoAssist on the same shared droplet.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="OCTOTIME_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="OCTOFLOW_", env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://octotime:octotime@localhost:5432/octotime"
+    database_url: str = "postgresql+psycopg://octoflow:octoflow@localhost:5432/octoflow"
 
     # Bootstrap admin — created on first boot if no users exist
     admin_email:    str = "admin@thirdoctopus.local"

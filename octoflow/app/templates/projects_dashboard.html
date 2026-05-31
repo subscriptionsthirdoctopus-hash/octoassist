@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Projects</h1>
+    <p class="meta">PMO dashboard — every engagement, RAG status, current stage, milestone progress, hours logged.</p>
+  </div>
+</section>
+
+<div class="filter-chips">
+  <a href="/projects"             class="chip {% if active_filter == 'all'     %}is-active{% endif %}">All <span class="chip-count">{{ counts.all }}</span></a>
+  <a href="/projects?status=active"  class="chip {% if active_filter == 'active'  %}is-active{% endif %}">Active <span class="chip-count">{{ counts.active }}</span></a>
+  <a href="/projects?status=on_hold" class="chip {% if active_filter == 'on_hold' %}is-active{% endif %}">On hold <span class="chip-count">{{ counts.on_hold }}</span></a>
+  <a href="/projects?status=closed"  class="chip {% if active_filter == 'closed'  %}is-active{% endif %}">Closed <span class="chip-count">{{ counts.closed }}</span></a>
+</div>
+
+{% if rows %}
+<table class="data projects-table">
+  <thead>
+    <tr>
+      <th>Project</th>
+      <th>Client</th>
+      <th>Owner</th>
+      <th>Current stage</th>
+      <th>Milestones</th>
+      <th>Hours</th>
+      <th>RAG</th>
+      <th>Last update</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><a href="/projects/{{ r.eng.id }}" class="link-strong">{{ r.eng.name }}</a><div class="meta-mono">{{ r.eng.code }}</div></td>
+      <td>{{ r.eng.client.name }}</td>
+      <td>{{ r.eng.owner.display_name if r.eng.owner else "—" }}</td>
+      <td>{% if r.current_stage %}<span class="stage-chip stage-{{ r.current_stage.status.value }}">{{ r.current_stage.name }}</span>{% else %}—{% endif %}</td>
+      <td>
+        {% if r.ms_total %}
+          <div class="progress-shell" title="{{ r.ms_met }} of {{ r.ms_total }} met">
+            <div class="progress-fill" style="width: {{ r.ms_pct }}%"></div>
+          </div>
+          <span class="meta-mono">{{ r.ms_met }}/{{ r.ms_total }} · {{ r.ms_pct }}%</span>
+        {% else %}<span class="meta">—</span>{% endif %}
+      </td>
+      <td><span class="meta-mono">{{ '%.1f' % r.hours }}h</span></td>
+      <td>
+        {% if r.rag == 'none' %}
+          <span class="rag-dot rag-none" title="No status update"></span>
+        {% else %}
+          <span class="rag-dot rag-{{ r.rag }}" title="{{ r.rag | capitalize }}"></span>
+        {% endif %}
+      </td>
+      <td>{% if r.rag_age_days is not none %}<span class="meta">{{ r.rag_age_days }}d ago</span>{% else %}<span class="meta">—</span>{% endif %}</td>
+      <td><span class="status-pill status-{{ 'approved' if r.eng.status.value == 'active' else ('draft' if r.eng.status.value == 'on_hold' else 'rejected') }}">{{ r.eng.status.value | replace('_',' ') }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card"><p class="meta">No engagements yet. Create them in <a href="/settings/clients" class="weeklink">Settings → Clients</a>.</p></div>
+{% endif %}
+{% endblock %}

@@ -1,7 +1,7 @@
 [project]
-name = "octotime"
+name = "octoflow"
 version = "0.1.0"
-description = "OctoTime — Time, Timesheet & Time-to-Bill platform for professional services"
+description = "OctoFlow — Time, Timesheet & Time-to-Bill platform for professional services"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi[standard]>=0.115",

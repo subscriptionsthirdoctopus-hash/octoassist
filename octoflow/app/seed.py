@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .models import (
     Tenant, User, UserRole, Activity, TimesheetPeriod, Client, Engagement,
-    EngagementTask, Assignment,
+    EngagementTask, Assignment, EngagementStage, StageStatus,
 )
 from .security import hash_password
 
-log = logging.getLogger("octotime.seed")
+log = logging.getLogger("octoflow.seed")
 
 
 def _monday_of(d: date) -> date:
@@ -100,5 +100,24 @@ def run(db: Session) -> None:
                 db.add(EngagementTask(engagement_id=eng.id, name="Delivery", sort_order=1))
                 db.add(EngagementTask(engagement_id=eng.id, name="Review",   sort_order=2))
                 db.add(Assignment(user_id=admin.id, engagement_id=eng.id))
+                # PM default stages so the project view is non-empty on first open
+                for i, sname in enumerate(["Discovery", "Design", "Build", "Test", "Close"], 1):
+                    db.add(EngagementStage(engagement_id=eng.id, name=sname,
+                                           sort_order=i, status=StageStatus.not_started))
         db.commit()
-        log.info("Seeded sample clients + engagements + tasks")
+        log.info("Seeded sample clients + engagements + tasks + stages")
+
+    # Backfill: every engagement (existing or new) should have a stage set.
+    # Run on every boot so older engagements created before stages existed
+    # also pick up the defaults.
+    stageless = (db.query(Engagement)
+                   .outerjoin(EngagementStage, EngagementStage.engagement_id == Engagement.id)
+                   .filter(Engagement.tenant_id == tenant.id, EngagementStage.id.is_(None))
+                   .all())
+    if stageless:
+        for eng in stageless:
+            for i, sname in enumerate(["Discovery", "Design", "Build", "Test", "Close"], 1):
+                db.add(EngagementStage(engagement_id=eng.id, name=sname,
+                                       sort_order=i, status=StageStatus.not_started))
+        db.commit()
+        log.info("Backfilled default stages for %d engagement(s)", len(stageless))

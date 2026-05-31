@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}{{ engagement.name }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ engagement.name }}</h1>
+    <p class="meta">
+      <a href="/projects" class="weeklink">← All projects</a>
+      · {{ client.name }}
+      · code <code class="code-pill">{{ engagement.code }}</code>
+      · owner {{ engagement.owner.display_name if engagement.owner else "—" }}
+      · <a href="/settings/clients/{{ client.id }}/engagements/{{ engagement.id }}" class="weeklink">admin →</a>
+    </p>
+  </div>
+  <div class="page-head-right">
+    <span class="status-pill status-{{ 'approved' if engagement.status.value == 'active' else ('draft' if engagement.status.value == 'on_hold' else 'rejected') }}">{{ engagement.status.value | replace('_',' ') }}</span>
+  </div>
+</section>
+
+<!-- Summary KPI row -->
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Hours logged</div><div class="kpi-val">{{ '%.1f' % hours }}</div><div class="kpi-sub">across all consultants</div></div>
+  <div class="kpi"><div class="kpi-label">Milestones met</div><div class="kpi-val">{{ ms_met }} / {{ milestones|length }}</div><div class="kpi-sub">{{ ms_pct }}% complete</div></div>
+  <div class="kpi"><div class="kpi-label">Stages</div><div class="kpi-val">{{ stages|length }}</div><div class="kpi-sub">{{ stages | selectattr('status.value','equalto','completed') | list | length }} completed</div></div>
+  <div class="kpi"><div class="kpi-label">Deliverables</div><div class="kpi-val">{{ deliverables|length }}</div><div class="kpi-sub">{{ deliverables | selectattr('status.value','in',['delivered','accepted']) | list | length }} shipped</div></div>
+</div>
+
+<!-- ─── Stages timeline ─── -->
+<section class="card">
+  <h3>Stages</h3>
+  <p class="meta">Where the project is. Click any stage to edit its status + dates.</p>
+  <ol class="stages">
+    {% for s in stages %}
+    <li class="stage-item stage-{{ s.status.value }}">
+      <span class="stage-num">{{ s.sort_order }}</span>
+      <div class="stage-body">
+        <details class="inline-edit">
+          <summary><strong>{{ s.name }}</strong> <span class="stage-chip stage-{{ s.status.value }}">{{ s.status.value | replace('_',' ') }}</span> {% if s.start_date or s.end_date %}<span class="meta">{{ s.start_date or '?' }} → {{ s.end_date or '?' }}</span>{% endif %}</summary>
+          <form method="post" action="/projects/{{ engagement.id }}/stages/{{ s.id }}/edit" class="crud-form inline">
+            <label>Name<input type="text" name="name" value="{{ s.name }}" required></label>
+            <div class="grid-3">
+              <label>Status
+                <select name="status">{% for st in stage_states %}<option value="{{ st.value }}" {% if st == s.status %}selected{% endif %}>{{ st.value | replace('_',' ') }}</option>{% endfor %}</select>
+              </label>
+              <label>Start<input type="date" name="start_date" value="{{ s.start_date or '' }}"></label>
+              <label>End<input type="date" name="end_date" value="{{ s.end_date or '' }}"></label>
+            </div>
+            <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+          </form>
+        </details>
+      </div>
+    </li>
+    {% else %}
+    <li class="meta">No stages yet — add one below.</li>
+    {% endfor %}
+  </ol>
+  <form method="post" action="/projects/{{ engagement.id }}/stages/new" class="crud-form inline">
+    <label>Add stage<input type="text" name="name" placeholder="e.g. UAT" required></label>
+    <div class="form-actions"><button type="submit" class="primary">+ Add stage</button></div>
+  </form>
+</section>
+
+<!-- ─── Milestones ─── -->
+<section class="card">
+  <h3>Milestones ({{ milestones|length }} · {{ ms_met }} met)</h3>
+  {% if milestones %}
+  <table class="data">
+    <thead><tr><th>Due</th><th>Milestone</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for m in milestones %}
+      <tr {% if m.status.value == 'missed' %}class="row-warn"{% endif %}>
+        <td><span class="meta-mono {% if m.due_date < today and m.status.value not in ['met'] %}text-red{% endif %}">{{ m.due_date }}</span><div class="meta">{{ m.due_date.strftime('%a') }}</div></td>
+        <td><strong>{{ m.name }}</strong></td>
+        <td><span class="status-pill status-{{ 'approved' if m.status.value == 'met' else ('rejected' if m.status.value == 'missed' else ('submitted' if m.status.value == 'in_progress' else 'draft')) }}">{{ m.status.value | replace('_',' ') }}</span></td>
+        <td>{{ m.notes or '—' }}</td>
+        <td><details class="inline-edit"><summary class="link-summary">Edit</summary>
+          <form method="post" action="/projects/{{ engagement.id }}/milestones/{{ m.id }}/edit" class="crud-form inline">
+            <div class="grid-2">
+              <label>Name<input type="text" name="name" value="{{ m.name }}"></label>
+              <label>Due date<input type="date" name="due_date" value="{{ m.due_date }}"></label>
+            </div>
+            <label>Status
+              <select name="status">{% for st in milestone_states %}<option value="{{ st.value }}" {% if st == m.status %}selected{% endif %}>{{ st.value | replace('_',' ') }}</option>{% endfor %}</select>
+            </label>
+            <label>Notes<textarea name="notes" rows="2">{{ m.notes }}</textarea></label>
+            <div class="form-actions">
+              <button type="submit" class="primary">Save</button>
+              <button type="submit" form="del-ms-{{ m.id }}" class="secondary small">Delete</button>
+            </div>
+          </form>
+          <form id="del-ms-{{ m.id }}" method="post" action="/projects/{{ engagement.id }}/milestones/{{ m.id }}/delete"
+                onsubmit="return confirm('Delete milestone &quot;{{ m.name | e }}&quot;?');"></form>
+        </details></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <details class="card" {% if milestones|length == 0 %}open{% endif %} style="margin-top: 12px;">
+    <summary>➕ Add milestone</summary>
+    <form method="post" action="/projects/{{ engagement.id }}/milestones/new" class="crud-form">
+      <div class="grid-2">
+        <label>Name<input type="text" name="name" required placeholder="e.g. Discovery report sign-off"></label>
+        <label>Due date<input type="date" name="due_date" required></label>
+      </div>
+      <label>Notes<textarea name="notes" rows="2"></textarea></label>
+      <div class="form-actions"><button type="submit" class="primary">Add</button></div>
+    </form>
+  </details>
+</section>
+
+<!-- ─── Weekly status updates ─── -->
+<section class="card">
+  <h3>Weekly status updates ({{ statuses|length }})</h3>
+  <details class="card" {% if not statuses %}open{% endif %} style="margin-bottom: 12px;">
+    <summary>➕ Post a new status</summary>
+    <form method="post" action="/projects/{{ engagement.id }}/status/new" class="crud-form">
+      <div class="grid-2">
+        <label>Week of (Monday)<input type="date" name="period_start" value="{{ monday }}"></label>
+        <label>RAG
+          <select name="rag">{% for r in rag_choices %}<option value="{{ r.value }}" {% if r.value == 'green' %}selected{% endif %}>{{ r.value | capitalize }}</option>{% endfor %}</select>
+        </label>
+      </div>
+      <label>Summary (what happened this week)<textarea name="summary" rows="3"></textarea></label>
+      <label>Blockers / risks<textarea name="blockers" rows="2"></textarea></label>
+      <label>Next week<textarea name="next_week" rows="2"></textarea></label>
+      <div class="form-actions"><button type="submit" class="primary">Post status</button></div>
+    </form>
+  </details>
+
+  {% for s in statuses %}
+  <article class="status-card status-rag-{{ s.rag.value }}">
+    <header class="status-head">
+      <span class="rag-dot rag-{{ s.rag.value }}"></span>
+      <strong>Week of {{ s.period_start }}</strong>
+      <span class="meta">· by {{ s.author.display_name }} · posted {{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+    </header>
+    {% if s.summary %}<p><strong>Summary:</strong> {{ s.summary }}</p>{% endif %}
+    {% if s.blockers %}<p><strong>Blockers:</strong> {{ s.blockers }}</p>{% endif %}
+    {% if s.next_week %}<p><strong>Next week:</strong> {{ s.next_week }}</p>{% endif %}
+  </article>
+  {% endfor %}
+</section>
+
+<!-- ─── Deliverables ─── -->
+<section class="card">
+  <h3>Deliverables ({{ deliverables|length }})</h3>
+  {% if deliverables %}
+  <table class="data">
+    <thead><tr><th>Name</th><th>Due</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for d in deliverables %}
+      <tr>
+        <td><strong>{{ d.name }}</strong>{% if d.description %}<div class="meta">{{ d.description }}</div>{% endif %}</td>
+        <td>{% if d.due_date %}<span class="meta-mono">{{ d.due_date }}</span>{% else %}—{% endif %}</td>
+        <td><span class="status-pill status-{{ 'approved' if d.status.value == 'accepted' else ('submitted' if d.status.value == 'delivered' else ('draft' if d.status.value == 'planned' else 'rejected')) }}">{{ d.status.value | replace('_',' ') }}</span></td>
+        <td>{{ d.notes or '—' }}</td>
+        <td><details class="inline-edit"><summary class="link-summary">Edit</summary>
+          <form method="post" action="/projects/{{ engagement.id }}/deliverables/{{ d.id }}/edit" class="crud-form inline">
+            <label>Name<input type="text" name="name" value="{{ d.name }}"></label>
+            <label>Description<textarea name="description" rows="2">{{ d.description }}</textarea></label>
+            <div class="grid-2">
+              <label>Due date<input type="date" name="due_date" value="{{ d.due_date or '' }}"></label>
+              <label>Status
+                <select name="status">{% for st in deliverable_states %}<option value="{{ st.value }}" {% if st == d.status %}selected{% endif %}>{{ st.value | replace('_',' ') }}</option>{% endfor %}</select>
+              </label>
+            </div>
+            <label>Notes<textarea name="notes" rows="2">{{ d.notes }}</textarea></label>
+            <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+          </form>
+        </details></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <details class="card" {% if not deliverables %}open{% endif %} style="margin-top: 12px;">
+    <summary>➕ Add deliverable</summary>
+    <form method="post" action="/projects/{{ engagement.id }}/deliverables/new" class="crud-form">
+      <div class="grid-2">
+        <label>Name<input type="text" name="name" required placeholder="e.g. CSCRF gap report"></label>
+        <label>Due date<input type="date" name="due_date"></label>
+      </div>
+      <label>Description<textarea name="description" rows="2"></textarea></label>
+      <div class="form-actions"><button type="submit" class="primary">Add deliverable</button></div>
+    </form>
+  </details>
+</section>
+{% endblock %}

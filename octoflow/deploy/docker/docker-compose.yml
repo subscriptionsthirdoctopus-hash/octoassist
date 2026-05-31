@@ -1,32 +1,32 @@
-# OctoTime Docker Compose stack
+# OctoFlow Docker Compose stack
 # Co-hosts on the hrms-erp droplet alongside HRMS and OctoAssist.
-# Exposed on TCP/8089 (next free port after 8088 used by OctoAssist).
-name: octotime
+# Exposed on TCP/8090 (next free port after 8088 used by OctoAssist).
+name: octoflow
 
 services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: octotime-postgres
+    container_name: octoflow-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: octotime
-      POSTGRES_USER: octotime
+      POSTGRES_DB: octoflow
+      POSTGRES_USER: octoflow
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U octotime -d octotime"]
+      test: ["CMD-SHELL", "pg_isready -U octoflow -d octoflow"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
     networks:
-      - octotime-network
+      - octoflow-network
 
   app:
-    image: octotime-server:latest
-    container_name: octotime-app
+    image: octoflow-server:latest
+    container_name: octoflow-app
     restart: unless-stopped
     build:
       context: ../../
@@ -35,16 +35,16 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      OCTOTIME_DATABASE_URL: postgresql+psycopg://octotime:${POSTGRES_PASSWORD}@octotime-postgres:5432/octotime
-      OCTOTIME_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@thirdoctopus.local}
-      OCTOTIME_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      OCTOTIME_SESSION_SECRET: ${SESSION_SECRET}
-      OCTOTIME_TENANT_NAME: ${TENANT_NAME:-Third Octopus}
-      OCTOTIME_BASE_URL: ${BASE_URL:-http://localhost:8089}
+      OCTOFLOW_DATABASE_URL: postgresql+psycopg://octoflow:${POSTGRES_PASSWORD}@octoflow-postgres:5432/octoflow
+      OCTOFLOW_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@thirdoctopus.local}
+      OCTOFLOW_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OCTOFLOW_SESSION_SECRET: ${SESSION_SECRET}
+      OCTOFLOW_TENANT_NAME: ${TENANT_NAME:-Third Octopus}
+      OCTOFLOW_BASE_URL: ${BASE_URL:-http://localhost:8090}
     ports:
-      - "8089:8080"
+      - "8090:8080"
     networks:
-      - octotime-network
+      - octoflow-network
       - hrms-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8080/health', timeout=3); sys.exit(0)"]
@@ -54,7 +54,7 @@ services:
       start_period: 30s
 
 networks:
-  octotime-network:
+  octoflow-network:
     driver: bridge
   hrms-network:
     external: true

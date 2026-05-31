@@ -1,4 +1,4 @@
-"""OctoTime — FastAPI entry point. Mirrors OctoAssist's wiring."""
+"""OctoFlow — FastAPI entry point. Mirrors OctoAssist's wiring."""
 import logging
 from pathlib import Path
 
@@ -15,20 +15,21 @@ from .web.views_login import router as login_router
 from .web.views_timesheet import router as timesheet_router
 from .web.views_stub import router as stub_router
 from .web.views_settings import router as settings_router
+from .web.views_projects import router as projects_router
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
-log = logging.getLogger("octotime")
+log = logging.getLogger("octoflow")
 
-app = FastAPI(title="OctoTime", version="0.1.0")
+app = FastAPI(title="OctoFlow", version="0.1.0")
 
 # Session middleware (signed, HttpOnly, SameSite=Lax)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
-    session_cookie="octotime_session",
+    session_cookie="octoflow_session",
     same_site="lax",
     https_only=False,   # behind nginx/TLS in prod; flip when going public
 )
@@ -40,7 +41,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Routes
 app.include_router(login_router)
 app.include_router(timesheet_router)
-app.include_router(settings_router)  # real settings — replaces the /settings stub
+app.include_router(projects_router)  # /projects PM dashboard + per-project detail
+app.include_router(settings_router)  # /settings + sub-pages
 app.include_router(stub_router)      # stubs for /approvals, /reports
 
 
@@ -52,7 +54,7 @@ async def _redirect_to_login(request: Request, exc: NotAuthenticated):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "octotime", "version": app.version}
+    return {"status": "ok", "service": "octoflow", "version": app.version}
 
 
 @app.on_event("startup")
@@ -63,5 +65,5 @@ def _startup() -> None:
         seed.run(db)
     finally:
         db.close()
-    log.info("OctoTime startup complete · tenant=%s · base_url=%s",
+    log.info("OctoFlow startup complete · tenant=%s · base_url=%s",
              settings.tenant_name, settings.base_url)
