@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Reports</h1>
+    <p class="meta">Phase 1 reports — utilisation, hours, compliance. Every report exports to CSV.</p>
+  </div>
+</section>
+
+<div class="tile-grid">
+  <a href="/reports/my-history" class="tile">
+    <span class="tile-icon">📒</span>
+    <p class="tile-title">My timesheet history</p>
+    <p class="tile-sub">Your last 52 weekly sheets with status, hours and approver.</p>
+    <p class="tile-meta">TS-132 · personal</p>
+  </a>
+
+  <a href="/reports/compliance" class="tile">
+    <span class="tile-icon">✅</span>
+    <p class="tile-title">Submission compliance</p>
+    <p class="tile-sub">Who has and has not submitted for the current period — by user, with practice and manager.</p>
+    <p class="tile-meta">TS-133 · this period</p>
+  </a>
+
+  <a href="/reports/hours-by-project" class="tile">
+    <span class="tile-icon">📁</span>
+    <p class="tile-title">Hours by project</p>
+    <p class="tile-sub">Total hours rolled up per engagement, with billable split and billable %.</p>
+    <p class="tile-meta">TS-134 · windowed</p>
+  </a>
+
+  <a href="/reports/hours-by-client" class="tile">
+    <span class="tile-icon">🏢</span>
+    <p class="tile-title">Hours by client</p>
+    <p class="tile-sub">Total hours rolled up per client across all their engagements.</p>
+    <p class="tile-meta">TS-135 · windowed</p>
+  </a>
+
+  <a href="/reports/billable-split" class="tile">
+    <span class="tile-icon">💸</span>
+    <p class="tile-title">Billable vs non-billable</p>
+    <p class="tile-sub">Per-person split of billable / non-billable hours over the window.</p>
+    <p class="tile-meta">TS-136 · windowed</p>
+  </a>
+
+  <a href="/reports/utilisation" class="tile">
+    <span class="tile-icon">📈</span>
+    <p class="tile-title">Utilisation</p>
+    <p class="tile-sub">Billable hours ÷ available business hours per consultant. Holidays excluded automatically.</p>
+    <p class="tile-meta">TS-137 · windowed</p>
+  </a>
+</div>
+{% endblock %}

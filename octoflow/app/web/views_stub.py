@@ -26,12 +26,7 @@ def _stub(request: Request, user: User, title: str, subtitle: str, body: str):
 # /approvals is now served by views_approvals (real manager inbox).
 
 
-@router.get("/reports", response_class=HTMLResponse)
-def reports(request: Request, user: User = Depends(require_user)):
-    return _stub(request, user,
-        title="Reports",
-        subtitle="Utilisation, billable vs non-billable, hours by client/project",
-        body="The seven Phase 1 reports (TS-132 to TS-138): my timesheet history, submission compliance, hours by project, hours by client, billable split, basic utilisation, Excel/CSV export.")
+# /reports is now served by views_reports (real reports cluster).
 
 
 # /settings is now served by views_settings (real admin surface).

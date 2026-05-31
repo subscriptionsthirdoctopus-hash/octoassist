@@ -1,0 +1,13 @@
+{# Shared filter bar — included by every windowed report.  Caller sets
+   `days` (current window) and `valid_days` (tuple of options).  Caller
+   also provides `csv_href` for the export button. #}
+<div class="filter-chips">
+  {% for d in valid_days %}
+    <a href="?days={{ d }}" class="chip {% if d == days %}is-active{% endif %}">
+      Last {{ d }} days
+    </a>
+  {% endfor %}
+  <a href="{{ csv_href }}" class="chip" style="margin-left:auto; border-color: var(--teal); color: var(--teal);">
+    ↓ Download CSV
+  </a>
+</div>

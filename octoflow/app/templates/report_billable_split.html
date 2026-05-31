@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Billable split · Reports{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Billable vs non-billable</h1>
+    <p class="meta"><a href="/reports" class="weeklink">← Reports</a> · last {{ days }} days · per consultant</p>
+  </div>
+</section>
+
+{% with csv_href = "/reports/billable-split?days=" ~ days ~ "&format=csv" %}
+{% include "_report_filters.html" %}
+{% endwith %}
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>Consultant</th><th>Practice</th><th style="text-align:right;">Total</th><th style="text-align:right;">Billable</th><th style="text-align:right;">Non-billable</th><th style="text-align:right;">Billable %</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><strong>{{ r.user }}</strong><div class="meta">{{ r.email }}</div></td>
+      <td>{{ r.practice or '—' }}</td>
+      <td style="text-align:right;"><span class="meta-mono"><strong>{{ '%.2f' % r.total_hours }}</strong></span></td>
+      <td style="text-align:right;"><span class="meta-mono" style="color: var(--green);">{{ '%.2f' % r.billable_hours }}</span></td>
+      <td style="text-align:right;"><span class="meta-mono" style="color: var(--slate);">{{ '%.2f' % r.non_billable }}</span></td>
+      <td style="text-align:right;">
+        <div class="progress-shell" style="display:inline-block;width:80px;margin-right:6px;vertical-align:middle;">
+          <div class="progress-fill" style="width: {{ r.billable_pct }}%"></div>
+        </div>
+        <span class="meta-mono">{{ '%.1f' % r.billable_pct }}%</span>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card"><p class="meta">No time logged in the last {{ days }} days.</p></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}My timesheet history · Reports{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>My timesheet history</h1>
+    <p class="meta"><a href="/reports" class="weeklink">← Reports</a> · last {{ rows|length }} sheet{{ "" if rows|length == 1 else "s" }}</p>
+  </div>
+</section>
+<div class="filter-chips">
+  <a href="/reports/my-history?format=csv" class="chip" style="margin-left:auto; border-color: var(--teal); color: var(--teal);">↓ Download CSV</a>
+</div>
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>Week</th><th>Status</th><th style="text-align:right;">Entries</th><th style="text-align:right;">Total</th><th style="text-align:right;">Billable</th><th>Submitted</th><th>Approved</th><th>Approver</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><span class="meta-mono">{{ r.period_start }} → {{ r.period_end }}</span></td>
+      <td><span class="status-pill status-{{ r.status }}">{{ r.status | capitalize }}</span></td>
+      <td style="text-align:right;"><span class="meta-mono">{{ r.entries }}</span></td>
+      <td style="text-align:right;"><span class="meta-mono"><strong>{{ '%.2f' % r.total_hours }}</strong></span></td>
+      <td style="text-align:right;"><span class="meta-mono">{{ '%.2f' % r.billable_hours }}</span></td>
+      <td><span class="meta-mono">{{ r.submitted_at or '—' }}</span></td>
+      <td><span class="meta-mono">{{ r.approved_at or '—' }}</span></td>
+      <td>{{ r.approver or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card"><p class="meta">No timesheets yet. Go log some time on the <a href="/timesheet" class="weeklink">Timesheet</a> page.</p></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Submission compliance · Reports{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Submission compliance</h1>
+    <p class="meta"><a href="/reports" class="weeklink">← Reports</a>
+      {% if period %} · week of <strong>{{ period.start_date }}</strong> → {{ period.end_date }}{% endif %}
+    </p>
+  </div>
+</section>
+
+<div class="filter-chips">
+  <a href="/reports/compliance?format=csv" class="chip" style="margin-left:auto; border-color: var(--teal); color: var(--teal);">↓ Download CSV</a>
+</div>
+
+{% if period %}
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Not started</div><div class="kpi-val" style="color: var(--red);">{{ counts.not_started }}</div><div class="kpi-sub">no draft created</div></div>
+  <div class="kpi"><div class="kpi-label">Draft</div><div class="kpi-val" style="color: var(--slate);">{{ counts.draft }}</div><div class="kpi-sub">started but not submitted</div></div>
+  <div class="kpi"><div class="kpi-label">Submitted</div><div class="kpi-val" style="color: var(--amber);">{{ counts.submitted }}</div><div class="kpi-sub">awaiting approval</div></div>
+  <div class="kpi"><div class="kpi-label">Approved</div><div class="kpi-val" style="color: var(--green);">{{ counts.approved }}</div><div class="kpi-sub">locked + closed</div></div>
+  <div class="kpi"><div class="kpi-label">Rejected</div><div class="kpi-val" style="color: var(--red);">{{ counts.rejected }}</div><div class="kpi-sub">awaiting rework</div></div>
+</div>
+
+<table class="data">
+  <thead><tr><th>Consultant</th><th>Practice</th><th>Reports to</th><th>Status</th><th style="text-align:right;">Entries</th><th style="text-align:right;">Hours</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><strong>{{ r.user }}</strong><div class="meta">{{ r.email }}</div></td>
+      <td>{{ r.practice or '—' }}</td>
+      <td>{{ r.manager or '—' }}</td>
+      <td>
+        {% if r.status == 'not_started' %}<span class="status-pill" style="background: #FEE2E2; color: var(--red);">Not started</span>
+        {% else %}<span class="status-pill status-{{ r.status }}">{{ r.status | replace('_',' ') | capitalize }}</span>{% endif %}
+      </td>
+      <td style="text-align:right;"><span class="meta-mono">{{ r.entries }}</span></td>
+      <td style="text-align:right;"><span class="meta-mono">{{ '%.2f' % r.hours }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card"><p class="meta">No timesheet periods configured yet for this tenant.</p></div>
+{% endif %}
+{% endblock %}

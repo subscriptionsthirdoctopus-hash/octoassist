@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Hours by client · Reports{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Hours by client</h1>
+    <p class="meta"><a href="/reports" class="weeklink">← Reports</a> · last {{ days }} days · {{ '%.1f' % total_hours }}h total</p>
+  </div>
+</section>
+
+{% with csv_href = "/reports/hours-by-client?days=" ~ days ~ "&format=csv" %}
+{% include "_report_filters.html" %}
+{% endwith %}
+
+{% if rows %}
+<table class="data">
+  <thead><tr><th>Code</th><th>Client</th><th style="text-align:right;">Engagements</th><th style="text-align:right;">Total</th><th style="text-align:right;">Billable</th><th style="text-align:right;">Billable %</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><code class="code-pill">{{ r.client_code }}</code></td>
+      <td><strong>{{ r.client }}</strong></td>
+      <td style="text-align:right;"><span class="meta-mono">{{ r.engagements }}</span></td>
+      <td style="text-align:right;"><span class="meta-mono"><strong>{{ '%.2f' % r.total_hours }}</strong></span></td>
+      <td style="text-align:right;"><span class="meta-mono">{{ '%.2f' % r.billable_hours }}</span></td>
+      <td style="text-align:right;">
+        <div class="progress-shell" style="display:inline-block;width:80px;margin-right:6px;vertical-align:middle;">
+          <div class="progress-fill" style="width: {{ r.billable_pct }}%"></div>
+        </div>
+        <span class="meta-mono">{{ '%.1f' % r.billable_pct }}%</span>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card"><p class="meta">No time logged in the last {{ days }} days.</p></div>
+{% endif %}
+{% endblock %}

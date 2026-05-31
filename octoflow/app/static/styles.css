@@ -626,3 +626,26 @@ button.small { padding: 4px 10px; font-size: 12px; }
   accent-color: var(--teal);
   cursor: pointer;
 }
+
+/* ─────────────────────────────── Utilisation bar (Reports) ──────────────────── */
+.util-bar {
+  position: relative;
+  width: 100%; min-width: 200px;
+  height: 22px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.util-fill {
+  height: 100%;
+  border-radius: 11px 0 0 11px;
+  transition: width 0.2s ease;
+}
+.util-label {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "SF Mono", "Consolas", monospace;
+  font-size: 12px; font-weight: 700; color: var(--navy);
+  text-shadow: 0 0 4px rgba(255,255,255,0.7);
+}
