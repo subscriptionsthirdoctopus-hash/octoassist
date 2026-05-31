@@ -1,13 +1,85 @@
-{# Shared filter bar — included by every windowed report.  Caller sets
-   `days` (current window) and `valid_days` (tuple of options).  Caller
-   also provides `csv_href` for the export button. #}
-<div class="filter-chips">
-  {% for d in valid_days %}
-    <a href="?days={{ d }}" class="chip {% if d == days %}is-active{% endif %}">
-      Last {{ d }} days
-    </a>
-  {% endfor %}
-  <a href="{{ csv_href }}" class="chip" style="margin-left:auto; border-color: var(--teal); color: var(--teal);">
-    ↓ Download CSV
-  </a>
-</div>
+{# Shared filter bar — included by every windowed report.
+   Caller passes via the _filter_context() helper:
+     · selected   — {days, start, end, client_id, user_id, effective_start/end}
+     · valid_days — tuple of preset day windows
+     · clients    — list (when show_client is True)
+     · users      — list (when show_user   is True)
+     · csv_href   — fully-built ?format=csv URL preserving all filters
+     · days_href  — closure: days_href(N) → URL with ?days=N (clears custom range)
+     · base_path  — for the custom-range form action
+     · show_client / show_user — whether to render those select dropdowns
+#}
+<section class="filter-bar">
+
+  <div class="filter-row filter-row-presets">
+    <span class="filter-label">Quick window</span>
+    {% for d in valid_days %}
+      <a href="{{ days_href(d) }}"
+         class="chip {% if d == selected.days and not selected.start and not selected.end %}is-active{% endif %}">
+        Last {{ d }} days
+      </a>
+    {% endfor %}
+    <a href="{{ csv_href }}" class="chip chip-csv">↓ Download CSV</a>
+  </div>
+
+  <form method="get" action="{{ base_path }}" class="filter-row filter-row-form">
+    <label class="filter-field">
+      <span class="filter-field-label">From</span>
+      <input type="date" name="start"
+             value="{{ selected.start.isoformat() if selected.start else selected.effective_start.isoformat() }}">
+    </label>
+    <label class="filter-field">
+      <span class="filter-field-label">To</span>
+      <input type="date" name="end"
+             value="{{ selected.end.isoformat() if selected.end else selected.effective_end.isoformat() }}">
+    </label>
+
+    {% if show_client and clients %}
+    <label class="filter-field">
+      <span class="filter-field-label">Client</span>
+      <select name="client_id">
+        <option value="">All clients</option>
+        {% for c in clients %}
+        <option value="{{ c.id }}" {% if selected.client_id == c.id %}selected{% endif %}>
+          {{ c.code }} · {{ c.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+
+    {% if show_user and users %}
+    <label class="filter-field">
+      <span class="filter-field-label">Consultant</span>
+      <select name="user_id">
+        <option value="">All consultants</option>
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if selected.user_id == u.id %}selected{% endif %}>
+          {{ u.display_name }}{% if u.practice %} · {{ u.practice }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+
+    <div class="filter-actions">
+      <button type="submit" class="button primary small">Apply</button>
+      <a href="{{ base_path }}" class="button secondary small">Reset</a>
+    </div>
+  </form>
+
+  {% if selected.start or selected.end or selected.client_id or selected.user_id %}
+  <div class="filter-summary">
+    Showing <strong>{{ selected.effective_start.strftime('%d %b %Y') }} → {{ selected.effective_end.strftime('%d %b %Y') }}</strong>
+    {% if selected.client_id %}
+      {% set _c = clients | selectattr('id', 'equalto', selected.client_id) | first %}
+      {% if _c %} · client = <strong>{{ _c.name }}</strong>{% endif %}
+    {% endif %}
+    {% if selected.user_id %}
+      {% set _u = users | selectattr('id', 'equalto', selected.user_id) | first %}
+      {% if _u %} · consultant = <strong>{{ _u.display_name }}</strong>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+</section>

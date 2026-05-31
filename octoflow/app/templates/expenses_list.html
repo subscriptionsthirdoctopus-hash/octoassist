@@ -11,6 +11,49 @@
   </div>
 </section>
 
+<section class="filter-bar">
+  <form method="get" action="/expenses" class="filter-row filter-row-form" style="border-top: 0; padding-top: 0;">
+    <label class="filter-field">
+      <span class="filter-field-label">From</span>
+      <input type="date" name="start" value="{{ filter.start.isoformat() if filter.start else '' }}">
+    </label>
+    <label class="filter-field">
+      <span class="filter-field-label">To</span>
+      <input type="date" name="end" value="{{ filter.end.isoformat() if filter.end else '' }}">
+    </label>
+    <label class="filter-field">
+      <span class="filter-field-label">Status</span>
+      <select name="status">
+        <option value="">All statuses</option>
+        {% for s in expense_statuses %}
+        <option value="{{ s }}" {% if filter.status == s %}selected{% endif %}>{{ s | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="filter-field">
+      <span class="filter-field-label">Category</span>
+      <select name="category_id">
+        <option value="">All categories</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}" {% if filter.category_id == c.id %}selected{% endif %}>{{ c.code }} · {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="filter-actions">
+      <button type="submit" class="button primary small">Filter</button>
+      {% if filter.any %}<a href="/expenses" class="button secondary small">Reset</a>{% endif %}
+    </div>
+  </form>
+  {% if filter.any %}
+  <div class="filter-summary">
+    Showing <strong>{{ rows | length }}</strong> matching expense{{ '' if rows|length == 1 else 's' }}
+    {% if filter.start %} · from <strong>{{ filter.start.strftime('%d %b %Y') }}</strong>{% endif %}
+    {% if filter.end %} · to <strong>{{ filter.end.strftime('%d %b %Y') }}</strong>{% endif %}
+    {% if filter.status %} · status = <strong>{{ filter.status | capitalize }}</strong>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
 <div class="kpi-row">
   <div class="kpi"><div class="kpi-label">Draft</div><div class="kpi-val" style="color: var(--slate);">{{ by_status.draft }}</div><div class="kpi-sub">not yet submitted</div></div>
   <div class="kpi"><div class="kpi-label">Submitted</div><div class="kpi-val" style="color: var(--amber);">{{ by_status.submitted }}</div><div class="kpi-sub">awaiting approval</div></div>

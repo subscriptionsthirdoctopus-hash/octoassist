@@ -27,19 +27,46 @@ from ..models import (
 
 # ─── Helpers ────────────────────────────────────────────────────────
 
-def _window(days: int) -> tuple[date, date]:
+def resolve_window(days: int | None = 30,
+                   start: date | None = None,
+                   end: date | None = None) -> tuple[date, date]:
+    """Pick a (start, end) range. Explicit start/end win over `days`;
+    if only one bound is given the other is filled in sensibly."""
     today = date.today()
-    return today - timedelta(days=days - 1), today
+    if start and end:
+        return start, end
+    if start and not end:
+        return start, today
+    if end and not start:
+        return end - timedelta(days=(days or 30) - 1), end
+    return today - timedelta(days=(days or 30) - 1), today
 
 
-def _entries_q(db: Session, tenant_id: int, days: int):
-    """Base query: entries × timesheet × user, scoped to one tenant + window."""
-    start, end = _window(days)
-    return (db.query(TimeEntry)
-              .join(Timesheet, Timesheet.id == TimeEntry.timesheet_id)
-              .filter(Timesheet.tenant_id == tenant_id,
-                      TimeEntry.entry_date >= start,
-                      TimeEntry.entry_date <= end))
+def _window(days: int) -> tuple[date, date]:
+    """Backwards-compatible single-arg form."""
+    return resolve_window(days=days)
+
+
+def _entries_q(db: Session, tenant_id: int, days: int | None = 30,
+               start: date | None = None, end: date | None = None,
+               client_id: int | None = None,
+               engagement_id: int | None = None,
+               user_id: int | None = None):
+    """Base query: entries × timesheet × user, scoped to one tenant +
+    window + optional client/engagement/user filter."""
+    s, e = resolve_window(days, start, end)
+    q = (db.query(TimeEntry)
+           .join(Timesheet, Timesheet.id == TimeEntry.timesheet_id)
+           .filter(Timesheet.tenant_id == tenant_id,
+                   TimeEntry.entry_date >= s,
+                   TimeEntry.entry_date <= e))
+    if client_id or engagement_id:
+        q = q.join(Engagement, Engagement.id == TimeEntry.engagement_id)
+        if client_id:     q = q.filter(Engagement.client_id == client_id)
+        if engagement_id: q = q.filter(Engagement.id == engagement_id)
+    if user_id:
+        q = q.filter(Timesheet.user_id == user_id)
+    return q
 
 
 def csv_stream(rows: Iterable[dict], columns: list[str]) -> str:
@@ -122,9 +149,16 @@ def compliance(db: Session, tenant_id: int) -> tuple[TimesheetPeriod | None, lis
 
 # ─── TS-134 · Hours by project ───────────────────────────────────────
 
-def hours_by_project(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
-    rows = (_entries_q(db, tenant_id, days)
-              .with_entities(
+def hours_by_project(db: Session, tenant_id: int, days: int = 30,
+                     start: date | None = None, end: date | None = None,
+                     client_id: int | None = None,
+                     user_id: int | None = None) -> list[dict]:
+    base = _entries_q(db, tenant_id, days, start=start, end=end,
+                      client_id=client_id, user_id=user_id)
+    # The _entries_q may already have joined Engagement (if client_id was set);
+    # to keep the SELECT below correct, always join Client and re-reference Engagement
+    # via the base query's join state. Using an outerjoin to Client is safe.
+    rows = (base.with_entities(
                   Engagement.id.label("eng_id"),
                   Engagement.code.label("eng_code"),
                   Engagement.name.label("eng_name"),
@@ -133,7 +167,7 @@ def hours_by_project(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
                   func.sum(TimeEntry.hours).label("total"),
                   func.sum(case((TimeEntry.is_billable.is_(True), TimeEntry.hours), else_=0)).label("billable"),
               )
-              .join(Engagement, Engagement.id == TimeEntry.engagement_id)
+              .join(Engagement, Engagement.id == TimeEntry.engagement_id, isouter=False)
               .join(Client, Client.id == Engagement.client_id)
               .group_by(Engagement.id, Engagement.code, Engagement.name,
                         Client.code, Client.name)
@@ -152,9 +186,13 @@ def hours_by_project(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
 
 # ─── TS-135 · Hours by client ────────────────────────────────────────
 
-def hours_by_client(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
-    rows = (_entries_q(db, tenant_id, days)
-              .with_entities(
+def hours_by_client(db: Session, tenant_id: int, days: int = 30,
+                    start: date | None = None, end: date | None = None,
+                    client_id: int | None = None,
+                    user_id: int | None = None) -> list[dict]:
+    base = _entries_q(db, tenant_id, days, start=start, end=end,
+                      client_id=client_id, user_id=user_id)
+    rows = (base.with_entities(
                   Client.id.label("client_id"),
                   Client.code.label("client_code"),
                   Client.name.label("client_name"),
@@ -162,7 +200,7 @@ def hours_by_client(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
                   func.sum(case((TimeEntry.is_billable.is_(True), TimeEntry.hours), else_=0)).label("billable"),
                   func.count(func.distinct(Engagement.id)).label("engagements"),
               )
-              .join(Engagement, Engagement.id == TimeEntry.engagement_id)
+              .join(Engagement, Engagement.id == TimeEntry.engagement_id, isouter=False)
               .join(Client, Client.id == Engagement.client_id)
               .group_by(Client.id, Client.code, Client.name)
               .order_by(func.sum(TimeEntry.hours).desc())
@@ -179,9 +217,13 @@ def hours_by_client(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
 
 # ─── TS-136 · Billable vs non-billable (per user) ────────────────────
 
-def billable_split(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
-    rows = (_entries_q(db, tenant_id, days)
-              .with_entities(
+def billable_split(db: Session, tenant_id: int, days: int = 30,
+                   start: date | None = None, end: date | None = None,
+                   client_id: int | None = None,
+                   user_id: int | None = None) -> list[dict]:
+    base = _entries_q(db, tenant_id, days, start=start, end=end,
+                      client_id=client_id, user_id=user_id)
+    rows = (base.with_entities(
                   User.id.label("uid"),
                   User.display_name.label("name"),
                   User.email.label("email"),
@@ -207,28 +249,27 @@ def billable_split(db: Session, tenant_id: int, days: int = 30) -> list[dict]:
 # ─── TS-137 · Basic utilisation ──────────────────────────────────────
 
 def utilisation(db: Session, tenant_id: int, days: int = 30,
-                daily_hours: float = 8.0) -> list[dict]:
-    """Billable hours ÷ available business hours over the window.
-
-    Available = (business_days_in_window − holidays_in_window) × daily_hours.
-    Business days = Mon–Fri. Holidays are subtracted ONCE if they fall on a
-    weekday in the window — same business-day model OctoAssist uses for SLAs.
-    """
-    start, end = _window(days)
+                daily_hours: float = 8.0,
+                start: date | None = None, end: date | None = None,
+                client_id: int | None = None,
+                user_id: int | None = None) -> list[dict]:
+    """Billable hours ÷ available business hours over the window."""
+    s, e = resolve_window(days, start, end)
     holiday_dates = {h.holiday_date for h in
                      db.query(Holiday)
                        .filter(Holiday.tenant_id == tenant_id,
-                               Holiday.holiday_date >= start,
-                               Holiday.holiday_date <= end).all()}
+                               Holiday.holiday_date >= s,
+                               Holiday.holiday_date <= e).all()}
     business_days = 0
-    d = start
-    while d <= end:
+    d = s
+    while d <= e:
         if d.weekday() < 5 and d not in holiday_dates:
             business_days += 1
         d += timedelta(days=1)
     available = business_days * daily_hours
 
-    split = billable_split(db, tenant_id, days)
+    split = billable_split(db, tenant_id, days, start=start, end=end,
+                           client_id=client_id, user_id=user_id)
     out = []
     for r in split:
         out.append({

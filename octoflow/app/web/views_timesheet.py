@@ -59,6 +59,7 @@ def grid(
 
     prev_week = (period.start_date - timedelta(days=7)).isoformat()
     next_week = (period.start_date + timedelta(days=7)).isoformat()
+    today_week_iso = ts_svc.monday_of(date.today()).isoformat()
 
     return templates.TemplateResponse(
         request=request, name="timesheet_grid.html",
@@ -71,6 +72,7 @@ def grid(
             "total_hours":   ts_svc.total_hours(sheet),
             "billable_hours":ts_svc.billable_hours(sheet),
             "prev_week": prev_week, "next_week": next_week,
+            "today_week_iso": today_week_iso,
             "is_editable": sheet.status in (TimesheetStatus.draft, TimesheetStatus.rejected),
             "TimesheetStatus": TimesheetStatus,
         },

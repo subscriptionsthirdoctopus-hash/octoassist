@@ -58,14 +58,35 @@ def _engagements(db: Session, viewer: User) -> list[Engagement]:
 
 @router.get("/expenses", response_class=HTMLResponse)
 def expenses_list(request: Request, flash: str | None = None,
+                  start: str | None = None, end: str | None = None,
+                  status: str | None = None, category_id: str | None = None,
                   user: User = Depends(require_user), db: Session = Depends(get_db)):
-    mine = (db.query(Expense)
-              .filter(Expense.user_id == user.id)
-              .order_by(Expense.status, Expense.expense_date.desc(),
-                        Expense.created_at.desc()).all())
+    # Parse filters
+    sd = ed = None
+    if start:
+        try: sd = date.fromisoformat(start)
+        except ValueError: pass
+    if end:
+        try: ed = date.fromisoformat(end)
+        except ValueError: pass
+    status_enum = None
+    if status:
+        try: status_enum = ExpenseStatus(status)
+        except ValueError: pass
+    cat_id = int(category_id) if category_id and category_id.isdigit() else None
+
+    q = db.query(Expense).filter(Expense.user_id == user.id)
+    if sd:           q = q.filter(Expense.expense_date >= sd)
+    if ed:           q = q.filter(Expense.expense_date <= ed)
+    if status_enum:  q = q.filter(Expense.status == status_enum)
+    if cat_id:       q = q.filter(Expense.category_id == cat_id)
+    mine = q.order_by(Expense.status, Expense.expense_date.desc(),
+                      Expense.created_at.desc()).all()
+
     by_status = {"draft": 0, "submitted": 0, "approved": 0, "rejected": 0, "reimbursed": 0}
     for e in mine:
         by_status[e.status.value] = by_status.get(e.status.value, 0) + 1
+
     return templates.TemplateResponse(
         request=request, name="expenses_list.html",
         context={
@@ -73,6 +94,11 @@ def expenses_list(request: Request, flash: str | None = None,
             "categories":  _categories(db, user.tenant_id),
             "engagements": _engagements(db, user),
             "today": date.today(), "flash": flash,
+            "filter": {
+                "start": sd, "end": ed, "status": status, "category_id": cat_id,
+                "any":   bool(sd or ed or status or cat_id),
+            },
+            "expense_statuses": [s.value for s in ExpenseStatus],
         },
     )
 

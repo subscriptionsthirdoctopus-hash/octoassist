@@ -8,13 +8,19 @@
     <p class="meta">
       Week of <strong>{{ period.start_date.strftime('%d %b %Y') }}</strong>
       &nbsp;→&nbsp; {{ period.end_date.strftime('%d %b %Y') }}
-      &nbsp;·&nbsp;
-      <a href="?week={{ prev_week }}" class="weeklink">← prev</a>
-      &nbsp; <a href="?week={{ next_week }}" class="weeklink">next →</a>
     </p>
   </div>
-  <div class="page-head-right">
-    <span class="status-pill status-{{ sheet.status.value }}">{{ sheet.status.value | capitalize }}</span>
+  <div class="page-head-right ts-nav-bar">
+    <a href="?week={{ prev_week }}" class="button secondary small ts-nav-arrow" title="Previous week">←</a>
+    <form method="get" action="/timesheet" class="ts-jump-form">
+      <label class="filter-field" style="gap:0;">
+        <input type="date" name="week" value="{{ period.start_date.isoformat() }}" title="Jump to any week — pick any date in that week">
+      </label>
+      <button type="submit" class="button primary small">Go</button>
+    </form>
+    <a href="?week={{ next_week }}" class="button secondary small ts-nav-arrow" title="Next week">→</a>
+    <a href="?week={{ today_week_iso if today_week_iso else '' }}" class="button secondary small" title="Jump to current week">Today</a>
+    <span class="status-pill status-{{ sheet.status.value }} ts-status-pill">{{ sheet.status.value | capitalize }}</span>
   </div>
 </section>
 
