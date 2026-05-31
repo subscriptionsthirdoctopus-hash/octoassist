@@ -23,12 +23,7 @@ def _stub(request: Request, user: User, title: str, subtitle: str, body: str):
     )
 
 
-@router.get("/approvals", response_class=HTMLResponse)
-def approvals(request: Request, user: User = Depends(require_user)):
-    return _stub(request, user,
-        title="Approvals",
-        subtitle="The manager's pending-approvals inbox",
-        body="A single inbox of all timesheets awaiting your approval, with Approve / Reject + comment per row. Backed by TS-119 to TS-126.")
+# /approvals is now served by views_approvals (real manager inbox).
 
 
 @router.get("/reports", response_class=HTMLResponse)

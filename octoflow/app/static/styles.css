@@ -610,3 +610,19 @@ button.small { padding: 4px 10px; font-size: 12px; }
   font-size: 13px;
 }
 .callout strong { color: var(--teal); }
+
+/* ─────────────────────────────── Approvals ──────────────────────────────────── */
+.approve-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 0;
+}
+.row-check {
+  width: 16px; height: 16px;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+#checkAll {
+  width: 16px; height: 16px;
+  accent-color: var(--teal);
+  cursor: pointer;
+}

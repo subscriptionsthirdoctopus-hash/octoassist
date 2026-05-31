@@ -17,6 +17,7 @@ from .web.views_stub import router as stub_router
 from .web.views_settings import router as settings_router
 from .web.views_projects import router as projects_router
 from .web.views_oidc import router as oidc_router
+from .web.views_approvals import router as approvals_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,9 +42,10 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Routes
 app.include_router(login_router)
-app.include_router(oidc_router)      # /auth/oidc/{idp_id}/start + /callback (multi-tenant SSO)
+app.include_router(oidc_router)       # /auth/oidc/{idp_id}/start + /callback (multi-tenant SSO)
 app.include_router(timesheet_router)
-app.include_router(projects_router)  # /projects PM dashboard + per-project detail
+app.include_router(approvals_router)  # /approvals manager inbox + per-sheet review
+app.include_router(projects_router)   # /projects PM dashboard + per-project detail
 app.include_router(settings_router)  # /settings + sub-pages (incl. /settings/identity, /settings/tenant)
 app.include_router(stub_router)      # stubs for /approvals, /reports
 

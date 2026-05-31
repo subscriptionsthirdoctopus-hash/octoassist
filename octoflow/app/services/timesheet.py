@@ -130,3 +130,31 @@ def recall(db: Session, sheet: Timesheet, actor: User) -> None:
     log_action(db, tenant_id=actor.tenant_id, actor_id=actor.id,
                action="timesheet.recall", resource=f"timesheet:{sheet.id}")
     db.commit()
+
+
+# ─────────────────────────────── Approval permissions ────────────────
+
+def can_approve(viewer, sheet) -> bool:
+    """Permission gate used by both the inbox query and per-sheet POSTs.
+    Admins can approve any submitted sheet in their tenant. Managers can
+    approve a sheet whose owner reports to them. Nobody else can.
+    """
+    from ..models import UserRole
+    if sheet.tenant_id != viewer.tenant_id:
+        return False
+    if viewer.role == UserRole.admin:
+        return True
+    # Manager rule: the sheet's owner reports to this user
+    return sheet.user is not None and sheet.user.manager_id == viewer.id
+
+
+def pending_for_approver(db, viewer):
+    """All submitted timesheets the viewer may approve."""
+    from ..models import UserRole, Timesheet, TimesheetStatus, User
+    q = (db.query(Timesheet)
+           .join(User, User.id == Timesheet.user_id)
+           .filter(Timesheet.tenant_id == viewer.tenant_id,
+                   Timesheet.status == TimesheetStatus.submitted))
+    if viewer.role != UserRole.admin:
+        q = q.filter(User.manager_id == viewer.id)
+    return q.order_by(Timesheet.submitted_at.asc()).all()

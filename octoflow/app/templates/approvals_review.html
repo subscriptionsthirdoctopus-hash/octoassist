@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Review · {{ sheet.user.display_name }} · {{ period.start_date }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Review timesheet</h1>
+    <p class="meta">
+      <a href="/approvals" class="weeklink">← Approvals inbox</a>
+      · <strong>{{ sheet.user.display_name }}</strong> ({{ sheet.user.email }})
+      · week of {{ period.start_date.strftime('%d %b %Y') }} → {{ period.end_date.strftime('%d %b %Y') }}
+    </p>
+  </div>
+  <div class="page-head-right">
+    <span class="status-pill status-{{ sheet.status.value }}">{{ sheet.status.value | capitalize }}</span>
+  </div>
+</section>
+
+<div class="grid-wrap">
+  <table class="grid">
+    <thead>
+      <tr>
+        <th class="proj">Project</th>
+        <th class="task">Task</th>
+        <th class="act">Activity</th>
+        {% for d in days %}
+        <th class="day">
+          <div class="day-name">{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d.weekday()] }}</div>
+          <div class="day-num">{{ d.strftime('%d') }}</div>
+        </th>
+        {% endfor %}
+        <th class="day total-col">Total</th>
+        <th class="bill">Bill</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% if grid %}
+      {% for (eng_id, task_id, act_id), day_map in grid.items() %}
+        {% set first = day_map.values()|list|first %}
+        {% set row_total = day_map.values()|sum(attribute='hours') %}
+        <tr>
+          <td class="proj"><strong>{{ first.engagement.name if first.engagement else "—" }}</strong>
+            {% if first.engagement %}<div class="meta">{{ first.engagement.client.name }}</div>{% endif %}</td>
+          <td class="task">{{ first.task.name if first.task else "—" }}</td>
+          <td class="act">
+            {% if first.activity %}<span class="act-pill">{{ first.activity.code }}</span> {{ first.activity.name }}{% else %}—{% endif %}
+          </td>
+          {% for d in days %}
+            {% set e = day_map.get(d) %}
+            <td class="hcell">
+              {% if e and e.hours %}<span class="ro-hours">{{ '%.2f' % e.hours }}</span>{% else %}<span class="ro-hours">–</span>{% endif %}
+            </td>
+          {% endfor %}
+          <td class="hcell total-col"><span class="row-total">{{ '%.2f' % row_total }}</span></td>
+          <td class="bill">{% if first.is_billable %}✓{% else %}—{% endif %}</td>
+        </tr>
+        {% if first.note %}
+        <tr class="note-row">
+          <td colspan="3" class="note-label">Note</td>
+          <td colspan="{{ days|length + 2 }}" class="note-cell"><span class="ro-note">{{ first.note }}</span></td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="{{ days|length + 5 }}" class="meta" style="text-align:center; padding: 20px;">No time entries on this sheet.</td></tr>
+    {% endif %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" class="totals-label">Day totals</td>
+        {% for d in days %}
+        <td class="hcell"><span class="day-total">{{ '%.2f' % totals_by_day.get(d, 0) }}</span></td>
+        {% endfor %}
+        <td class="hcell total-col"><span class="grand-total">{{ '%.2f' % total_hours }}</span></td>
+        <td class="bill"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<div class="grid-actions" style="padding: 14px 4px 4px;">
+  <span class="meta">{{ '%.2f' % billable_hours }} billable / {{ '%.2f' % total_hours }} total</span>
+</div>
+
+{% if sheet.status.value == "rejected" and sheet.rejection_reason %}
+<div class="callout" style="background:#FEE2E2; border-left-color: var(--red);">
+  <strong>Rejection reason</strong> (recorded on {{ sheet.updated_at.strftime('%Y-%m-%d %H:%M') }}):<br>
+  {{ sheet.rejection_reason }}
+</div>
+{% endif %}
+
+{% if can_act %}
+<section class="card" style="margin-top: 20px;">
+  <h3>Decision</h3>
+  <div class="approve-row">
+    <form method="post" action="/approvals/{{ sheet.id }}/approve" class="inline-form">
+      <button type="submit" class="primary big">✓ Approve</button>
+    </form>
+    <span class="meta">Locks the timesheet and records the approval in the audit log.</span>
+  </div>
+
+  <details style="margin-top: 16px;">
+    <summary style="cursor:pointer; font-weight:600; color: var(--red);">✗ Reject with reason</summary>
+    <form method="post" action="/approvals/{{ sheet.id }}/reject" class="crud-form" style="margin-top: 12px;">
+      <label>Reason (required — will be visible to the consultant)
+        <textarea name="reason" rows="3" required placeholder="e.g. Friday hours don't match the activity report; please correct and resubmit."></textarea>
+      </label>
+      <div class="form-actions"><button type="submit" class="secondary" style="color: var(--red); border-color: var(--red);">Reject</button></div>
+    </form>
+  </details>
+</section>
+{% else %}
+<div class="card" style="margin-top: 20px;">
+  <p class="meta">This sheet is <strong>{{ sheet.status.value }}</strong> — no decision needed.
+    {% if sheet.approver %}Approved by {{ sheet.approver.display_name }} on {{ sheet.approved_at.strftime('%Y-%m-%d %H:%M') }}.{% endif %}
+  </p>
+</div>
+{% endif %}
+{% endblock %}

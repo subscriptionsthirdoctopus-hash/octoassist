@@ -263,9 +263,10 @@ class Timesheet(Base):
     created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
 
-    user:    Mapped[User] = relationship(back_populates="timesheets", foreign_keys=[user_id])
-    period:  Mapped[TimesheetPeriod] = relationship()
-    entries: Mapped[list["TimeEntry"]] = relationship(back_populates="timesheet", cascade="all, delete-orphan")
+    user:     Mapped[User] = relationship(back_populates="timesheets", foreign_keys=[user_id])
+    approver: Mapped["User | None"] = relationship(foreign_keys=[approver_id])
+    period:   Mapped[TimesheetPeriod] = relationship()
+    entries:  Mapped[list["TimeEntry"]] = relationship(back_populates="timesheet", cascade="all, delete-orphan")
 
 
 class TimeEntry(Base):

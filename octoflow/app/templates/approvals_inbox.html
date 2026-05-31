@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Approvals · inbox{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Approvals</h1>
+    <p class="meta">{{ rows|length }} timesheet{{ "" if rows|length == 1 else "s" }} awaiting your approval.</p>
+  </div>
+</section>
+
+{% if rows %}
+<form method="post" action="/approvals/bulk-approve" id="bulkForm">
+  <div class="grid-actions" style="margin-bottom: 12px;">
+    <button type="submit" class="primary">✓ Approve all selected</button>
+    <span class="meta">Tick rows to approve in bulk. For Reject + reason, click into a row.</span>
+  </div>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th style="width: 36px;"><input type="checkbox" id="checkAll" title="Select all"></th>
+        <th>Consultant</th>
+        <th>Week</th>
+        <th>Submitted</th>
+        <th style="text-align:right;">Entries</th>
+        <th style="text-align:right;">Hours</th>
+        <th style="text-align:right;">Billable</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><input type="checkbox" form="bulkForm" name="sheet_id" value="{{ r.sheet.id }}" class="row-check"></td>
+        <td><strong>{{ r.sheet.user.display_name }}</strong>
+          <div class="meta">{{ r.sheet.user.email }}{% if r.sheet.user.practice %} · {{ r.sheet.user.practice }}{% endif %}</div></td>
+        <td><span class="meta-mono">{{ r.sheet.period.start_date }}</span>
+          <div class="meta">→ {{ r.sheet.period.end_date }}</div></td>
+        <td><span class="meta-mono">{{ r.sheet.submitted_at.strftime('%Y-%m-%d %H:%M') if r.sheet.submitted_at else "—" }}</span></td>
+        <td style="text-align:right;"><span class="meta-mono">{{ r.entries }}</span></td>
+        <td style="text-align:right;"><span class="meta-mono"><strong>{{ '%.2f' % r.total }}</strong></span></td>
+        <td style="text-align:right;"><span class="meta-mono">{{ '%.2f' % r.billable }}</span></td>
+        <td><a href="/approvals/{{ r.sheet.id }}" class="weeklink">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
+
+<script>
+  document.getElementById("checkAll").addEventListener("change", function(e) {
+    document.querySelectorAll(".row-check").forEach(c => c.checked = e.target.checked);
+  });
+</script>
+{% else %}
+<div class="card">
+  <h3>Nothing to approve right now</h3>
+  <p class="meta">Submitted timesheets from your direct reports (and, if you are an admin, from anyone in your tenant) will land here.</p>
+</div>
+{% endif %}
+{% endblock %}
