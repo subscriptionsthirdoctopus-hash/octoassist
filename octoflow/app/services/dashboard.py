@@ -1,9 +1,11 @@
 """Dashboard — single call computes everything the landing page needs,
-adapted to the viewer's role.
+adapted to the viewer's role AND the chosen date window.
 
-  Consultant : my week, recent sheets, active projects (read-only)
-  Manager    : adds pending approvals + team submission compliance
-  Admin      : adds tenant-wide utilisation snapshot + all projects RAG
+  view='week'  : Mon-Sun containing `anchor` (default = today). KPIs use
+                 the user's timesheet for that period.
+  view='month' : 1st-to-last-day of `anchor`'s month. KPIs aggregate
+                 every entry the user has on weekdays in that month
+                 (regardless of which timesheet they live on).
 
 All queries are tenant-scoped via the same FK chain used elsewhere
 (TimeEntry → Timesheet.tenant_id, Engagement.tenant_id, …) — there is no
@@ -11,8 +13,10 @@ path that could leak rows from another tenant.
 """
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import Literal
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -28,24 +32,40 @@ from .timesheet import (
 )
 
 
+ViewMode = Literal["week", "month"]
+
+
 @dataclass
 class DashboardData:
-    # Always shown
+    # Window
     role:            str
-    week_start:      date
-    week_end:        date
-    my_sheet:        Timesheet
-    my_status:       str
+    view:            str            # "week" | "month"
+    anchor:          date           # the date the user picked
+    range_start:     date           # inclusive
+    range_end:       date           # inclusive
+    range_label:     str            # display string
+    prev_anchor:     date           # ← arrow link
+    next_anchor:     date           # → arrow link
+
+    # My hours over the window
     my_total:        float
     my_billable:     float
-    my_days_logged:  int        # number of days in the week that have any entry
-    my_recent:       list       # last 5 sheets (this one included if exists)
-    active_projects: list       # engagements I'm assigned to (capped at 6)
+    my_days_logged:  int
 
-    # Expense rollup (always shown — values are tenant-zero-safe)
+    # Week-mode-only: the timesheet for that week
+    my_sheet:        Timesheet | None  = None
+    my_status:       str | None        = None
+
+    # Month-mode-only: rollup of sheets that fall in this month
+    month_sheet_summary: dict | None  = None  # {approved, submitted, draft, total}
+
+    my_recent:       list = field(default_factory=list)
+    active_projects: list = field(default_factory=list)
+
+    # Expense rollup (always shown — totals over the window)
     my_expenses_draft:       int = 0
     my_expenses_submitted:   int = 0
-    my_expenses_awaiting:    float = 0.0   # value of approved-but-not-yet-reimbursed
+    my_expenses_awaiting:    float = 0.0
     my_expenses_currency:    str = "INR"
 
     # Manager / Admin additions
@@ -61,14 +81,80 @@ class DashboardData:
     projects_rag:       list = field(default_factory=list)
 
 
-def compute(db: Session, user: User) -> DashboardData:
-    today  = date.today()
-    period = get_or_create_period(db, user.tenant_id, today)
-    sheet  = get_or_create_timesheet(db, user, period)
+def _resolve_window(anchor: date, view: ViewMode) -> tuple[date, date, str, date, date]:
+    """Return (start, end, label, prev_anchor, next_anchor) for the chosen
+    view. `prev_anchor` / `next_anchor` are anchors that the arrow links
+    can hand straight to compute() for the previous / next bucket."""
+    if view == "month":
+        start = anchor.replace(day=1)
+        _, last_day = calendar.monthrange(start.year, start.month)
+        end = start.replace(day=last_day)
+        label = start.strftime("%B %Y")
+        # Prev / next anchors = first day of adjacent month
+        prev_a = (start - timedelta(days=1)).replace(day=1)
+        # next-month first day
+        if start.month == 12:
+            next_a = date(start.year + 1, 1, 1)
+        else:
+            next_a = date(start.year, start.month + 1, 1)
+        return start, end, label, prev_a, next_a
 
-    # ─── Always: my week ───
-    days = day_columns(period)
-    days_logged = len({e.entry_date for e in sheet.entries if (e.hours or 0) > 0})
+    # default: week
+    mon = monday_of(anchor)
+    sun = mon + timedelta(days=6)
+    label = f"Week of {mon.strftime('%d %b')} → {sun.strftime('%d %b %Y')}"
+    return mon, sun, label, mon - timedelta(days=7), mon + timedelta(days=7)
+
+
+def compute(db: Session, user: User,
+            anchor: date | None = None,
+            view: ViewMode = "week") -> DashboardData:
+    today = date.today()
+    if anchor is None:
+        anchor = today
+    if view not in ("week", "month"):
+        view = "week"
+
+    range_start, range_end, range_label, prev_a, next_a = _resolve_window(anchor, view)
+
+    # ─── Hours over the window ──────────────────────────────────────
+    if view == "week":
+        period = get_or_create_period(db, user.tenant_id, anchor)
+        sheet  = get_or_create_timesheet(db, user, period)
+        my_total_v    = total_hours(sheet)
+        my_billable_v = billable_hours(sheet)
+        my_days_v     = len({e.entry_date for e in sheet.entries if (e.hours or 0) > 0})
+        my_status_v   = sheet.status.value
+        my_sheet_v    = sheet
+        month_summary = None
+    else:
+        # Aggregate across every entry of mine in the month
+        entries = (db.query(TimeEntry)
+                     .join(Timesheet, Timesheet.id == TimeEntry.timesheet_id)
+                     .filter(Timesheet.user_id == user.id,
+                             TimeEntry.entry_date >= range_start,
+                             TimeEntry.entry_date <= range_end).all())
+        my_total_v    = round(sum(float(e.hours or 0) for e in entries), 2)
+        my_billable_v = round(sum(float(e.hours or 0) for e in entries if e.is_billable), 2)
+        my_days_v     = len({e.entry_date for e in entries if (e.hours or 0) > 0})
+        my_status_v   = None
+        my_sheet_v    = None
+        # Sheet status rollup for the month: count sheets whose week overlaps the month
+        month_sheets = (db.query(Timesheet)
+                          .join(TimesheetPeriod, TimesheetPeriod.id == Timesheet.period_id)
+                          .filter(Timesheet.user_id == user.id,
+                                  TimesheetPeriod.start_date <= range_end,
+                                  TimesheetPeriod.end_date   >= range_start).all())
+        counts = {"draft": 0, "submitted": 0, "approved": 0, "rejected": 0}
+        for s in month_sheets:
+            counts[s.status.value] = counts.get(s.status.value, 0) + 1
+        month_summary = {
+            "total":     len(month_sheets),
+            "approved":  counts["approved"],
+            "submitted": counts["submitted"],
+            "draft":     counts["draft"],
+            "rejected":  counts["rejected"],
+        }
 
     recent = (db.query(Timesheet)
                 .filter(Timesheet.user_id == user.id)
@@ -85,24 +171,32 @@ def compute(db: Session, user: User) -> DashboardData:
         active_projects = [a.engagement for a in user.assignments
                            if a.engagement.status == ProjectStatus.active][:6]
 
-    # ─── My expense rollup ───
-    my_exp = db.query(Expense).filter(Expense.user_id == user.id).all()
+    # ─── Expense rollup (totals over the window) ───
+    my_exp = (db.query(Expense)
+                .filter(Expense.user_id == user.id,
+                        Expense.expense_date >= range_start,
+                        Expense.expense_date <= range_end).all())
     draft_n = sum(1 for e in my_exp if e.status in (ExpenseStatus.draft, ExpenseStatus.rejected))
     sub_n   = sum(1 for e in my_exp if e.status == ExpenseStatus.submitted)
     awaiting_val = sum(float(e.amount or 0) for e in my_exp if e.status == ExpenseStatus.approved)
-    # Pick the currency of the most-recent approved expense, else fall back
     currency = next((e.currency for e in my_exp
                      if e.status == ExpenseStatus.approved), None) or "INR"
 
     data = DashboardData(
         role            = user.role.value,
-        week_start      = period.start_date,
-        week_end        = period.end_date,
-        my_sheet        = sheet,
-        my_status       = sheet.status.value,
-        my_total        = total_hours(sheet),
-        my_billable     = billable_hours(sheet),
-        my_days_logged  = days_logged,
+        view            = view,
+        anchor          = anchor,
+        range_start     = range_start,
+        range_end       = range_end,
+        range_label     = range_label,
+        prev_anchor     = prev_a,
+        next_anchor     = next_a,
+        my_total        = my_total_v,
+        my_billable     = my_billable_v,
+        my_days_logged  = my_days_v,
+        my_sheet        = my_sheet_v,
+        my_status       = my_status_v,
+        month_sheet_summary   = month_summary,
         my_recent       = recent,
         active_projects = active_projects,
         my_expenses_draft     = draft_n,
@@ -118,8 +212,9 @@ def compute(db: Session, user: User) -> DashboardData:
         data.pending_approvals_count = len(pending)
         data.pending_approvals_top   = pending[:5]
 
-        # Team submission compliance for the current period
-        # admins see all active non-admin users; managers see direct reports
+        # Team compliance is always anchored to the CURRENT week — that's
+        # what managers actually care about ("did the team submit?").
+        cur_period = get_or_create_period(db, user.tenant_id, today)
         q = (db.query(User)
                .filter(User.tenant_id == user.tenant_id,
                        User.is_active.is_(True),
@@ -130,7 +225,7 @@ def compute(db: Session, user: User) -> DashboardData:
         sheets_by_user = {
             s.user_id: s for s in
             db.query(Timesheet).filter(Timesheet.tenant_id == user.tenant_id,
-                                       Timesheet.period_id == period.id).all()
+                                       Timesheet.period_id == cur_period.id).all()
         }
         team = []
         for u in team_users:
@@ -141,22 +236,22 @@ def compute(db: Session, user: User) -> DashboardData:
                 "hours":   sum(float(e.hours or 0) for e in s.entries) if s else 0.0,
             })
         data.team_compliance        = team
-        data.team_compliance_period = period
+        data.team_compliance_period = cur_period
 
-        # Pending expenses queue for this approver
         from .expenses import pending_for_approver as exp_pending
         pending_exp = exp_pending(db, user)
         data.expense_pending_count = len(pending_exp)
         data.expense_pending_top   = pending_exp[:5]
 
-    # ─── Admin: tenant-wide utilisation snapshot + projects RAG ───
+    # ─── Admin: tenant-wide utilisation + projects RAG ───
     if user.role == UserRole.admin:
-        # 30-day rolling utilisation, tenant-wide
         from .reports import utilisation
         from ..models import Tenant
         tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
         daily = float(tenant.daily_hours) if tenant else 8.0
-        util_rows = utilisation(db, user.tenant_id, 30, daily)
+        # Use the chosen window as the utilisation period (defaults to current week if view=week)
+        util_rows = utilisation(db, user.tenant_id, 30, daily,
+                                start=range_start, end=range_end)
         if util_rows:
             avg_pct = sum(r["utilisation_pct"] for r in util_rows) / len(util_rows)
             data.tenant_utilisation = {
@@ -166,10 +261,7 @@ def compute(db: Session, user: User) -> DashboardData:
                 "top":              util_rows[:3],
                 "bottom":           [r for r in util_rows[::-1]][:3],
             }
-        else:
-            data.tenant_utilisation = None
 
-        # Projects RAG — pull from latest status update per engagement
         engagements = (db.query(Engagement)
                          .filter(Engagement.tenant_id == user.tenant_id,
                                  Engagement.status == ProjectStatus.active)

@@ -7,8 +7,7 @@
   <div>
     <h1>Welcome back, {{ current_user.display_name.split(' ')[0] }}</h1>
     <p class="meta">
-      Week of <strong>{{ data.week_start.strftime('%d %b') }} → {{ data.week_end.strftime('%d %b %Y') }}</strong>
-      · <code class="code-pill">{{ data.role }}</code>
+      <code class="code-pill">{{ data.role }}</code>
       · {{ current_user.tenant.name }}
     </p>
   </div>
@@ -18,12 +17,51 @@
   </div>
 </section>
 
+{# ─── Range picker — Week / Month + calendar ─────────────────────── #}
+<section class="dash-range">
+  <div class="dash-range-toggle" role="tablist" aria-label="Range view">
+    <a href="/dashboard?view=week&anchor={{ data.anchor.isoformat() }}"
+       class="dash-range-tab {% if data.view == 'week' %}is-active{% endif %}"
+       role="tab" aria-selected="{{ 'true' if data.view == 'week' else 'false' }}">
+      Weekly
+    </a>
+    <a href="/dashboard?view=month&anchor={{ data.anchor.isoformat() }}"
+       class="dash-range-tab {% if data.view == 'month' %}is-active{% endif %}"
+       role="tab" aria-selected="{{ 'true' if data.view == 'month' else 'false' }}">
+      Monthly
+    </a>
+  </div>
+
+  <a href="/dashboard?view={{ data.view }}&anchor={{ data.prev_anchor.isoformat() }}"
+     class="button secondary small dash-range-nav" title="Previous {{ data.view }}">←</a>
+
+  <form method="get" action="/dashboard" class="dash-range-form">
+    <input type="hidden" name="view" value="{{ data.view }}">
+    <label class="filter-field">
+      <input type="date" name="anchor" value="{{ data.anchor.isoformat() }}"
+             title="Pick any date in the {{ data.view }} you want to view">
+    </label>
+    <button type="submit" class="button primary small">Go</button>
+  </form>
+
+  <a href="/dashboard?view={{ data.view }}&anchor={{ data.next_anchor.isoformat() }}"
+     class="button secondary small dash-range-nav" title="Next {{ data.view }}">→</a>
+
+  <a href="/dashboard?view={{ data.view }}&anchor={{ today_iso }}"
+     class="button secondary small">Today</a>
+
+  <div class="dash-range-label">
+    <strong>{{ data.range_label }}</strong>
+    <span class="meta">· {{ data.range_start.strftime('%d %b') }} → {{ data.range_end.strftime('%d %b %Y') }}</span>
+  </div>
+</section>
+
 {# ─── KPI strip — single row, role-adaptive ──────────────────────── #}
 {% set pending_total = data.pending_approvals_count + data.expense_pending_count %}
 <div class="kpi-row dash-kpis">
 
   <div class="kpi">
-    <div class="kpi-label">This week — hours</div>
+    <div class="kpi-label">{{ 'This month' if data.view == 'month' else 'This week' }} — hours</div>
     <div class="kpi-val">{{ '%.1f' % data.my_total }}</div>
     <div class="kpi-sub">
       {{ '%.1f' % data.my_billable }}h billable
@@ -33,10 +71,26 @@
 
   <div class="kpi">
     <div class="kpi-label">Days logged</div>
+    {% if data.view == 'month' %}
+    <div class="kpi-val">{{ data.my_days_logged }}</div>
+    <div class="kpi-sub">days this month with entries</div>
+    {% else %}
     <div class="kpi-val">{{ data.my_days_logged }}<span class="kpi-val-sub">/5</span></div>
     <div class="kpi-sub">of the work week</div>
+    {% endif %}
   </div>
 
+  {% if data.view == 'month' and data.month_sheet_summary %}
+  <div class="kpi">
+    <div class="kpi-label">My sheets · this month</div>
+    <div class="kpi-val">{{ data.month_sheet_summary.total }}</div>
+    <div class="kpi-sub">
+      {{ data.month_sheet_summary.approved }} approved ·
+      {{ data.month_sheet_summary.submitted }} submitted ·
+      {{ data.month_sheet_summary.draft }} draft
+    </div>
+  </div>
+  {% else %}
   <div class="kpi">
     <div class="kpi-label">My sheet</div>
     <div class="kpi-val-pill">
@@ -50,6 +104,7 @@
       {% else %}<a href="/timesheet" class="weeklink">Start logging →</a>{% endif %}
     </div>
   </div>
+  {% endif %}
 
   <div class="kpi">
     <div class="kpi-label">My expenses</div>
@@ -223,7 +278,7 @@
 {% if data.role == 'admin' and data.tenant_utilisation %}
 <section class="card dash-card dash-wide">
   <header class="dash-card-head">
-    <h3>Tenant utilisation — last 30 days</h3>
+    <h3>Tenant utilisation — {{ data.range_label }}</h3>
     <a href="/reports/utilisation" class="weeklink">Per-person breakdown →</a>
   </header>
   <div class="util-row">
@@ -240,7 +295,7 @@
     <div class="util-stat">
       <div class="util-stat-label">Available / consultant</div>
       <div class="util-stat-val">{{ '%.0f' % data.tenant_utilisation.available }}<span class="kpi-val-sub">h</span></div>
-      <div class="util-stat-sub">working hours · 30-day window</div>
+      <div class="util-stat-sub">working hours · {{ data.view }} window</div>
     </div>
   </div>
 </section>

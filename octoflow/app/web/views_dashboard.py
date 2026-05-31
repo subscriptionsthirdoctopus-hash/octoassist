@@ -1,4 +1,10 @@
-"""Adaptive /dashboard — the post-login landing page."""
+"""Adaptive /dashboard — the post-login landing page.
+
+Accepts:
+  · ?view=week|month   — default 'week'
+  · ?anchor=YYYY-MM-DD — date the chosen window is built around (default today)
+"""
+from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
@@ -23,12 +29,23 @@ def home(user: User = Depends(require_user)):
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+def _parse_anchor(v: str | None) -> date:
+    if not v: return date.today()
+    try:    return date.fromisoformat(v)
+    except ValueError: return date.today()
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request,
+              view: str = "week",
+              anchor: str | None = None,
               user: User = Depends(require_user),
               db: Session = Depends(get_db)):
-    data = dash_svc.compute(db, user)
+    view_norm = "month" if view == "month" else "week"
+    anchor_d  = _parse_anchor(anchor)
+    data = dash_svc.compute(db, user, anchor=anchor_d, view=view_norm)
     return templates.TemplateResponse(
         request=request, name="dashboard.html",
-        context={"current_user": user, "data": data},
+        context={"current_user": user, "data": data,
+                 "today_iso": date.today().isoformat()},
     )

@@ -504,6 +504,61 @@ button.small { padding: 4px 10px; font-size: 12px; }
 [data-theme="dark"] .filter-field select { color: var(--text); }
 [data-theme="dark"] .filter-summary strong { color: var(--text); }
 
+/* Dashboard range picker — Week/Month toggle + date jump */
+.dash-range {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--teal);
+  border-radius: var(--r-md);
+}
+.dash-range-toggle {
+  display: inline-flex; align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px; gap: 3px;
+}
+.dash-range-tab {
+  padding: 6px 16px; font-size: 13px; font-weight: 700;
+  color: var(--slate); text-decoration: none;
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+  transition: all 0.12s ease;
+}
+.dash-range-tab:hover { color: var(--navy); }
+.dash-range-tab.is-active {
+  background: var(--teal); color: var(--white);
+}
+[data-theme="dark"] .dash-range-tab { color: var(--muted); }
+[data-theme="dark"] .dash-range-tab:hover { color: var(--text); }
+[data-theme="dark"] .dash-range-tab.is-active { color: var(--white); }
+
+.dash-range-nav {
+  padding: 6px 12px !important; min-width: 36px; text-align: center;
+  font-weight: 700;
+}
+.dash-range-form {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+}
+.dash-range-form input[type="date"] {
+  padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-size: 13px; font-family: inherit; background: var(--white);
+}
+.dash-range-form input[type="date"]:focus {
+  outline: 2px solid var(--teal); outline-offset: -1px; border-color: var(--teal);
+}
+.dash-range-label {
+  margin-left: auto; font-size: 13.5px; color: var(--slate);
+}
+.dash-range-label strong { color: var(--navy); font-size: 14.5px; }
+[data-theme="dark"] .dash-range-label strong { color: var(--text); }
+[data-theme="dark"] .dash-range-form input[type="date"] { color: var(--text); }
+@media (max-width: 720px) {
+  .dash-range-label { margin-left: 0; flex-basis: 100%; }
+}
+
 /* Timesheet week-nav bar in the page head */
 .ts-nav-bar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
