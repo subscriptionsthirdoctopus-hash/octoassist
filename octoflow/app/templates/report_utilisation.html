@@ -10,9 +10,7 @@
   </div>
 </section>
 
-{% with csv_href = "/reports/utilisation?days=" ~ days ~ "&format=csv" %}
 {% include "_report_filters.html" %}
-{% endwith %}
 
 {% if rows %}
 <table class="data">

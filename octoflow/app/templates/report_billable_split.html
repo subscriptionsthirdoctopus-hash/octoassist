@@ -1,39 +1,142 @@
 {% extends "base.html" %}
 {% block title %}Billable split · Reports{% endblock %}
 {% block content %}
+
+{% set total_h    = (rows | sum(attribute='total_hours'))    | round(1) %}
+{% set billable_h = (rows | sum(attribute='billable_hours')) | round(1) %}
+{% set nonbill_h  = (rows | sum(attribute='non_billable'))   | round(1) %}
+{% set bill_pct   = (100 * billable_h / total_h) if total_h else 0 %}
+
 <section class="page-head">
   <div>
     <h1>Billable vs non-billable</h1>
-    <p class="meta"><a href="/reports" class="weeklink">← Reports</a> · last {{ days }} days · per consultant</p>
+    <p class="meta">
+      <a href="/reports" class="weeklink">← Reports</a>
+      · {{ selected.effective_start.strftime('%d %b %Y') }} → {{ selected.effective_end.strftime('%d %b %Y') }}
+      · per consultant
+    </p>
   </div>
 </section>
 
-{% with csv_href = "/reports/billable-split?days=" ~ days ~ "&format=csv" %}
 {% include "_report_filters.html" %}
-{% endwith %}
 
+{# ─── Headline summary + tenant-wide chart ──────────────────────── #}
+<section class="card chart-card">
+  <header class="chart-card-head">
+    <h3>Tenant totals — {{ selected.effective_start.strftime('%d %b') }} → {{ selected.effective_end.strftime('%d %b %Y') }}</h3>
+    {% if selected.user_id %}
+    {% set _u = users | selectattr('id', 'equalto', selected.user_id) | first %}
+    {% if _u %}<span class="meta">Filtered to <strong>{{ _u.display_name }}</strong></span>{% endif %}
+    {% endif %}
+  </header>
+
+  <div class="chart-summary">
+    <div class="chart-stat">
+      <div class="chart-stat-label">Total hours</div>
+      <div class="chart-stat-val">{{ '%.1f' % total_h }}</div>
+    </div>
+    <div class="chart-stat">
+      <div class="chart-stat-label" style="color: var(--green);">Billable</div>
+      <div class="chart-stat-val" style="color: var(--green);">{{ '%.1f' % billable_h }}</div>
+      <div class="chart-stat-sub">{{ '%.1f' % bill_pct }}% of total</div>
+    </div>
+    <div class="chart-stat">
+      <div class="chart-stat-label" style="color: var(--slate);">Non-billable</div>
+      <div class="chart-stat-val" style="color: var(--slate);">{{ '%.1f' % nonbill_h }}</div>
+      <div class="chart-stat-sub">{{ '%.1f' % (100 - bill_pct) }}% of total</div>
+    </div>
+  </div>
+
+  {% if total_h %}
+  <div class="chart-stack-wrap chart-stack-wrap-lg">
+    <div class="chart-stack" title="Billable {{ '%.1f' % billable_h }}h · Non-billable {{ '%.1f' % nonbill_h }}h">
+      <div class="chart-stack-seg chart-seg-billable"
+           style="width: {{ bill_pct }}%;"
+           title="Billable: {{ '%.1f' % billable_h }}h ({{ '%.1f' % bill_pct }}%)">
+        {% if bill_pct >= 12 %}<span class="chart-seg-label">{{ '%.0f' % bill_pct }}% billable</span>{% endif %}
+      </div>
+      <div class="chart-stack-seg chart-seg-nonbillable"
+           style="width: {{ 100 - bill_pct }}%;"
+           title="Non-billable: {{ '%.1f' % nonbill_h }}h ({{ '%.1f' % (100 - bill_pct) }}%)">
+        {% if (100 - bill_pct) >= 12 %}<span class="chart-seg-label">{{ '%.0f' % (100 - bill_pct) }}% non-billable</span>{% endif %}
+      </div>
+    </div>
+    <div class="chart-legend">
+      <span class="legend-item"><span class="legend-swatch swatch-billable"></span> Billable</span>
+      <span class="legend-item"><span class="legend-swatch swatch-nonbillable"></span> Non-billable</span>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{# ─── Per-consultant stacked bars ───────────────────────────────── #}
 {% if rows %}
-<table class="data">
-  <thead><tr><th>Consultant</th><th>Practice</th><th style="text-align:right;">Total</th><th style="text-align:right;">Billable</th><th style="text-align:right;">Non-billable</th><th style="text-align:right;">Billable %</th></tr></thead>
-  <tbody>
-  {% for r in rows %}
-    <tr>
-      <td><strong>{{ r.user }}</strong><div class="meta">{{ r.email }}</div></td>
-      <td>{{ r.practice or '—' }}</td>
-      <td style="text-align:right;"><span class="meta-mono"><strong>{{ '%.2f' % r.total_hours }}</strong></span></td>
-      <td style="text-align:right;"><span class="meta-mono" style="color: var(--green);">{{ '%.2f' % r.billable_hours }}</span></td>
-      <td style="text-align:right;"><span class="meta-mono" style="color: var(--slate);">{{ '%.2f' % r.non_billable }}</span></td>
-      <td style="text-align:right;">
-        <div class="progress-shell" style="display:inline-block;width:80px;margin-right:6px;vertical-align:middle;">
-          <div class="progress-fill" style="width: {{ r.billable_pct }}%"></div>
+{% set max_total = rows | map(attribute='total_hours') | max %}
+<section class="card chart-card">
+  <header class="chart-card-head">
+    <h3>Per-consultant breakdown</h3>
+    <span class="meta">{{ rows | length }} consultant{{ '' if rows|length == 1 else 's' }} — bar width = total hours, fill = billable share</span>
+  </header>
+
+  <ul class="chart-rows">
+    {% for r in rows %}
+    {% set bar_w_pct = (100 * r.total_hours / max_total) if max_total else 0 %}
+    {% set b_share   = (100 * r.billable_hours / r.total_hours) if r.total_hours else 0 %}
+    <li class="chart-row">
+      <div class="chart-row-label">
+        <strong>{{ r.user }}</strong>
+        <span class="meta">{{ r.practice or '—' }}</span>
+      </div>
+      <div class="chart-row-bar">
+        <div class="chart-stack-wrap" style="width: {{ bar_w_pct }}%;">
+          <div class="chart-stack">
+            <div class="chart-stack-seg chart-seg-billable"
+                 style="width: {{ b_share }}%;"
+                 title="Billable: {{ '%.1f' % r.billable_hours }}h">
+              {% if b_share >= 20 %}<span class="chart-seg-label">{{ '%.0f' % r.billable_hours }}h</span>{% endif %}
+            </div>
+            <div class="chart-stack-seg chart-seg-nonbillable"
+                 style="width: {{ 100 - b_share }}%;"
+                 title="Non-billable: {{ '%.1f' % r.non_billable }}h">
+              {% if (100 - b_share) >= 20 %}<span class="chart-seg-label">{{ '%.0f' % r.non_billable }}h</span>{% endif %}
+            </div>
+          </div>
         </div>
-        <span class="meta-mono">{{ '%.1f' % r.billable_pct }}%</span>
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+      </div>
+      <div class="chart-row-stat">
+        <span class="meta-mono"><strong>{{ '%.1f' % r.total_hours }}h</strong></span>
+        <span class="meta">{{ '%.0f' % r.billable_pct }}%</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{# ─── Data table (kept below the charts for drill-in / CSV) ─────── #}
+<details class="card">
+  <summary>Show data table</summary>
+  <table class="data" style="margin-top: 12px;">
+    <thead><tr><th>Consultant</th><th>Practice</th><th style="text-align:right;">Total</th><th style="text-align:right;">Billable</th><th style="text-align:right;">Non-billable</th><th style="text-align:right;">Billable %</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td><strong>{{ r.user }}</strong><div class="meta">{{ r.email }}</div></td>
+        <td>{{ r.practice or '—' }}</td>
+        <td style="text-align:right;"><span class="meta-mono"><strong>{{ '%.2f' % r.total_hours }}</strong></span></td>
+        <td style="text-align:right;"><span class="meta-mono" style="color: var(--green);">{{ '%.2f' % r.billable_hours }}</span></td>
+        <td style="text-align:right;"><span class="meta-mono" style="color: var(--slate);">{{ '%.2f' % r.non_billable }}</span></td>
+        <td style="text-align:right;">
+          <div class="progress-shell" style="display:inline-block;width:80px;margin-right:6px;vertical-align:middle;">
+            <div class="progress-fill" style="width: {{ r.billable_pct }}%"></div>
+          </div>
+          <span class="meta-mono">{{ '%.1f' % r.billable_pct }}%</span>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
 {% else %}
-<div class="card"><p class="meta">No time logged in the last {{ days }} days.</p></div>
+<div class="card"><p class="meta">No time logged in this window.</p></div>
 {% endif %}
 {% endblock %}
