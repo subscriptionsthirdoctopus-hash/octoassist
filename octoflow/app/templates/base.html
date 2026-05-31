@@ -4,7 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}OctoFlow{% endblock %} · OctoFlow</title>
-  <link rel="stylesheet" href="/static/styles.css?v=0.1.0">
+  {# Set the theme attribute BEFORE the stylesheet loads so the first paint
+     is already in the correct mode (no white-flash for dark-mode users). #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('octoflow-theme');
+        if (!t) {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark' : 'light';
+        }
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      } catch (e) { /* localStorage blocked — default to light */ }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=0.2.0">
 </head>
 <body>
 
@@ -27,6 +41,11 @@
     <a href="/settings"  class="nav-item">Settings</a>
   </nav>
 
+  <button type="button" class="theme-toggle" onclick="window.__toggleTheme()"
+          title="Switch light / dark mode" aria-label="Toggle theme">
+    <span class="icon-sun">☀</span><span class="icon-moon">☾</span>
+  </button>
+
   <div class="user-pill">
     <span class="user-name">{{ current_user.display_name }}</span>
     <span class="user-role">{{ current_user.role.value }}</span>
@@ -36,6 +55,15 @@
   </div>
   {% endif %}
 </header>
+<script>
+  window.__toggleTheme = function () {
+    var root = document.documentElement;
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    if (next === 'dark') root.setAttribute('data-theme', 'dark');
+    else root.removeAttribute('data-theme');
+    try { localStorage.setItem('octoflow-theme', next); } catch (e) {}
+  };
+</script>
 
 <main class="content">
   {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}

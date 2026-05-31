@@ -674,3 +674,141 @@ button.small { padding: 4px 10px; font-size: 12px; }
 @media (max-width: 960px) {
   .dash-grid { grid-template-columns: 1fr; }
 }
+
+/* ────────────────────────────────────────────────────────────────
+   Theme toggle button (lives in topbar; same in both modes)
+   ──────────────────────────────────────────────────────────────── */
+.theme-toggle {
+  background: transparent;
+  color: var(--white);
+  border: 1px solid rgba(255,255,255,0.20);
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px; line-height: 1;
+  margin-right: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.12s ease;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.12); }
+.theme-toggle .icon-sun  { display: none; }
+.theme-toggle .icon-moon { display: inline; }
+[data-theme="dark"] .theme-toggle .icon-sun  { display: inline; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+/* ────────────────────────────────────────────────────────────────
+   DARK THEME — activated by  <html data-theme="dark">
+   Light theme is the default; nothing here applies without the attr.
+   ──────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:      #0B1220;   /* page background */
+  --white:   #182030;   /* card / surface */
+  --row-alt: #1A2333;
+  --text:    #E5EEF7;
+  --muted:   #94A3B8;
+  --slate:   #94A3B8;   /* lift readability on dark */
+  --line:    #2C3849;
+  --teal-2:  #38D6E8;   /* slightly brighter on dark */
+  /* Keep --navy nearly the same — it's used as topbar / table-header
+     / stage-number background. We only adjust very slightly so cards
+     don't sit visually on top of the topbar. */
+  --navy:    #1E293B;
+}
+
+/* The page bg / body color cascades through tokens above. But the
+   <body> rule pre-computed `color: var(--text)` once at parse time —
+   tokens still re-apply. No selector edit needed. */
+
+/* Headings used `color: var(--navy)` as TEXT, which becomes invisible
+   on a dark surface. Re-target them to the bright text token. */
+[data-theme="dark"] .page-head h1,
+[data-theme="dark"] .card h3,
+[data-theme="dark"] .auth-form label,
+[data-theme="dark"] .auth-title,
+[data-theme="dark"] .tile-title,
+[data-theme="dark"] .link-strong,
+[data-theme="dark"] details.card summary,
+[data-theme="dark"] .task-name,
+[data-theme="dark"] .row-total,
+[data-theme="dark"] .day-total,
+[data-theme="dark"] .grid tfoot .totals-label,
+[data-theme="dark"] .kpi-val,
+[data-theme="dark"] .crud-form label.check,
+[data-theme="dark"] .status-card p strong,
+[data-theme="dark"] button.secondary,
+[data-theme="dark"] .sso-btn,
+[data-theme="dark"] .grid td.proj { color: var(--text); }
+
+/* Pill palettes — pastels become dark-tinted with bright fg */
+[data-theme="dark"] .status-submitted,
+[data-theme="dark"] .role-finance,
+[data-theme="dark"] .stage-skipped     { background: #3D2F0A; color: #FBBF24; }
+[data-theme="dark"] .status-approved,
+[data-theme="dark"] .role-consultant,
+[data-theme="dark"] .stage-completed   { background: #0F3320; color: #86EFAC; }
+[data-theme="dark"] .status-rejected,
+[data-theme="dark"] .role-admin        { background: #3F1010; color: #FCA5A5; }
+[data-theme="dark"] .status-draft,
+[data-theme="dark"] .stage-not_started { background: #243144; color: #94A3B8; }
+[data-theme="dark"] .role-manager,
+[data-theme="dark"] .stage-in_progress { background: #0F1F3F; color: #93C5FD; }
+
+/* Alerts */
+[data-theme="dark"] .alert.success { background: #0F3320; color: #86EFAC; border-left-color: #22C55E; }
+[data-theme="dark"] .alert.error   { background: #3F1010; color: #FCA5A5; border-left-color: #EF4444; }
+
+/* Callout (was light teal-tint) */
+[data-theme="dark"] .callout { background: #0F2A30; }
+[data-theme="dark"] .callout strong { color: var(--teal-2); }
+
+/* Stage item with in-progress background */
+[data-theme="dark"] .stage-item.stage-in_progress { background: #0F1F3F; }
+
+/* Warn row highlight */
+[data-theme="dark"] .row-warn { background: #3D2F0A !important; }
+
+/* Tile hover — --navy is too dark on dark surface; switch accent */
+[data-theme="dark"] .tile:hover {
+  border-left-color: var(--teal-2);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+}
+
+/* Grid footer */
+[data-theme="dark"] .grid tfoot td { background: #1F2A3D; border-top-color: var(--teal); }
+
+/* Auth-card shadow — softer on dark */
+[data-theme="dark"] .auth-card { box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+
+/* Util label readability */
+[data-theme="dark"] .util-label { text-shadow: 0 0 4px rgba(0,0,0,0.7); color: var(--text); }
+
+/* Form controls: tell the browser native widgets should be dark */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background: var(--white);
+  color: var(--text);
+  border-color: var(--line);
+  color-scheme: dark;
+}
+[data-theme="dark"] .crud-form input::placeholder,
+[data-theme="dark"] .crud-form textarea::placeholder { color: var(--muted); }
+
+/* RAG dot border */
+[data-theme="dark"] .rag-dot { border-color: rgba(255,255,255,0.10); }
+
+/* Code-pill (was --bg + --teal — fg now low contrast on dark --bg) */
+[data-theme="dark"] .code-pill { background: var(--row-alt); color: var(--teal-2); }
+[data-theme="dark"] .act-pill  { background: var(--row-alt); color: var(--teal-2); }
+
+/* Chip "active" should still pop */
+[data-theme="dark"] .chip { background: var(--white); color: var(--text); }
+[data-theme="dark"] .chip:hover { color: var(--text); border-color: var(--teal-2); }
+[data-theme="dark"] .chip-count { background: rgba(255,255,255,0.10); }
+
+/* Status pill that uses --slate as fg — keep but ensure bg readable */
+[data-theme="dark"] .status-draft { background: #243144; }
+
+/* Total-column subtle tint */
+[data-theme="dark"] .total-col { background: rgba(56,214,232,0.06); }
+
