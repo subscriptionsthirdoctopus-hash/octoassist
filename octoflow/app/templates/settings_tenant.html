@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Tenant · Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Tenant settings</h1>
+    <p class="meta"><a href="/settings" class="weeklink">← Settings</a> · slug <code class="code-pill">{{ tenant.slug }}</code></p>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Branding</h3>
+  <p class="meta">Each tenant in OctoFlow sees its own brand chrome — your users will not see another organisation's logo or colours.</p>
+  <form method="post" action="/settings/tenant/save" class="crud-form">
+    <label>Display name<input type="text" name="name" value="{{ tenant.name }}" required></label>
+    <label>Logo URL (https only)
+      <input type="url" name="logo_url" value="{{ tenant.logo_url or '' }}" placeholder="https://example.com/logo.svg">
+    </label>
+    <div class="grid-2">
+      <label>Primary colour (hex)
+        <input type="text" name="primary_color" value="{{ tenant.primary_color or '' }}" placeholder="#1B2A4A" maxlength="7">
+      </label>
+      <label>Accent colour (hex)
+        <input type="text" name="accent_color" value="{{ tenant.accent_color or '' }}" placeholder="#0097A7" maxlength="7">
+      </label>
+    </div>
+    <label>Support email
+      <input type="email" name="support_email" value="{{ tenant.support_email or '' }}" placeholder="helpdesk@yourorg.com">
+    </label>
+    <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Tenant identifier</h3>
+  <table class="data">
+    <tr><td><strong>Slug</strong></td><td><code class="code-pill">{{ tenant.slug }}</code> <span class="meta">— immutable URL-safe identifier</span></td></tr>
+    <tr><td><strong>Created</strong></td><td><span class="meta-mono">{{ tenant.created_at.strftime('%Y-%m-%d %H:%M') }}</span></td></tr>
+    <tr><td><strong>Week starts</strong></td><td>{{ ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][tenant.week_start] }}</td></tr>
+    <tr><td><strong>Standard daily hours</strong></td><td>{{ tenant.daily_hours }}</td></tr>
+  </table>
+</section>
+{% endblock %}

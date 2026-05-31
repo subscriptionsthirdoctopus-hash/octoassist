@@ -45,43 +45,71 @@ class TimesheetStatus(str, enum.Enum):
 # ─────────────────────────────── Tenant ──────────────────────────────
 
 class Tenant(Base):
-    """The customer organisation. Multi-tenant from day one even though
-    the MVP only has one tenant (Third Octopus)."""
+    """The customer organisation. Multi-tenant from day one — any number
+    of tenants can co-exist; every record below is tenant_id-scoped so
+    there is structurally no cross-tenant data leakage."""
     __tablename__ = "tenants"
+    __table_args__ = (UniqueConstraint("slug", name="uq_tenants_slug"),)
+
     id:         Mapped[int] = mapped_column(Integer, primary_key=True)
     name:       Mapped[str] = mapped_column(String(120), nullable=False)
+    slug:       Mapped[str] = mapped_column(String(60), nullable=False,
+                                            doc="URL-safe identifier — thirdoctopus / tema / hcal")
+
     # Working calendar config — TS-140
     week_start: Mapped[int] = mapped_column(Integer, nullable=False, default=0,
                                             doc="0=Monday, 6=Sunday")
     daily_hours:Mapped[float] = mapped_column(Numeric(4, 2), nullable=False, default=8.0,
                                               doc="Standard working hours per day")
+
+    # Per-tenant branding (each tenant's users see their own chrome)
+    logo_url:      Mapped[str | None] = mapped_column(String(500), nullable=True)
+    primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True,
+                                                      doc="Hex e.g. #1B2A4A")
+    accent_color:  Mapped[str | None] = mapped_column(String(7), nullable=True,
+                                                      doc="Hex e.g. #0097A7")
+    support_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     users:        Mapped[list["User"]]        = relationship(back_populates="tenant", cascade="all, delete-orphan")
     clients:      Mapped[list["Client"]]      = relationship(back_populates="tenant", cascade="all, delete-orphan")
     activities:   Mapped[list["Activity"]]    = relationship(back_populates="tenant", cascade="all, delete-orphan")
     holidays:     Mapped[list["Holiday"]]     = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    identity_providers: Mapped[list["IdentityProvider"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan")
 
 
 # ─────────────────────────────── User ────────────────────────────────
 
 class User(Base):
-    """A staff member — consultant, manager, finance or admin (TS-127, TS-128)."""
-    __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
+    """A staff member — consultant, manager, finance or admin (TS-127, TS-128).
 
-    id:           Mapped[int] = mapped_column(Integer, primary_key=True)
-    tenant_id:    Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    email:        Mapped[str] = mapped_column(String(320), nullable=False)
-    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    role:         Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.consultant)
-    password_hash:Mapped[str | None] = mapped_column(String(255), nullable=True)
-    practice:     Mapped[str | None] = mapped_column(String(80), nullable=True,
-                                                     doc="Practice / team grouping — TS-130")
-    manager_id:   Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True,
-                                                     doc="Reporting line — also default approver")
-    is_active:    Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    Email uniqueness is scoped per-tenant so two tenants can each have a
+    user at the same address (rare but legitimate for shared addresses
+    like helpdesk@…). The Entra subject claim, when present, is globally
+    unique and maps an SSO identity to this user record.
+    """
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="uq_users_tenant_email"),
+        UniqueConstraint("entra_subject", name="uq_users_entra_subject"),
+    )
+
+    id:            Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id:     Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    email:         Mapped[str] = mapped_column(String(320), nullable=False)
+    display_name:  Mapped[str] = mapped_column(String(120), nullable=False)
+    role:          Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.consultant)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    practice:      Mapped[str | None] = mapped_column(String(80), nullable=True,
+                                                      doc="Practice / team grouping — TS-130")
+    manager_id:    Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True,
+                                                      doc="Reporting line — also default approver")
+    # SSO identity (Entra `sub` claim — globally stable, never changes)
+    entra_subject: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_active:     Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     tenant:       Mapped[Tenant] = relationship(back_populates="users")
     manager:      Mapped["User | None"] = relationship(remote_side="User.id")
@@ -398,3 +426,46 @@ class Deliverable(Base):
     created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     engagement:    Mapped["Engagement"] = relationship()
+
+
+# ═══════════════════════════════ Identity / SSO ═══════════════════════════════
+
+class IdpKind(str, enum.Enum):
+    entra = "entra"   # Microsoft Entra ID (Azure AD) via OIDC
+
+
+class IdentityProvider(Base):
+    """A per-tenant SSO configuration. A tenant can have multiple — e.g.
+    one for the staff Entra tenant, another for a partner federation.
+
+    The client_secret is Fernet-encrypted at rest (app.crypto).
+    Any user signing in through this IdP is auto-created in this IdP's
+    tenant — full data isolation per tenant.
+    """
+    __tablename__ = "identity_providers"
+    __table_args__ = (Index("ix_idps_tenant_active", "tenant_id", "is_active"),)
+
+    id:                   Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id:            Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name:                 Mapped[str] = mapped_column(String(120), nullable=False,
+                                                      doc="Display name on /login button, e.g. 'Sign in with Microsoft (Tema)'")
+    kind:                 Mapped[IdpKind] = mapped_column(Enum(IdpKind), nullable=False, default=IdpKind.entra)
+
+    # Entra OIDC settings
+    entra_tenant_id:      Mapped[str | None] = mapped_column(String(64), nullable=True,
+                                                              doc="Azure AD tenant GUID (or 'common' for multi-tenant apps)")
+    entra_client_id:      Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entra_client_secret:  Mapped[str | None] = mapped_column(Text, nullable=True,
+                                                              doc="Fernet-encrypted")
+
+    # Allow auto-provisioning only from these email domains (csv).
+    # Empty = allow any domain that the IdP attests.
+    allowed_email_domains: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Default role applied to auto-provisioned users
+    default_role:         Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.consultant)
+
+    is_active:            Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at:           Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    tenant:               Mapped[Tenant] = relationship(back_populates="identity_providers")

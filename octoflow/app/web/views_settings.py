@@ -13,7 +13,7 @@ from ..auth import require_admin
 from ..database import get_db
 from ..models import (
     Activity, Assignment, AuditLog, Client, Engagement, EngagementTask, Holiday,
-    ProjectStatus, Tenant, User, UserRole,
+    IdentityProvider, ProjectStatus, Tenant, User, UserRole,
 )
 from ..security import hash_password
 from ..services.timesheet import log_action
@@ -36,6 +36,7 @@ def settings_home(request: Request, user: User = Depends(require_admin), db: Ses
         "activities":  db.query(func.count(Activity.id)).filter(Activity.tenant_id == tid, Activity.is_active.is_(True)).scalar() or 0,
         "holidays":    db.query(func.count(Holiday.id)).filter(Holiday.tenant_id == tid).scalar() or 0,
         "audit":       db.query(func.count(AuditLog.id)).filter(AuditLog.tenant_id == tid).scalar() or 0,
+        "idps":        db.query(func.count(IdentityProvider.id)).filter(IdentityProvider.tenant_id == tid).scalar() or 0,
     }
     tenant = db.query(Tenant).filter(Tenant.id == tid).first()
     return templates.TemplateResponse(
@@ -403,3 +404,140 @@ def audit_view(request: Request, user: User = Depends(require_admin), db: Sessio
         request=request, name="settings_audit.html",
         context={"current_user": user, "rows": rows, "actors": actors},
     )
+
+
+# ─────────────────────────────── Identity providers (SSO) ────────────
+
+from ..crypto import encrypt, is_encrypted
+from ..models import IdentityProvider, IdpKind
+
+
+def _idp_redirect_uri(request: Request, idp_id: int) -> str:
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/auth/oidc/{idp_id}/callback"
+
+
+@router.get("/settings/identity", response_class=HTMLResponse)
+def identity_list(request: Request, flash: str | None = None,
+                  user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = (db.query(IdentityProvider)
+              .filter(IdentityProvider.tenant_id == user.tenant_id)
+              .order_by(IdentityProvider.is_active.desc(), IdentityProvider.name).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_identity.html",
+        context={"current_user": user, "rows": rows, "flash": flash,
+                 "roles": list(UserRole), "kinds": list(IdpKind),
+                 "redirect_uri_fn": lambda idp_id: _idp_redirect_uri(request, idp_id)},
+    )
+
+
+@router.post("/settings/identity/new")
+def identity_new(
+    name: str = Form(...),
+    entra_tenant_id: str = Form(...),
+    entra_client_id: str = Form(...),
+    entra_client_secret: str = Form(...),
+    allowed_email_domains: str = Form(""),
+    default_role: str = Form("consultant"),
+    is_active: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        role = UserRole(default_role)
+    except ValueError:
+        role = UserRole.consultant
+    idp = IdentityProvider(
+        tenant_id=user.tenant_id, name=name.strip(), kind=IdpKind.entra,
+        entra_tenant_id=entra_tenant_id.strip(),
+        entra_client_id=entra_client_id.strip(),
+        entra_client_secret=encrypt(entra_client_secret.strip()),
+        allowed_email_domains=allowed_email_domains.strip() or None,
+        default_role=role, is_active=bool(is_active),
+    )
+    db.add(idp)
+    log_action(db, tenant_id=user.tenant_id, actor_id=user.id,
+               action="idp.create", resource=f"idp:{name}")
+    db.commit()
+    return RedirectResponse(url=f"/settings/identity?flash={quote('Identity provider added')}", status_code=303)
+
+
+@router.post("/settings/identity/{idp_id}/edit")
+def identity_edit(
+    idp_id: int,
+    name: str = Form(...),
+    entra_tenant_id: str = Form(""),
+    entra_client_id: str = Form(""),
+    entra_client_secret: str = Form(""),
+    allowed_email_domains: str = Form(""),
+    default_role: str = Form("consultant"),
+    is_active: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    idp = db.get(IdentityProvider, idp_id)
+    if not idp or idp.tenant_id != user.tenant_id:
+        raise HTTPException(404)
+    idp.name = name.strip()
+    if entra_tenant_id.strip():  idp.entra_tenant_id  = entra_tenant_id.strip()
+    if entra_client_id.strip():  idp.entra_client_id  = entra_client_id.strip()
+    if entra_client_secret.strip():
+        idp.entra_client_secret = encrypt(entra_client_secret.strip())
+    idp.allowed_email_domains = allowed_email_domains.strip() or None
+    try:
+        idp.default_role = UserRole(default_role)
+    except ValueError:
+        pass
+    idp.is_active = bool(is_active)
+    log_action(db, tenant_id=user.tenant_id, actor_id=user.id,
+               action="idp.update", resource=f"idp:{idp.name}")
+    db.commit()
+    return RedirectResponse(url=f"/settings/identity?flash={quote('Saved')}", status_code=303)
+
+
+@router.post("/settings/identity/{idp_id}/delete")
+def identity_delete(idp_id: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    idp = db.get(IdentityProvider, idp_id)
+    if not idp or idp.tenant_id != user.tenant_id:
+        raise HTTPException(404)
+    name = idp.name
+    db.delete(idp)
+    log_action(db, tenant_id=user.tenant_id, actor_id=user.id,
+               action="idp.delete", resource=f"idp:{name}")
+    db.commit()
+    return RedirectResponse(url=f"/settings/identity?flash={quote(f'Deleted {name}')}", status_code=303)
+
+
+# ─────────────────────────────── Tenant branding ─────────────────────
+
+@router.get("/settings/tenant", response_class=HTMLResponse)
+def tenant_settings(request: Request, flash: str | None = None,
+                    user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    t = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    return templates.TemplateResponse(
+        request=request, name="settings_tenant.html",
+        context={"current_user": user, "tenant": t, "flash": flash},
+    )
+
+
+@router.post("/settings/tenant/save")
+def tenant_save(
+    name: str = Form(...),
+    logo_url: str = Form(""),
+    primary_color: str = Form(""),
+    accent_color: str = Form(""),
+    support_email: str = Form(""),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    t = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+    if not t:
+        raise HTTPException(404)
+    t.name = name.strip()
+    t.logo_url      = logo_url.strip() or None
+    t.primary_color = primary_color.strip() or None
+    t.accent_color  = accent_color.strip() or None
+    t.support_email = support_email.strip() or None
+    log_action(db, tenant_id=user.tenant_id, actor_id=user.id, action="tenant.update")
+    db.commit()
+    return RedirectResponse(url=f"/settings/tenant?flash={quote('Saved')}", status_code=303)

@@ -12,6 +12,7 @@ from .config import settings
 from .models import (
     Tenant, User, UserRole, Activity, TimesheetPeriod, Client, Engagement,
     EngagementTask, Assignment, EngagementStage, StageStatus,
+    IdentityProvider, IdpKind,
 )
 from .security import hash_password
 
@@ -23,14 +24,68 @@ def _monday_of(d: date) -> date:
 
 
 def run(db: Session) -> None:
-    # 1. Tenant
-    tenant = db.query(Tenant).first()
+    # 1. Tenants — Third Octopus (primary) + TEMA India (second tenant for
+    #    multi-tenant demonstration with full data isolation).
+    tenant = db.query(Tenant).filter(Tenant.slug == "thirdoctopus").first()
     if tenant is None:
-        tenant = Tenant(name=settings.tenant_name, week_start=0, daily_hours=8.0)
-        db.add(tenant)
+        # Either first boot OR an older tenant exists without a slug.
+        legacy = db.query(Tenant).filter(Tenant.slug.is_(None)).first()
+        if legacy is not None:
+            legacy.slug = "thirdoctopus"
+            legacy.name = "Third Octopus"
+            legacy.primary_color = "#1B2A4A"
+            legacy.accent_color  = "#0097A7"
+            legacy.support_email = "subscriptionsthirdoctopus@gmail.com"
+            db.commit()
+            tenant = legacy
+            log.info("Backfilled slug + branding for legacy tenant → thirdoctopus")
+        else:
+            tenant = Tenant(name="Third Octopus", slug="thirdoctopus",
+                            week_start=0, daily_hours=8.0,
+                            primary_color="#1B2A4A", accent_color="#0097A7",
+                            support_email="subscriptionsthirdoctopus@gmail.com")
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
+            log.info("Bootstrapped tenant: %s", tenant.name)
+
+    # Second tenant — TEMA India. Isolated data set; its own admin + IdP.
+    tema = db.query(Tenant).filter(Tenant.slug == "tema").first()
+    if tema is None:
+        tema = Tenant(name="TEMA India Pvt. Ltd.", slug="tema",
+                      week_start=0, daily_hours=8.0,
+                      primary_color="#0F3460", accent_color="#16A085",
+                      support_email="helpdesk@temaindia.com")
+        db.add(tema)
         db.commit()
-        db.refresh(tenant)
-        log.info("Bootstrapped tenant: %s", tenant.name)
+        db.refresh(tema)
+        log.info("Bootstrapped second tenant: TEMA India")
+        # TEMA's own bootstrap admin, distinct from Third Octopus's
+        if not db.query(User).filter(User.tenant_id == tema.id,
+                                     User.email == "admin@temaindia.com").first():
+            db.add(User(tenant_id=tema.id, email="admin@temaindia.com",
+                        display_name="TEMA Administrator", role=UserRole.admin,
+                        password_hash=hash_password(settings.admin_password),
+                        practice="IT", is_active=True))
+            db.commit()
+            log.info("Bootstrapped TEMA admin user")
+
+    # Stub IdP rows so /login shows a 'Sign in with Microsoft (X)' button
+    # for each tenant. Admin pastes Entra credentials via /settings/identity.
+    for t, idp_name, hint_domain in [
+        (tenant, "Sign in with Microsoft (Third Octopus)", "thirdoctopus.com"),
+        (tema,   "Sign in with Microsoft (TEMA India)",    "temaindia.com"),
+    ]:
+        existing = db.query(IdentityProvider).filter(IdentityProvider.tenant_id == t.id).first()
+        if existing is None:
+            db.add(IdentityProvider(
+                tenant_id=t.id, name=idp_name, kind=IdpKind.entra,
+                allowed_email_domains=hint_domain,
+                default_role=UserRole.consultant,
+                is_active=False,  # stays inactive until admin pastes credentials
+            ))
+            db.commit()
+            log.info("Seeded stub IdP for tenant '%s' (inactive until configured)", t.name)
 
     # 2. Bootstrap admin
     admin = db.query(User).filter(User.email == settings.admin_email).first()

@@ -563,3 +563,50 @@ button.small { padding: 4px 10px; font-size: 12px; }
 .status-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .status-card p { margin: 4px 0; font-size: 13.5px; }
 .status-card p strong { color: var(--navy); }
+
+/* ─────────────────────────────── Login SSO buttons ─────────────────────────── */
+.sso-block { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
+.sso-group { display: flex; flex-direction: column; gap: 8px; }
+.sso-group-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--slate); font-weight: 700; margin: 0 0 4px;
+}
+.sso-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--white);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  text-decoration: none; color: var(--navy);
+  font-size: 14px; font-weight: 600;
+  transition: all 0.12s ease;
+}
+.sso-btn:hover {
+  background: var(--bg);
+  border-color: var(--teal);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(27,42,74,0.06);
+}
+.sso-icon { font-size: 16px; }
+.sso-text { flex: 1; }
+.sso-arrow { color: var(--teal); font-weight: 700; }
+
+.auth-sep {
+  display: flex; align-items: center; gap: 12px;
+  margin: 18px 0 12px;
+  color: var(--slate); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 1.5px;
+}
+.auth-sep::before, .auth-sep::after {
+  content: ""; flex: 1; height: 1px; background: var(--line);
+}
+
+/* ─────────────────────────────── Callout reused on settings pages ──────────── */
+.callout {
+  padding: 12px 16px;
+  background: #E8F4F7;
+  border-left: 4px solid var(--teal);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.callout strong { color: var(--teal); }

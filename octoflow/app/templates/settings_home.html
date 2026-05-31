@@ -50,5 +50,19 @@
     <p class="tile-sub">Immutable trail of every config + workflow action.</p>
     <p class="tile-meta">{{ counts.audit }} entries (most recent 200 shown)</p>
   </a>
+
+  <a href="/settings/identity" class="tile">
+    <span class="tile-icon">🔐</span>
+    <p class="tile-title">Identity providers</p>
+    <p class="tile-sub">Microsoft Entra ID single sign-on for your tenant. Add the IdP once, your users sign in with their work Microsoft account.</p>
+    <p class="tile-meta">{{ counts.idps }} configured</p>
+  </a>
+
+  <a href="/settings/tenant" class="tile">
+    <span class="tile-icon">🏷️</span>
+    <p class="tile-title">Tenant &amp; branding</p>
+    <p class="tile-sub">Display name, logo, brand colours, support email. Your users see your brand chrome, not anyone else's.</p>
+    <p class="tile-meta">{{ tenant.name }} · {{ tenant.slug }}</p>
+  </a>
 </div>
 {% endblock %}

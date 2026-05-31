@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Identity providers · Settings{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Identity providers (SSO)</h1>
+    <p class="meta"><a href="/settings" class="weeklink">← Settings</a> · {{ rows|length }} configured for {{ current_user.tenant.name }}</p>
+  </div>
+</section>
+
+<section class="card">
+  <h3>How this works</h3>
+  <p class="meta">
+    Each identity provider lets your users sign in with their organisation's Microsoft account.
+    When somebody signs in through an IdP for the first time, OctoFlow auto-creates their user
+    record <strong>in this tenant only</strong>. They never see any data from other tenants.
+  </p>
+  <p class="meta">
+    To wire up a new IdP you need three things from your Azure Portal app registration:
+    <strong>Tenant ID</strong>, <strong>Application (client) ID</strong>, and a fresh
+    <strong>Client secret Value</strong>. Add a redirect URI shown below to the app registration.
+  </p>
+</section>
+
+<details class="card" {% if rows|length == 0 %}open{% endif %}>
+  <summary>➕ Add identity provider</summary>
+  <form method="post" action="/settings/identity/new" class="crud-form">
+    <label>Display name (shown on /login button)
+      <input type="text" name="name" required placeholder="e.g. Sign in with Microsoft (Third Octopus)">
+    </label>
+    <div class="grid-2">
+      <label>Azure Tenant ID
+        <input type="text" name="entra_tenant_id" required placeholder="e.g. 7ede5c19-a4f8-4620-9c7c-279a2f109c20">
+      </label>
+      <label>Application (client) ID
+        <input type="text" name="entra_client_id" required placeholder="e.g. b951a3f5-8207-43ed-bdd4-eb62ca04e6ac">
+      </label>
+    </div>
+    <label>Client secret (Value, not Secret ID)
+      <input type="password" name="entra_client_secret" required autocomplete="new-password">
+    </label>
+    <div class="grid-2">
+      <label>Allowed email domains (csv, optional)
+        <input type="text" name="allowed_email_domains" placeholder="e.g. thirdoctopus.com,thirdoctopus.local">
+      </label>
+      <label>Default role for new SSO users
+        <select name="default_role">
+          {% for r in roles %}<option value="{{ r.value }}" {% if r.value == 'consultant' %}selected{% endif %}>{{ r.value }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" name="is_active" value="1" checked> Active — show on /login</label>
+    <div class="form-actions"><button type="submit" class="primary">Add identity provider</button></div>
+  </form>
+</details>
+
+{% for idp in rows %}
+<details class="card" style="margin-bottom: 12px;">
+  <summary>
+    <strong>{{ idp.name }}</strong>
+    {% if idp.is_active %}<span class="status-pill status-approved">Active</span>{% else %}<span class="status-pill status-draft">Inactive</span>{% endif %}
+    <span class="meta-mono">· {{ idp.entra_tenant_id or "no tenant id" }}</span>
+  </summary>
+  <div class="callout">
+    <strong>Redirect URI</strong> to add in Azure App Registration → Authentication:<br>
+    <code class="code-pill" style="font-size: 12px;">{{ redirect_uri_fn(idp.id) }}</code>
+  </div>
+  <form method="post" action="/settings/identity/{{ idp.id }}/edit" class="crud-form">
+    <label>Display name<input type="text" name="name" value="{{ idp.name }}" required></label>
+    <div class="grid-2">
+      <label>Tenant ID<input type="text" name="entra_tenant_id" value="{{ idp.entra_tenant_id or '' }}"></label>
+      <label>Client ID<input type="text" name="entra_client_id" value="{{ idp.entra_client_id or '' }}"></label>
+    </div>
+    <label>Client secret (leave blank to keep existing)
+      <input type="password" name="entra_client_secret" autocomplete="new-password"
+             placeholder="{% if idp.entra_client_secret %}•••••• stored{% else %}paste Value here{% endif %}">
+    </label>
+    <div class="grid-2">
+      <label>Allowed email domains<input type="text" name="allowed_email_domains" value="{{ idp.allowed_email_domains or '' }}" placeholder="csv, blank = any"></label>
+      <label>Default role for new users
+        <select name="default_role">{% for r in roles %}<option value="{{ r.value }}" {% if r == idp.default_role %}selected{% endif %}>{{ r.value }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" name="is_active" value="1" {% if idp.is_active %}checked{% endif %}> Active</label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Save</button>
+      <button type="submit" form="del-idp-{{ idp.id }}" class="secondary small">Delete</button>
+    </div>
+  </form>
+  <form id="del-idp-{{ idp.id }}" method="post" action="/settings/identity/{{ idp.id }}/delete"
+        onsubmit="return confirm('Delete identity provider &quot;{{ idp.name | e }}&quot;? Users already created via SSO keep their accounts.');"></form>
+</details>
+{% endfor %}
+{% endblock %}
