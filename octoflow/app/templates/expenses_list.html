@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}My expenses{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>My expenses</h1>
+    <p class="meta">Out-of-pocket spend you want reimbursed. Save a draft, attach the receipt, submit for approval.</p>
+  </div>
+  <div class="page-head-right">
+    <a href="/expenses/approvals" class="weeklink">Approvals queue →</a>
+  </div>
+</section>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Draft</div><div class="kpi-val" style="color: var(--slate);">{{ by_status.draft }}</div><div class="kpi-sub">not yet submitted</div></div>
+  <div class="kpi"><div class="kpi-label">Submitted</div><div class="kpi-val" style="color: var(--amber);">{{ by_status.submitted }}</div><div class="kpi-sub">awaiting approval</div></div>
+  <div class="kpi"><div class="kpi-label">Approved</div><div class="kpi-val" style="color: var(--green);">{{ by_status.approved }}</div><div class="kpi-sub">awaiting reimbursement</div></div>
+  <div class="kpi"><div class="kpi-label">Rejected</div><div class="kpi-val" style="color: var(--red);">{{ by_status.rejected }}</div><div class="kpi-sub">edit + resubmit</div></div>
+  <div class="kpi"><div class="kpi-label">Reimbursed</div><div class="kpi-val" style="color: var(--navy);">{{ by_status.reimbursed }}</div><div class="kpi-sub">paid out</div></div>
+</div>
+
+<details class="card" open>
+  <summary>➕ Add expense</summary>
+  <form method="post" action="/expenses/new" class="crud-form">
+    <div class="grid-3">
+      <label>Date<input type="date" name="expense_date" value="{{ today }}" required></label>
+      <label>Category
+        <select name="category_id">
+          <option value="">— uncategorised —</option>
+          {% for c in categories %}<option value="{{ c.id }}">{{ c.code }} · {{ c.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Bill to project (optional)
+        <select name="engagement_id">
+          <option value="">— internal / not billed —</option>
+          {% for e in engagements %}<option value="{{ e.id }}">{{ e.client.code }} · {{ e.name }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="grid-3">
+      <label>Amount<input type="number" name="amount" min="0.01" step="0.01" required placeholder="e.g. 1250.00"></label>
+      <label>Currency<input type="text" name="currency" maxlength="3" value="INR"></label>
+      <label class="check" style="align-self: end;"><input type="checkbox" name="is_billable" value="1" checked> Billable to client</label>
+    </div>
+    <label>Description<textarea name="description" rows="2" placeholder="e.g. Ola to HCAL Mumbai office for CSCRF kickoff"></textarea></label>
+    <div class="form-actions"><button type="submit" class="primary">Save as draft</button>
+      <span class="meta">You'll attach the receipt on the next screen.</span></div>
+  </form>
+</details>
+
+{% if rows %}
+<table class="data" style="margin-top: 16px;">
+  <thead><tr><th>Date</th><th>Category</th><th>Project</th><th style="text-align:right;">Amount</th><th>Status</th><th>Receipt</th><th></th></tr></thead>
+  <tbody>
+    {% for e in rows %}
+    <tr {% if e.status.value == 'rejected' %}class="row-warn"{% endif %}>
+      <td><span class="meta-mono">{{ e.expense_date }}</span></td>
+      <td>{% if e.category %}<code class="code-pill">{{ e.category.code }}</code> {{ e.category.name }}{% else %}<span class="meta">—</span>{% endif %}</td>
+      <td>{% if e.engagement %}{{ e.engagement.client.code }} · {{ e.engagement.name }}{% else %}<span class="meta">— internal —</span>{% endif %}</td>
+      <td style="text-align:right;"><span class="meta-mono"><strong>{{ e.currency }} {{ '%.2f' % e.amount }}</strong></span>{% if not e.is_billable %}<div class="meta">non-billable</div>{% endif %}</td>
+      <td><span class="status-pill status-{{ 'draft' if e.status.value == 'draft' else ('submitted' if e.status.value == 'submitted' else ('approved' if e.status.value == 'approved' else ('rejected' if e.status.value == 'rejected' else 'approved'))) }}">{{ e.status.value | capitalize }}</span></td>
+      <td>{% if e.receipt_path %}<a href="/expenses/{{ e.id }}/receipt/file" class="weeklink">📎 view</a>{% else %}<span class="meta">none</span>{% endif %}</td>
+      <td><a href="/expenses/{{ e.id }}" class="weeklink">Open →</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card" style="margin-top: 16px;">
+  <p class="meta">No expenses yet. Add one above to get started.</p>
+</div>
+{% endif %}
+{% endblock %}

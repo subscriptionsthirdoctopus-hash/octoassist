@@ -20,6 +20,7 @@ from .web.views_projects import router as projects_router
 from .web.views_oidc import router as oidc_router
 from .web.views_approvals import router as approvals_router
 from .web.views_reports import router as reports_router
+from .web.views_expenses import router as expenses_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,6 +50,7 @@ app.include_router(dashboard_router)  # / + /dashboard (post-login landing)
 app.include_router(timesheet_router)
 app.include_router(approvals_router)  # /approvals manager inbox + per-sheet review
 app.include_router(projects_router)   # /projects PM dashboard + per-project detail
+app.include_router(expenses_router)   # /expenses + /expenses/approvals (out-of-pocket reimbursement)
 app.include_router(reports_router)    # /reports landing + 6 Phase-1 reports + CSV exports
 app.include_router(settings_router)  # /settings + sub-pages (incl. /settings/identity, /settings/tenant)
 app.include_router(stub_router)      # stubs for /approvals, /reports

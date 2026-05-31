@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 from ..auth import require_admin
 from ..database import get_db
 from ..models import (
-    Activity, Assignment, AuditLog, Client, Engagement, EngagementTask, Holiday,
-    IdentityProvider, ProjectStatus, Tenant, User, UserRole,
+    Activity, Assignment, AuditLog, Client, Engagement, EngagementTask,
+    ExpenseCategory, Holiday, IdentityProvider, ProjectStatus, Tenant,
+    User, UserRole,
 )
 from ..security import hash_password
 from ..services.timesheet import log_action
@@ -34,6 +35,7 @@ def settings_home(request: Request, user: User = Depends(require_admin), db: Ses
         "clients":     db.query(func.count(Client.id)).filter(Client.tenant_id == tid, Client.is_active.is_(True)).scalar() or 0,
         "engagements": db.query(func.count(Engagement.id)).filter(Engagement.tenant_id == tid).scalar() or 0,
         "activities":  db.query(func.count(Activity.id)).filter(Activity.tenant_id == tid, Activity.is_active.is_(True)).scalar() or 0,
+        "expense_categories": db.query(func.count(ExpenseCategory.id)).filter(ExpenseCategory.tenant_id == tid, ExpenseCategory.is_active.is_(True)).scalar() or 0,
         "holidays":    db.query(func.count(Holiday.id)).filter(Holiday.tenant_id == tid).scalar() or 0,
         "audit":       db.query(func.count(AuditLog.id)).filter(AuditLog.tenant_id == tid).scalar() or 0,
         "idps":        db.query(func.count(IdentityProvider.id)).filter(IdentityProvider.tenant_id == tid).scalar() or 0,
@@ -349,6 +351,53 @@ def activity_edit(aid: int, code: str = Form(...), name: str = Form(...),
     log_action(db, tenant_id=user.tenant_id, actor_id=user.id, action="activity.update", resource=f"activity:{a.code}")
     db.commit()
     return RedirectResponse(url=f"/settings/activities?flash={quote('Saved')}", status_code=303)
+
+
+# ─────────────────────────────── Expense categories ──────────────────
+
+@router.get("/settings/expense-categories", response_class=HTMLResponse)
+def expcat_list(request: Request, flash: str | None = None,
+                user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = (db.query(ExpenseCategory)
+              .filter(ExpenseCategory.tenant_id == user.tenant_id)
+              .order_by(ExpenseCategory.is_active.desc(), ExpenseCategory.code).all())
+    return templates.TemplateResponse(
+        request=request, name="settings_expense_categories.html",
+        context={"current_user": user, "rows": rows, "flash": flash},
+    )
+
+
+@router.post("/settings/expense-categories/new")
+def expcat_new(code: str = Form(...), name: str = Form(...),
+               is_billable_default: str = Form(""),
+               user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    code = code.strip().upper()
+    if db.query(ExpenseCategory).filter(ExpenseCategory.tenant_id == user.tenant_id,
+                                        ExpenseCategory.code == code).first():
+        return RedirectResponse(url=f"/settings/expense-categories?flash={quote(f'Code {code} exists')}", status_code=303)
+    db.add(ExpenseCategory(tenant_id=user.tenant_id, code=code, name=name.strip(),
+                           is_billable_default=bool(is_billable_default), is_active=True))
+    log_action(db, tenant_id=user.tenant_id, actor_id=user.id,
+               action="expense_category.create", resource=f"expense_category:{code}")
+    db.commit()
+    return RedirectResponse(url=f"/settings/expense-categories?flash={quote('Added')}", status_code=303)
+
+
+@router.post("/settings/expense-categories/{cid}/edit")
+def expcat_edit(cid: int, code: str = Form(...), name: str = Form(...),
+                is_billable_default: str = Form(""), is_active: str = Form(""),
+                user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    c = db.get(ExpenseCategory, cid)
+    if not c or c.tenant_id != user.tenant_id:
+        raise HTTPException(404)
+    c.code = code.strip().upper()
+    c.name = name.strip()
+    c.is_billable_default = bool(is_billable_default)
+    c.is_active = bool(is_active)
+    log_action(db, tenant_id=user.tenant_id, actor_id=user.id,
+               action="expense_category.update", resource=f"expense_category:{c.code}")
+    db.commit()
+    return RedirectResponse(url=f"/settings/expense-categories?flash={quote('Saved')}", status_code=303)
 
 
 # ─────────────────────────────── Holidays ─────────────────────────────

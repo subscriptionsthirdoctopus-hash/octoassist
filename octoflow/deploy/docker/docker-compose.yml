@@ -47,6 +47,10 @@ services:
     networks:
       - octoflow-network
       - hrms-network
+    volumes:
+      # Receipt uploads (expense module). Persists across container
+      # rebuilds. Host dir is created by docker on first up.
+      - /opt/octoflow/receipts:/srv/octoflow/receipts
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8080/health', timeout=3); sys.exit(0)"]
       interval: 30s

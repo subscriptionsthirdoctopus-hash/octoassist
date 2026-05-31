@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     bind_host: str = "0.0.0.0"
     bind_port: int = 8080
 
+    # Expense receipt uploads — bind-mounted from host in production
+    receipts_dir: str = "/srv/octoflow/receipts"
+    receipt_max_mb: int = 10
+
 
 settings = Settings()

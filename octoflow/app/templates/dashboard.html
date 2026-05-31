@@ -52,6 +52,37 @@
   {% endif %}
 </div>
 
+<!-- ─── Expense KPI strip ─── -->
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">My expenses — draft</div>
+    <div class="kpi-val" style="color: var(--slate);">{{ data.my_expenses_draft }}</div>
+    <div class="kpi-sub">{% if data.my_expenses_draft %}<a href="/expenses" class="weeklink">Submit drafts →</a>{% else %}nothing to file{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">My expenses — submitted</div>
+    <div class="kpi-val" style="color: var(--amber);">{{ data.my_expenses_submitted }}</div>
+    <div class="kpi-sub">awaiting approval</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Awaiting reimbursement</div>
+    <div class="kpi-val" style="color: var(--green);">{{ data.my_expenses_currency }} {{ '%.0f' % data.my_expenses_awaiting }}</div>
+    <div class="kpi-sub">approved · not yet paid</div>
+  </div>
+  {% if data.role in ('admin', 'manager') %}
+  <div class="kpi" style="border-top-color: var(--amber);">
+    <div class="kpi-label">Expenses awaiting your approval</div>
+    <div class="kpi-val" style="color: {{ 'var(--amber)' if data.expense_pending_count else 'var(--slate)' }};">{{ data.expense_pending_count }}</div>
+    <div class="kpi-sub">{% if data.expense_pending_count %}<a href="/expenses/approvals" class="weeklink">Review queue →</a>{% else %}nothing pending{% endif %}</div>
+  </div>
+  {% endif %}
+  <div class="kpi" style="border-top-color: var(--teal);">
+    <div class="kpi-label">Log new expense</div>
+    <div class="kpi-val" style="font-size: 22px; padding-top: 8px;"><a href="/expenses" class="weeklink">+ Add expense →</a></div>
+    <div class="kpi-sub">attach a receipt + submit</div>
+  </div>
+</div>
+
 <!-- ─── 2-column layout: left (mine), right (manager/admin extras) ─── -->
 <div class="dash-grid">
   <!-- Left column — always shown -->

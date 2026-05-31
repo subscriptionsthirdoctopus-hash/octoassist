@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Expense · {{ exp.expense_date }} · {{ exp.currency }} {{ '%.2f' % exp.amount }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ exp.currency }} {{ '%.2f' % exp.amount }}
+      {% if exp.category %}<span class="meta" style="font-weight:normal;">· {{ exp.category.name }}</span>{% endif %}
+    </h1>
+    <p class="meta">
+      <a href="/expenses" class="weeklink">← My expenses</a>
+      · spent on <strong>{{ exp.expense_date }}</strong>
+      · by {{ exp.user.display_name }}
+    </p>
+  </div>
+  <div class="page-head-right">
+    <span class="status-pill status-{{ 'draft' if exp.status.value == 'draft' else ('submitted' if exp.status.value == 'submitted' else ('approved' if exp.status.value == 'approved' else ('rejected' if exp.status.value == 'rejected' else 'approved'))) }}">{{ exp.status.value | capitalize }}</span>
+  </div>
+</section>
+
+{% if exp.status.value == 'rejected' and exp.rejection_reason %}
+<div class="callout" style="background:#FEE2E2; border-left-color: var(--red);">
+  <strong>Rejection reason:</strong> {{ exp.rejection_reason }}<br>
+  <span class="meta">Edit the fields below + attach a corrected receipt if needed, then submit again.</span>
+</div>
+{% endif %}
+
+<div class="dash-grid">
+  <div class="dash-col">
+    <section class="card">
+      <h3>Details</h3>
+      {% if can_edit %}
+      <form method="post" action="/expenses/{{ exp.id }}/edit" class="crud-form">
+        <div class="grid-3">
+          <label>Date<input type="date" name="expense_date" value="{{ exp.expense_date }}" required></label>
+          <label>Category
+            <select name="category_id">
+              <option value="">— uncategorised —</option>
+              {% for c in categories %}<option value="{{ c.id }}" {% if exp.category_id == c.id %}selected{% endif %}>{{ c.code }} · {{ c.name }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Bill to project
+            <select name="engagement_id">
+              <option value="">— internal —</option>
+              {% for e in engagements %}<option value="{{ e.id }}" {% if exp.engagement_id == e.id %}selected{% endif %}>{{ e.client.code }} · {{ e.name }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="grid-3">
+          <label>Amount<input type="number" name="amount" step="0.01" min="0.01" value="{{ '%.2f' % exp.amount }}" required></label>
+          <label>Currency<input type="text" name="currency" maxlength="3" value="{{ exp.currency }}"></label>
+          <label class="check" style="align-self: end;"><input type="checkbox" name="is_billable" value="1" {% if exp.is_billable %}checked{% endif %}> Billable to client</label>
+        </div>
+        <label>Description<textarea name="description" rows="3">{{ exp.description }}</textarea></label>
+        <div class="form-actions"><button type="submit" class="primary">Save</button></div>
+      </form>
+      {% else %}
+      <table class="data">
+        <tr><td><strong>Date</strong></td><td>{{ exp.expense_date }}</td></tr>
+        <tr><td><strong>Category</strong></td><td>{% if exp.category %}{{ exp.category.code }} · {{ exp.category.name }}{% else %}—{% endif %}</td></tr>
+        <tr><td><strong>Amount</strong></td><td><strong>{{ exp.currency }} {{ '%.2f' % exp.amount }}</strong></td></tr>
+        <tr><td><strong>Billable</strong></td><td>{% if exp.is_billable %}✓ billable to client{% else %}— non-billable{% endif %}</td></tr>
+        <tr><td><strong>Project</strong></td><td>{% if exp.engagement %}{{ exp.engagement.client.code }} · {{ exp.engagement.name }}{% else %}— internal —{% endif %}</td></tr>
+        <tr><td><strong>Description</strong></td><td>{{ exp.description or '—' }}</td></tr>
+      </table>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h3>History</h3>
+      <table class="data">
+        <tr><td><strong>Created</strong></td><td><span class="meta-mono">{{ exp.created_at.strftime('%Y-%m-%d %H:%M') }}</span> by {{ exp.user.display_name }}</td></tr>
+        {% if exp.submitted_at %}<tr><td><strong>Submitted</strong></td><td><span class="meta-mono">{{ exp.submitted_at.strftime('%Y-%m-%d %H:%M') }}</span></td></tr>{% endif %}
+        {% if exp.approved_at %}<tr><td><strong>{{ 'Approved' if exp.status.value != 'rejected' else 'Decision' }}</strong></td><td><span class="meta-mono">{{ exp.approved_at.strftime('%Y-%m-%d %H:%M') }}</span>{% if exp.approver %} by {{ exp.approver.display_name }}{% endif %}</td></tr>{% endif %}
+        {% if exp.reimbursed_at %}<tr><td><strong>Reimbursed</strong></td><td><span class="meta-mono">{{ exp.reimbursed_at.strftime('%Y-%m-%d %H:%M') }}</span>{% if exp.reimbursed_by %} by {{ exp.reimbursed_by.display_name }}{% endif %}</td></tr>{% endif %}
+      </table>
+    </section>
+  </div>
+
+  <div class="dash-col">
+    <section class="card">
+      <h3>Receipt</h3>
+      {% if exp.receipt_path %}
+      <p>
+        📎 <a href="/expenses/{{ exp.id }}/receipt/file" class="link-strong">{{ exp.receipt_filename or 'receipt' }}</a>
+        <span class="meta">· {{ exp.receipt_mime }}</span>
+      </p>
+      {% if exp.receipt_mime and exp.receipt_mime.startswith('image/') %}
+      <p><a href="/expenses/{{ exp.id }}/receipt/file"><img src="/expenses/{{ exp.id }}/receipt/file" alt="receipt" style="max-width:100%; border:1px solid var(--line); border-radius: 4px;"></a></p>
+      {% endif %}
+      {% else %}
+      <p class="meta">No receipt attached yet. Required to submit.</p>
+      {% endif %}
+
+      {% if can_edit %}
+      <form method="post" action="/expenses/{{ exp.id }}/receipt" enctype="multipart/form-data" class="crud-form" style="margin-top: 12px;">
+        <label>{% if exp.receipt_path %}Replace receipt{% else %}Attach receipt{% endif %} (jpg / png / webp / gif / pdf, max 10 MB)
+          <input type="file" name="receipt" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" required>
+        </label>
+        <div class="form-actions"><button type="submit" class="primary">Upload</button></div>
+      </form>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h3>Decision</h3>
+      {% if can_submit %}
+      <div class="approve-row">
+        <form method="post" action="/expenses/{{ exp.id }}/submit" class="inline-form">
+          <button type="submit" class="primary big">↑ Submit for approval</button>
+        </form>
+        <span class="meta">Requires a receipt to be attached.</span>
+      </div>
+      {% endif %}
+
+      {% if can_recall %}
+      <div class="approve-row" style="margin-top: 10px;">
+        <form method="post" action="/expenses/{{ exp.id }}/recall" class="inline-form">
+          <button type="submit" class="secondary">↩ Recall to draft</button>
+        </form>
+        <span class="meta">Brings the expense back under your control.</span>
+      </div>
+      {% endif %}
+
+      {% if can_approve %}
+      <div class="approve-row" style="margin-top: 10px;">
+        <form method="post" action="/expenses/{{ exp.id }}/approve" class="inline-form">
+          <button type="submit" class="primary big">✓ Approve</button>
+        </form>
+        <span class="meta">Moves to awaiting-reimbursement.</span>
+      </div>
+      <details style="margin-top: 14px;">
+        <summary style="cursor:pointer; font-weight:600; color: var(--red);">✗ Reject with reason</summary>
+        <form method="post" action="/expenses/{{ exp.id }}/reject" class="crud-form" style="margin-top: 10px;">
+          <label>Reason (required)<textarea name="reason" rows="3" required placeholder="e.g. Receipt is illegible — please re-upload a clearer photo."></textarea></label>
+          <div class="form-actions"><button type="submit" class="secondary" style="color: var(--red); border-color: var(--red);">Reject</button></div>
+        </form>
+      </details>
+      {% endif %}
+
+      {% if can_mark_reimbursed %}
+      <div class="approve-row" style="margin-top: 10px;">
+        <form method="post" action="/expenses/{{ exp.id }}/reimburse" class="inline-form">
+          <button type="submit" class="primary big">💰 Mark reimbursed</button>
+        </form>
+        <span class="meta">Finance action — record that payment has been made.</span>
+      </div>
+      {% endif %}
+
+      {% if can_delete %}
+      <details style="margin-top: 18px;">
+        <summary style="cursor:pointer; color: var(--slate); font-size: 13px;">Delete expense</summary>
+        <form method="post" action="/expenses/{{ exp.id }}/delete" class="inline-form" style="margin-top: 8px;"
+              onsubmit="return confirm('Permanently delete this expense (and any receipt)?');">
+          <button type="submit" class="secondary small" style="color: var(--red);">Delete permanently</button>
+        </form>
+      </details>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

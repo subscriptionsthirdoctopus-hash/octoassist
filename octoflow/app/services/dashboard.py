@@ -18,9 +18,9 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from ..models import (
-    Engagement, Milestone, MilestoneStatus, ProjectStatus, RagStatus,
-    StatusUpdate, TimeEntry, Timesheet, TimesheetPeriod, TimesheetStatus,
-    User, UserRole,
+    Engagement, Expense, ExpenseStatus, Milestone, MilestoneStatus,
+    ProjectStatus, RagStatus, StatusUpdate, TimeEntry, Timesheet,
+    TimesheetPeriod, TimesheetStatus, User, UserRole,
 )
 from .timesheet import (
     billable_hours, day_columns, get_or_create_period, get_or_create_timesheet,
@@ -42,11 +42,19 @@ class DashboardData:
     my_recent:       list       # last 5 sheets (this one included if exists)
     active_projects: list       # engagements I'm assigned to (capped at 6)
 
+    # Expense rollup (always shown — values are tenant-zero-safe)
+    my_expenses_draft:       int = 0
+    my_expenses_submitted:   int = 0
+    my_expenses_awaiting:    float = 0.0   # value of approved-but-not-yet-reimbursed
+    my_expenses_currency:    str = "INR"
+
     # Manager / Admin additions
     pending_approvals_count: int = 0
     pending_approvals_top:   list = field(default_factory=list)
     team_compliance:         list = field(default_factory=list)
     team_compliance_period:  TimesheetPeriod | None = None
+    expense_pending_count:   int = 0
+    expense_pending_top:     list = field(default_factory=list)
 
     # Admin additions
     tenant_utilisation: dict | None = None
@@ -77,6 +85,15 @@ def compute(db: Session, user: User) -> DashboardData:
         active_projects = [a.engagement for a in user.assignments
                            if a.engagement.status == ProjectStatus.active][:6]
 
+    # ─── My expense rollup ───
+    my_exp = db.query(Expense).filter(Expense.user_id == user.id).all()
+    draft_n = sum(1 for e in my_exp if e.status in (ExpenseStatus.draft, ExpenseStatus.rejected))
+    sub_n   = sum(1 for e in my_exp if e.status == ExpenseStatus.submitted)
+    awaiting_val = sum(float(e.amount or 0) for e in my_exp if e.status == ExpenseStatus.approved)
+    # Pick the currency of the most-recent approved expense, else fall back
+    currency = next((e.currency for e in my_exp
+                     if e.status == ExpenseStatus.approved), None) or "INR"
+
     data = DashboardData(
         role            = user.role.value,
         week_start      = period.start_date,
@@ -88,6 +105,10 @@ def compute(db: Session, user: User) -> DashboardData:
         my_days_logged  = days_logged,
         my_recent       = recent,
         active_projects = active_projects,
+        my_expenses_draft     = draft_n,
+        my_expenses_submitted = sub_n,
+        my_expenses_awaiting  = awaiting_val,
+        my_expenses_currency  = currency,
     )
 
     # ─── Manager + Admin: pending approvals + team compliance ───
@@ -121,6 +142,12 @@ def compute(db: Session, user: User) -> DashboardData:
             })
         data.team_compliance        = team
         data.team_compliance_period = period
+
+        # Pending expenses queue for this approver
+        from .expenses import pending_for_approver as exp_pending
+        pending_exp = exp_pending(db, user)
+        data.expense_pending_count = len(pending_exp)
+        data.expense_pending_top   = pending_exp[:5]
 
     # ─── Admin: tenant-wide utilisation snapshot + projects RAG ───
     if user.role == UserRole.admin:

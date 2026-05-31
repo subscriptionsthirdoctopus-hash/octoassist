@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Expense approvals{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Expense approvals</h1>
+    <p class="meta">{{ pending|length }} awaiting your approval
+      {% if to_reimb %} · {{ to_reimb|length }} awaiting reimbursement (admin){% endif %}
+    </p>
+  </div>
+  <div class="page-head-right">
+    <a href="/expenses" class="weeklink">← My expenses</a>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Awaiting your approval ({{ pending|length }})</h3>
+  {% if pending %}
+  <table class="data">
+    <thead><tr><th>Consultant</th><th>Date</th><th>Category</th><th>Project</th><th style="text-align:right;">Amount</th><th>Receipt</th><th></th></tr></thead>
+    <tbody>
+      {% for e in pending %}
+      <tr>
+        <td><strong>{{ e.user.display_name }}</strong><div class="meta">{{ e.user.email }}</div></td>
+        <td><span class="meta-mono">{{ e.expense_date }}</span></td>
+        <td>{% if e.category %}<code class="code-pill">{{ e.category.code }}</code> {{ e.category.name }}{% else %}<span class="meta">—</span>{% endif %}</td>
+        <td>{% if e.engagement %}{{ e.engagement.client.code }} · {{ e.engagement.name }}{% else %}<span class="meta">— internal —</span>{% endif %}</td>
+        <td style="text-align:right;"><span class="meta-mono"><strong>{{ e.currency }} {{ '%.2f' % e.amount }}</strong></span></td>
+        <td>{% if e.receipt_path %}<a href="/expenses/{{ e.id }}/receipt/file" class="weeklink">📎 view</a>{% else %}<span class="meta">none</span>{% endif %}</td>
+        <td><a href="/expenses/{{ e.id }}" class="weeklink">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">All clear — nothing waiting for your approval.</p>
+  {% endif %}
+</section>
+
+{% if current_user.role.value == 'admin' %}
+<section class="card">
+  <h3>Awaiting reimbursement ({{ to_reimb|length }}) — admin / finance</h3>
+  {% if to_reimb %}
+  <table class="data">
+    <thead><tr><th>Consultant</th><th>Approved</th><th>Date</th><th>Category</th><th style="text-align:right;">Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for e in to_reimb %}
+      <tr>
+        <td><strong>{{ e.user.display_name }}</strong></td>
+        <td><span class="meta-mono">{{ e.approved_at.strftime('%Y-%m-%d') if e.approved_at else '—' }}</span><div class="meta">by {{ e.approver.display_name if e.approver else '—' }}</div></td>
+        <td><span class="meta-mono">{{ e.expense_date }}</span></td>
+        <td>{% if e.category %}{{ e.category.name }}{% else %}<span class="meta">—</span>{% endif %}</td>
+        <td style="text-align:right;"><span class="meta-mono"><strong>{{ e.currency }} {{ '%.2f' % e.amount }}</strong></span></td>
+        <td>
+          <form method="post" action="/expenses/{{ e.id }}/reimburse" class="inline-form">
+            <button type="submit" class="primary small">💰 Mark reimbursed</button>
+          </form>
+          &nbsp;<a href="/expenses/{{ e.id }}" class="weeklink">view</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">All approved expenses have been reimbursed.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

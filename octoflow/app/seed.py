@@ -12,7 +12,7 @@ from .config import settings
 from .models import (
     Tenant, User, UserRole, Activity, TimesheetPeriod, Client, Engagement,
     EngagementTask, Assignment, EngagementStage, StageStatus,
-    IdentityProvider, IdpKind,
+    IdentityProvider, IdpKind, ExpenseCategory,
 )
 from .security import hash_password
 
@@ -119,6 +119,26 @@ def run(db: Session) -> None:
             db.add(Activity(tenant_id=tenant.id, code=code, name=name, is_billable_default=billable))
         db.commit()
         log.info("Seeded %d default activity codes", len(defaults))
+
+    # 3b. Default expense categories (TS-214) — backfill on every boot so a
+    # tenant that already has activities but no categories picks them up.
+    for tnt in db.query(Tenant).all():
+        if db.query(ExpenseCategory).filter(ExpenseCategory.tenant_id == tnt.id).count() == 0:
+            exp_defaults = [
+                ("TRV", "Travel",       True),
+                ("LDG", "Lodging",      True),
+                ("MEA", "Meals",        True),
+                ("SUB", "Subsistence",  True),
+                ("MIL", "Mileage",      True),
+                ("SFT", "Software",     False),
+                ("OTH", "Other",        False),
+            ]
+            for code, name, billable in exp_defaults:
+                db.add(ExpenseCategory(tenant_id=tnt.id, code=code, name=name,
+                                       is_billable_default=billable))
+            db.commit()
+            log.info("Seeded %d default expense categories for tenant '%s'",
+                     len(exp_defaults), tnt.name)
 
     # 4. Current week's TimesheetPeriod
     today = date.today()

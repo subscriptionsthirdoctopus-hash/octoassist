@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Settings · Expense categories{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Expense categories</h1>
+    <p class="meta">
+      <a href="/settings" class="weeklink">← Settings</a>
+      · Drive the category dropdown on out-of-pocket expenses and the default billable flag.
+    </p>
+  </div>
+</section>
+
+<details class="card" open>
+  <summary>➕ Add category</summary>
+  <form method="post" action="/settings/expense-categories/new" class="crud-form">
+    <div class="grid-3">
+      <label>Code<input type="text" name="code" maxlength="16" required placeholder="e.g. TRV"></label>
+      <label>Name<input type="text" name="name" required placeholder="e.g. Travel"></label>
+      <label class="check" style="align-self: end;">
+        <input type="checkbox" name="is_billable_default" value="1" checked>
+        Billable to client by default
+      </label>
+    </div>
+    <div class="form-actions"><button type="submit" class="primary">Add</button></div>
+  </form>
+</details>
+
+<table class="data" style="margin-top: 16px;">
+  <thead><tr><th>Code</th><th>Name</th><th>Billable default</th><th>Active</th><th></th></tr></thead>
+  <tbody>
+    {% for c in rows %}
+    <tr>
+      <form method="post" action="/settings/expense-categories/{{ c.id }}/edit" class="inline-form">
+        <td><input type="text" name="code" value="{{ c.code }}" maxlength="16" required style="width:90px;"></td>
+        <td><input type="text" name="name" value="{{ c.name }}" required></td>
+        <td><label class="check"><input type="checkbox" name="is_billable_default" value="1" {% if c.is_billable_default %}checked{% endif %}> Billable</label></td>
+        <td><label class="check"><input type="checkbox" name="is_active" value="1" {% if c.is_active %}checked{% endif %}> Active</label></td>
+        <td><button type="submit" class="primary small">Save</button></td>
+      </form>
+    </tr>
+    {% endfor %}
+    {% if not rows %}
+    <tr><td colspan="5" class="meta">No categories yet — defaults seed automatically on next app start.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

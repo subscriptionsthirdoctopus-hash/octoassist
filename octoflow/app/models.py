@@ -470,3 +470,84 @@ class IdentityProvider(Base):
     created_at:           Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     tenant:               Mapped[Tenant] = relationship(back_populates="identity_providers")
+
+
+# ═══════════════════════════════ Expenses (TS-211 … TS-215) ════════════════════
+
+class ExpenseStatus(str, enum.Enum):
+    draft      = "draft"
+    submitted  = "submitted"
+    approved   = "approved"
+    rejected   = "rejected"
+    reimbursed = "reimbursed"
+
+
+class ExpenseCategory(Base):
+    """Tenant-scoped category dictionary — Travel, Meals, Software, etc.
+    Seeded with sensible defaults on first boot; admins add/disable in
+    /settings/expense-categories."""
+    __tablename__ = "expense_categories"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_expcat_tenant_code"),
+    )
+
+    id:                  Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id:           Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    code:                Mapped[str] = mapped_column(String(20), nullable=False)
+    name:                Mapped[str] = mapped_column(String(80), nullable=False)
+    is_billable_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True,
+                                                      doc="Default billable flag when this category is picked")
+    is_active:           Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class Expense(Base):
+    """A single out-of-pocket expense the consultant paid for and wants
+    reimbursed.
+
+    Lifecycle (independent of timesheets):
+      draft → submitted → approved → reimbursed
+                       └→ rejected (back to draft after rework)
+    """
+    __tablename__ = "expenses"
+    __table_args__ = (
+        Index("ix_expenses_tenant_status", "tenant_id", "status"),
+        Index("ix_expenses_user_status",   "user_id", "status"),
+    )
+
+    id:               Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id:        Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id:          Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    expense_date:     Mapped[date] = mapped_column(Date, nullable=False,
+                                                   doc="The date the spend actually happened")
+    category_id:      Mapped[int | None] = mapped_column(ForeignKey("expense_categories.id"), nullable=True)
+    engagement_id:    Mapped[int | None] = mapped_column(ForeignKey("engagements.id"), nullable=True,
+                                                          doc="Optional — bill the expense to a client")
+    amount:           Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    currency:         Mapped[str] = mapped_column(String(3), nullable=False, default="INR",
+                                                  doc="ISO 4217 currency code")
+    description:      Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_billable:      Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    receipt_path:     Mapped[str | None] = mapped_column(String(500), nullable=True,
+                                                          doc="Path on disk relative to RECEIPTS_DIR")
+    receipt_filename: Mapped[str | None] = mapped_column(String(255), nullable=True,
+                                                          doc="Original filename for download")
+    receipt_mime:     Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+    status:           Mapped[ExpenseStatus] = mapped_column(Enum(ExpenseStatus), nullable=False, default=ExpenseStatus.draft)
+    submitted_at:     Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approver_id:      Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at:      Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reimbursed_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reimbursed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at:       Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at:       Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    user:             Mapped["User"]              = relationship(foreign_keys=[user_id])
+    category:         Mapped["ExpenseCategory | None"] = relationship()
+    engagement:       Mapped["Engagement | None"] = relationship()
+    approver:         Mapped["User | None"]       = relationship(foreign_keys=[approver_id])
+    reimbursed_by:    Mapped["User | None"]       = relationship(foreign_keys=[reimbursed_by_id])
