@@ -768,9 +768,9 @@ foreach ($sid in $sessions) {
     try {
         $ok = [OctoToast]::WTSSendMessage([IntPtr]::Zero, $sid, $title,
                 $title.Length*2, $body, $body.Length*2, 0x40, 0, [ref]$resp, $false)
-        if ($ok) { $count++ } else { $errors += ("session {0}: WTSSendMessage returned false (last error {1})" -f $sid, [Runtime.InteropServices.Marshal]::GetLastWin32Error()) }
+        if ($ok) { $count++ } else { $errors += (""session {0}: WTSSendMessage returned false (last error {1})"" -f $sid, [Runtime.InteropServices.Marshal]::GetLastWin32Error()) }
     } catch {
-        $errors += ("session {0}: {1}" -f $sid, $_.Exception.Message)
+        $errors += (""session {0}: {1}"" -f $sid, $_.Exception.Message)
     }
 }
 ""DELIVERED:$count""
