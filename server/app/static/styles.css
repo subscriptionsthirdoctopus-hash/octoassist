@@ -622,6 +622,28 @@ table.data thead th {
   padding-top: 9px;
   padding-bottom: 9px;
 }
+/* Sortable column headers — applied by static/sortable-tables.js. The arrow
+   is reserved with a fixed-width ::after so activating a sort never reflows
+   the header row. */
+table.data thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+table.data thead th.sortable:hover,
+table.data thead th.sortable:focus-visible { color: var(--text-1); }
+table.data thead th.sortable::after {
+  content: "\2195";           /* ↕ idle */
+  display: inline-block;
+  width: 1em;
+  margin-left: 4px;
+  opacity: 0.3;
+  font-size: 10px;
+}
+table.data thead th.sortable.sorted::after { opacity: 1; color: var(--accent); }
+table.data thead th.sortable[data-dir="asc"]::after  { content: "\2191"; }  /* ↑ */
+table.data thead th.sortable[data-dir="desc"]::after { content: "\2193"; }  /* ↓ */
+
 table.data tbody td { color: var(--text-2); }
 table.data tbody td strong { color: var(--text-1); }
 table.data tbody tr:last-child td { border-bottom: none; }
