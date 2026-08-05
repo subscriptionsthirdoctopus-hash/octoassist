@@ -120,12 +120,12 @@ async def asset_action_queue(
         file_supplied = (hasattr(wallpaper_file, "filename") and wallpaper_file.filename
                          and wallpaper_file.size and wallpaper_file.size > 0)
         if file_supplied:
-            from ..api.uploads import UPLOAD_DIR, _safe_ext, MAX_BYTES
+            from ..api.uploads import ensure_upload_dir, _safe_ext, MAX_BYTES
             from ..models import UploadedFile as _UF
             import hashlib as _hl, uuid as _uuid
             file_id = _uuid.uuid4().hex
             ext = _safe_ext(wallpaper_file.filename)
-            target_path = UPLOAD_DIR / f"{file_id}{ext}"
+            target_path = ensure_upload_dir() / f"{file_id}{ext}"
             h = _hl.sha256(); written = 0
             try:
                 with open(target_path, "wb") as out:
