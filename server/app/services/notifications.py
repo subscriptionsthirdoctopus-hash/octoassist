@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from .email import EmailError, send_email
 from ..models import (
-    Change, PatchWindow, Tenant, Ticket, TicketComment, TicketEventKind, User, Problem,
+    Agent, Change, PatchWindow, Tenant, Ticket, TicketComment, TicketEventKind, User, Problem,
 )
 
 log = logging.getLogger("octoassist.notify")
