@@ -22,7 +22,9 @@ Run locally from anywhere:
 """
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 SERVER_DIR = Path(__file__).resolve().parent.parent
@@ -30,6 +32,17 @@ TEMPLATE_DIR = SERVER_DIR / "app" / "templates"
 
 # Import `app.*` the same way the server does, regardless of cwd.
 sys.path.insert(0, str(SERVER_DIR))
+
+# app.api.uploads runs UPLOAD_DIR.mkdir() at import time, defaulting to
+# /srv/octoassist/uploads — the path the production container owns. Anywhere
+# else (CI, a developer laptop) that raises PermissionError before a single
+# check has run, unless the process happens to be root. Point it at a temp
+# directory using the app's own documented override so importing the app
+# stays a read-only act. Respects the value if it is already set.
+os.environ.setdefault(
+    "OCTOASSIST_UPLOAD_DIR",
+    tempfile.mkdtemp(prefix="octoassist-preflight-uploads-"),
+)
 
 
 def check_templates() -> list[str]:
