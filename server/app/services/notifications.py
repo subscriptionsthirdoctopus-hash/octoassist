@@ -4,9 +4,11 @@ Every public function here:
   - Catches all exceptions; never blocks the caller.
   - Decides whether to send (e.g. only if mail is configured, only to a
     real recipient).
-  - Composes a short subject + plain-text body. HTML is intentionally
-    avoided — keeps the templates trivial and renders cleanly in any
-    Microsoft mailbox.
+  - Composes a short subject + plain-text body. Plain text is the default:
+    it keeps the templates trivial and renders cleanly in any Microsoft
+    mailbox. The one exception is send_software_expiry_digest, which the
+    customer asked for as a table — it sends an HTML table *alongside* the
+    plaintext body, so non-HTML clients still get a fixed-width one.
 
 If you need synchronous send (e.g. user clicked "Send test"), call
 services.email.send_email directly.
@@ -34,8 +36,14 @@ def _mail_configured(tenant: Tenant) -> bool:
     return bool(tenant.smtp_host and tenant.smtp_port and tenant.smtp_from)
 
 
-def _fire(tenant: Tenant, to: str, subject: str, body: str) -> None:
-    """Send in a background thread — never blocks the request thread."""
+def _fire(tenant: Tenant, to: str, subject: str, body: str,
+          body_html: str | None = None) -> None:
+    """Send in a background thread — never blocks the request thread.
+
+    body_html is optional and defaults to None, so every existing plaintext
+    caller is unaffected. Pass it when the message is genuinely tabular; the
+    plaintext body is still required and is what non-HTML clients receive.
+    """
     if not _mail_configured(tenant):
         return
     if not to:
@@ -43,7 +51,8 @@ def _fire(tenant: Tenant, to: str, subject: str, body: str) -> None:
 
     def _go():
         try:
-            send_email(tenant=tenant, to=to, subject=subject, body_text=body)
+            send_email(tenant=tenant, to=to, subject=subject, body_text=body,
+                       body_html=body_html)
             log.info("notify sent: %r → %s", subject, to)
         except EmailError as e:
             log.warning("notify failed: %r → %s: %s", subject, to, e)
@@ -781,3 +790,117 @@ def agent_uninstallation_triggered(db: Session, agent: Agent) -> None:
 
 
 
+
+
+def send_software_expiry_digest(db: Session, horizon_days: int | None = None) -> int:
+    """One consolidated email listing every software subscription that has
+    lapsed or lapses within the horizon — TEMA action item 5.
+
+    Deliberately one message per tenant per day, not one per subscription. A
+    per-item notification stream is what the customer asked us to replace: ten
+    licences renewing in the same week produced ten separate mails, none of
+    which showed the whole picture.
+
+    Sent as an HTML table with a fixed-width plaintext alternative, so it reads
+    as a table whether or not the client renders HTML.
+
+    Returns the number of tenants mailed, so the scheduler can log it.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from . import subscriptions as subs_svc
+
+    horizon = subs_svc.DEFAULT_HORIZON_DAYS if horizon_days is None else horizon_days
+    IST = _tz(_td(hours=5, minutes=30), name="IST")
+    today = subs_svc._today()
+    sent = 0
+
+    for tenant in db.query(Tenant).all():
+        if not _mail_configured(tenant):
+            continue
+        recipient = tenant.notification_email
+        if not recipient:
+            continue
+        rows = subs_svc.expiring_soon(db, tenant.id, horizon_days=horizon)
+        if not rows:
+            continue  # nothing to chase — silence is correct, not a missed send
+
+        expired = [r for r in rows if (r.expires_on - today).days < 0]
+        upcoming = [r for r in rows if (r.expires_on - today).days >= 0]
+
+        def _when(sub) -> str:
+            days = (sub.expires_on - today).days
+            if days < 0:
+                return f"expired {abs(days)}d ago"
+            if days == 0:
+                return "expires today"
+            return f"in {days}d"
+
+        subject = (f"[OctoAssist] Software expiry — {len(rows)} item(s) need attention "
+                   f"({_dt.now(IST).strftime('%d-%b-%Y')})")
+
+        # ---- plaintext: fixed-width columns so it still lines up ----
+        head = f"{'Software':<34} {'Vendor':<18} {'Seats':>5} {'Expires':<12} {'Status':<18} PO"
+        lines = [
+            "OCTOASSIST — SOFTWARE SUBSCRIPTION EXPIRY",
+            "=" * len(head),
+            f"Tenant: {tenant.name}   Horizon: next {horizon} days   "
+            f"Generated: {_dt.now(IST).strftime('%d-%b-%Y %H:%M IST')}",
+            f"{len(expired)} already expired, {len(upcoming)} expiring within {horizon} days.",
+            "",
+            head,
+            "-" * len(head),
+        ]
+        for s in rows:
+            lines.append(
+                f"{(s.software_name or '')[:34]:<34} "
+                f"{(s.vendor or '—')[:18]:<18} "
+                f"{(str(s.seats) if s.seats else '—'):>5} "
+                f"{s.expires_on.strftime('%d/%m/%Y'):<12} "
+                f"{_when(s):<18} "
+                f"{s.po_reference or '—'}"
+            )
+        lines += ["-" * len(head), "",
+                  "Manage these at /subscriptions in OctoAssist.", ""]
+        body_text = "\n".join(lines)
+
+        # ---- HTML table ----
+        def _esc(v: str) -> str:
+            return (str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+        cells = []
+        for s in rows:
+            days = (s.expires_on - today).days
+            colour = "#b91c1c" if days < 0 else ("#b45309" if days <= 7 else "#1f2937")
+            cells.append(
+                "<tr>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;'>{_esc(s.software_name)}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;'>{_esc(s.vendor or '—')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right;'>{_esc(s.seats or '—')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;'>{s.expires_on.strftime('%d/%m/%Y')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;color:{colour};font-weight:600;white-space:nowrap;'>{_esc(_when(s))}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;'>{_esc(s.po_reference or '—')}</td>"
+                "</tr>"
+            )
+        header_cells = "".join(
+            f"<th style='padding:6px 10px;text-align:left;border-bottom:2px solid #0c64c0;"
+            f"font-size:12px;text-transform:uppercase;letter-spacing:.4px;'>{h}</th>"
+            for h in ("Software", "Vendor", "Seats", "Expires", "Status", "PO")
+        )
+        body_html = (
+            "<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">"
+            "<h2 style='margin:0 0 4px;font-size:18px;'>Software subscription expiry</h2>"
+            f"<p style='margin:0 0 14px;color:#6b7280;font-size:13px;'>"
+            f"{_esc(tenant.name)} &middot; horizon next {horizon} days &middot; "
+            f"{_dt.now(IST).strftime('%d-%b-%Y %H:%M IST')}<br>"
+            f"<strong>{len(expired)}</strong> already expired, "
+            f"<strong>{len(upcoming)}</strong> expiring within {horizon} days.</p>"
+            "<table style='border-collapse:collapse;font-size:13px;min-width:640px;'>"
+            f"<thead><tr>{header_cells}</tr></thead><tbody>{''.join(cells)}</tbody></table>"
+            "<p style='margin:14px 0 0;color:#6b7280;font-size:12px;'>"
+            "Manage these at /subscriptions in OctoAssist.</p></div>"
+        )
+
+        _fire(tenant, recipient, subject, body_text, body_html=body_html)
+        sent += 1
+
+    return sent

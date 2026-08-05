@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Software Subscriptions — OctoAssist{% endblock %}
+{% macro subscription_form(s, action, submit_label) %}
+<form method="post" action="{{ action }}" enctype="multipart/form-data" style="padding:10px 2px;">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+    <label>Software name *
+      <input type="text" name="software_name" required maxlength="200" value="{{ s.software_name if s else '' }}" style="width:100%;">
+    </label>
+    <label>Vendor
+      <input type="text" name="vendor" maxlength="160" value="{{ s.vendor or '' if s else '' }}" style="width:100%;">
+    </label>
+    <label>Licence key
+      <input type="text" name="license_key" maxlength="200" value="{{ s.license_key or '' if s else '' }}" style="width:100%;">
+    </label>
+    <label>Seats
+      <input type="number" name="seats" min="0" value="{{ s.seats if s and s.seats else '' }}" style="width:100%;">
+    </label>
+    <label>PO reference
+      <input type="text" name="po_reference" maxlength="120" value="{{ s.po_reference or '' if s else '' }}" style="width:100%;">
+    </label>
+    <label>Purchased on
+      <input type="date" name="purchased_on" value="{{ s.purchased_on.isoformat() if s and s.purchased_on else '' }}" style="width:100%;">
+    </label>
+    <label>Starts on
+      <input type="date" name="starts_on" value="{{ s.starts_on.isoformat() if s and s.starts_on else '' }}" style="width:100%;">
+    </label>
+    <label>Expires on <span class="meta" style="font-weight:normal;">(blank = perpetual)</span>
+      <input type="date" name="expires_on" value="{{ s.expires_on.isoformat() if s and s.expires_on else '' }}" style="width:100%;">
+    </label>
+    <label>PO / licence document
+      <input type="file" name="attachment" style="width:100%;">
+      {% if s and s.attachment %}<span class="meta" style="font-size:11.5px;">current: {{ s.attachment.original_filename[:40] }}</span>{% endif %}
+    </label>
+  </div>
+  <label style="display:block;margin-top:10px;">Notes
+    <textarea name="notes" rows="2" style="width:100%;">{{ s.notes if s else '' }}</textarea>
+  </label>
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <button type="submit" class="button primary">{{ submit_label }}</button>
+    {% if s %}
+    <button type="submit" class="button" formaction="/subscriptions/{{ s.id }}/delete" formenctype="application/x-www-form-urlencoded"
+            onclick="return confirm('Delete {{ s.software_name|e }}? The attached document is kept.');"
+            style="background:#dc2626;color:white;">Delete</button>
+    {% endif %}
+  </div>
+</form>
+{% endmacro %}
+
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Software Subscriptions</h1>
+      <p class="meta">
+        Licences owned — keys, seats, POs and renewal dates.
+        One consolidated expiry email goes out daily at 09:00 IST covering the next {{ horizon }} days.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="button" href="/subscriptions/windows-keys">🔑 Windows keys on endpoints</a>
+      <a class="button primary" href="/subscriptions/export.csv">Export CSV</a>
+    </div>
+  </div>
+</section>
+
+{% if flash %}<div class="alert success" style="margin-bottom:16px;">{{ flash }}</div>{% endif %}
+{% if error %}<div class="alert danger" style="margin-bottom:16px;">{{ error }}</div>{% endif %}
+
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <p class="kpi-label">Subscriptions</p>
+    <p class="kpi-value">{{ kpis.total }}</p>
+    <p class="kpi-sub">{{ kpis.seats }} seat{{ "" if kpis.seats == 1 else "s" }} recorded</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Expired</p>
+    <p class="kpi-value" style="color:var(--red,#b91c1c);">{{ kpis.expired }}</p>
+    <p class="kpi-sub">past their renewal date</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Expiring soon</p>
+    <p class="kpi-value" style="color:var(--amber,#b45309);">{{ kpis.expiring }}</p>
+    <p class="kpi-sub">within the next {{ horizon }} days</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Perpetual</p>
+    <p class="kpi-value">{{ kpis.perpetual }}</p>
+    <p class="kpi-sub">no expiry recorded — never chased</p>
+  </div>
+</section>
+
+<form method="get" action="/subscriptions" class="card" style="max-width:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+  <input type="search" name="q" value="{{ q }}" placeholder="software, vendor or PO…" style="flex:1;min-width:220px;padding:6px 10px;">
+  <button type="submit" class="button">Search</button>
+  {% if q %}<a href="/subscriptions" class="button">Clear</a>{% endif %}
+</form>
+
+{% if current_user.role == 'admin' %}
+<details class="card" style="max-width:none;margin-bottom:14px;">
+  <summary style="cursor:pointer;font-weight:600;">➕ Add a subscription</summary>
+  {{ subscription_form(None, "/subscriptions/new", "Add subscription") }}
+</details>
+
+<form method="post" action="/subscriptions/import-windows" style="margin-bottom:18px;"
+      onsubmit="return confirm('Create a subscription row for every endpoint reporting a Windows OEM key?\n\nSafe to re-run — existing rows are left alone.');">
+  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+  <button type="submit" class="button">🔑 Import Windows keys from endpoints</button>
+  <span class="meta" style="margin-left:8px;">Reads the OEM firmware key each agent already reports. Retail/volume machines report none and still need entering by hand.</span>
+</form>
+{% endif %}
+
+<section class="card" style="max-width:none;">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Software</th>
+        <th>Vendor</th>
+        <th>Licence key</th>
+        <th>Seats</th>
+        <th>PO</th>
+        <th>Expires</th>
+        <th>Status</th>
+        <th>Document</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      {% set s = r.sub %}
+      <tr>
+        <td>
+          <strong>{{ s.software_name }}</strong>
+          {% if current_user.role == 'admin' %}
+          <button type="button" class="link-button" title="Edit this subscription"
+                  style="margin-left:6px;font-size:12px;" onclick="toggleEdit({{ s.id }})">✎ Edit</button>
+          {% endif %}
+          {% if s.agent %}<br><span class="meta" style="font-size:11.5px;">{{ s.agent.hostname }}</span>{% endif %}
+        </td>
+        <td>{{ s.vendor or "—" }}</td>
+        <td>
+          {% if s.license_key %}
+            <code style="font-family:ui-monospace,monospace;font-size:12px;">{{ s.license_key }}</code>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ s.seats if s.seats else "—" }}</td>
+        <td>{{ s.po_reference or "—" }}</td>
+        <td>{{ s.expires_on | dmy }}</td>
+        <td>
+          {% if r.status == 'expired' %}
+            <span class="status status-cancelled">expired {{ -r.days }}d ago</span>
+          {% elif r.status == 'expiring' %}
+            <span class="status status-on_hold">{{ "today" if r.days == 0 else "in " ~ r.days ~ "d" }}</span>
+          {% elif r.status == 'perpetual' %}
+            <span class="meta">perpetual</span>
+          {% else %}
+            <span class="status status-resolved">{{ r.days }}d left</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.download_url %}
+            <a href="{{ r.download_url }}">📎 {{ s.attachment.original_filename[:28] }}</a>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if not rows %}
+  <div class="empty">
+    <h2>No subscriptions recorded yet</h2>
+    <p>Add one above, or import the Windows keys your endpoints already report.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% if current_user.role == 'admin' %}
+{# Edit panels live outside the table: a colspan row inside <tbody> makes the
+   table ragged, and sorting would tear the panel away from its row. #}
+{% for r in rows %}{% set s = r.sub %}
+<section id="edit-{{ s.id }}" class="card" style="display:none;max-width:none;margin-top:12px;border-left:4px solid var(--accent,#2563eb);">
+  <div class="row-between" style="margin-bottom:4px;">
+    <h3 style="margin:0;font-size:16px;">Edit — {{ s.software_name }}</h3>
+    <button type="button" class="link-button" onclick="toggleEdit({{ s.id }})" style="font-size:20px;line-height:1;">&times;</button>
+  </div>
+  {{ subscription_form(s, "/subscriptions/" ~ s.id ~ "/edit", "Save changes") }}
+</section>
+{% endfor %}
+{% endif %}
+
+<script>
+  function toggleEdit(id) {
+    var panel = document.getElementById('edit-' + id);
+    if (!panel) return;
+    var opening = panel.style.display === 'none';
+    // Only one panel open at a time, so the page does not become a wall of forms.
+    document.querySelectorAll('section[id^="edit-"]').forEach(function (el) {
+      el.style.display = 'none';
+    });
+    if (opening) {
+      panel.style.display = '';
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+</script>
+{% endblock %}

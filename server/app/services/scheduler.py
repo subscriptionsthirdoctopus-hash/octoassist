@@ -28,6 +28,7 @@ TICK_SECONDS = 60
 _STARTED = False
 _LOCK = threading.Lock()
 _LAST_DIGEST_SENT_DATE = None
+_LAST_EXPIRY_DIGEST_DATE = None
 
 
 
@@ -56,6 +57,23 @@ def _tick_once() -> int:
                     _LAST_DIGEST_SENT_DATE = current_date_str
                 except Exception as e:
                     log.exception("Failed to send daily admin audit digest: %s", e)
+
+        # Consolidated software-expiry digest — one mail per tenant per day
+        # (TEMA action item 5). 03:30 UTC is 09:00 IST, so it lands at the top
+        # of the working day rather than overnight. Guarded by its own date
+        # marker so a restart inside the window cannot send it twice.
+        global _LAST_EXPIRY_DIGEST_DATE
+        if now_utc.hour == 3 and now_utc.minute >= 30:
+            expiry_date_str = now_utc.strftime("%Y-%m-%d")
+            if _LAST_EXPIRY_DIGEST_DATE != expiry_date_str:
+                from .notifications import send_software_expiry_digest
+                try:
+                    n = send_software_expiry_digest(db)
+                    log.info("Software expiry digest sent to %d tenant(s) for %s",
+                             n, expiry_date_str)
+                    _LAST_EXPIRY_DIGEST_DATE = expiry_date_str
+                except Exception as e:
+                    log.exception("Failed to send software expiry digest: %s", e)
 
         windows = _due_windows(db)
         promoted = 0
