@@ -34,6 +34,10 @@
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;">
+    {# Run PowerShell leads the grid — it is the action the TEMA team reaches
+       for most often, and hunting for it at the bottom cost them time. The
+       modal it opens still carries the full break-glass confirmation. #}
+    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">⚠️ Run PowerShell</button>
     {# Single-click actions — POST with hidden 'kind' #}
     <form method="post" action="/asset/{{ agent.id }}/action">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
@@ -56,7 +60,6 @@
     <button type="button" class="button" style="width:100%;" onclick="openAct('toast')">🔔 Send notification</button>
     <button type="button" class="button" style="width:100%;" onclick="openAct('wallpaper')">🖼️ Set wallpaper</button>
     <button type="button" class="button" style="width:100%;" onclick="openAct('password')">🔑 Reset password</button>
-    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">⚠️ Run PowerShell</button>
   </div>
 </section>
 
@@ -262,7 +265,7 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
         <td>{{ s.name }}</td>
         <td>{{ s.version or "—" }}</td>
         <td>{{ s.publisher or "—" }}</td>
-        <td>{{ s.install_date or "—" }}</td>
+        <td>{{ s.install_date | dmy }}</td>
         {% if current_user.role == 'admin' %}
         <td>
           <div style="display: flex; gap: 6px;">

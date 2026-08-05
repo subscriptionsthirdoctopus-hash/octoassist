@@ -154,7 +154,7 @@
         {% endif %}
         <td><a href="/asset/{{ e.agent_id }}">{{ e.hostname }}</a></td>
         <td><code>{{ e.version }}</code></td>
-        <td>{{ e.install_date }}</td>
+        <td>{{ e.install_date | dmy }}</td>
         <td>{% if e.last_seen_at %}{{ e.last_seen_at | ist }}{% else %}never{% endif %}</td>
         <td style="color:var(--slate);font-size:12.5px;">{{ e.raw_name }}</td>
       </tr>

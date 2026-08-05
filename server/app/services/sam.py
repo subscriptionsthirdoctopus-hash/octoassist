@@ -432,9 +432,16 @@ def fleet_software(db: Session, tenant_id: int) -> list[dict]:
     """
     rows = _latest_snapshots(db, tenant_id)
 
-    # {(publisher, product): {versions:set, agent_ids:set, hostnames:list[(hn,ver)]}}
+    # {(publisher, product): {versions:set, agent_ids:set, installs:set, hostnames:list}}
+    #
+    # `installs` is keyed on (agent_id, version), not on the raw registry row:
+    # the 32-bit and 64-bit uninstall keys for one product are two rows that
+    # normalise to the same (publisher, product, version), and counting both
+    # inflated the Installs column and the category/publisher breakdowns fed
+    # from it. `hostnames` is kept distinct so the sample never repeats a host.
     acc: dict[tuple[str, str], dict] = defaultdict(lambda: {
-        "versions": set(), "agent_ids": set(), "hostnames": [],
+        "versions": set(), "agent_ids": set(), "installs": set(),
+        "seen_hosts": set(), "hostnames": [],
     })
 
     for agent, payload in rows:
@@ -458,7 +465,10 @@ def fleet_software(db: Session, tenant_id: int) -> list[dict]:
             bucket = acc[key]
             bucket["versions"].add(version)
             bucket["agent_ids"].add(agent.id)
-            bucket["hostnames"].append((agent.hostname, version))
+            bucket["installs"].add((agent.id, version))
+            if agent.hostname not in bucket["seen_hosts"]:
+                bucket["seen_hosts"].add(agent.hostname)
+                bucket["hostnames"].append(agent.hostname)
 
     out = []
     for (publisher, product), bucket in acc.items():
@@ -467,10 +477,10 @@ def fleet_software(db: Session, tenant_id: int) -> list[dict]:
             "product":          product,
             "category":         categorise(product, publisher),
             "license_posture":  license_posture(product, publisher),
-            "install_count":    len(bucket["hostnames"]),
+            "install_count":    len(bucket["installs"]),
             "endpoint_count":   len(bucket["agent_ids"]),
             "versions":         sorted(bucket["versions"]),
-            "sample_hostnames": [h for h, _ in bucket["hostnames"][:3]],
+            "sample_hostnames": bucket["hostnames"][:3],
             "agent_ids":        sorted(bucket["agent_ids"]),
         })
     out.sort(key=lambda r: (-r["install_count"], r["publisher"].lower(), r["product"].lower()))
@@ -519,10 +529,21 @@ def license_breakdown(rows: Iterable[dict]) -> list[tuple[str, int]]:
 
 
 def product_detail(db: Session, tenant_id: int, publisher: str, product: str) -> dict | None:
-    """Per-product detail page: every endpoint that has this software, with version."""
+    """Per-product detail page: one row per endpoint that has this software.
+
+    A single machine routinely reports the same product more than once — the
+    32-bit and 64-bit uninstall keys are separate registry entries, and
+    _norm_name() deliberately collapses the "(x64)" / "(x86)" suffixes so both
+    roll up to one product. That is correct for the fleet roll-up, but it used
+    to emit one row per registry entry here, so the same hostname appeared two
+    or three times over on the product page.
+
+    Endpoints are now keyed by agent id. Where a machine does carry genuinely
+    different versions side by side, they are joined into the one row rather
+    than duplicating the host.
+    """
     rows = _latest_snapshots(db, tenant_id)
-    matches = []
-    versions: dict[str, int] = defaultdict(int)
+    by_agent: dict[int, dict] = {}
     for agent, payload in rows:
         for sw in (payload or {}).get("software", []) or []:
             raw_name = sw.get("name") or ""
@@ -532,19 +553,45 @@ def product_detail(db: Session, tenant_id: int, publisher: str, product: str) ->
             else:
                 name = _norm_name(raw_name)
                 pub  = _norm_publisher(sw.get("publisher"))
-            if name == product and pub == publisher:
-                version = (sw.get("version") or "").strip() or "—"
-                versions[version] += 1
-                matches.append({
+            if name != product or pub != publisher:
+                continue
+            version = (sw.get("version") or "").strip() or "—"
+            entry = by_agent.get(agent.id)
+            if entry is None:
+                entry = by_agent[agent.id] = {
                     "agent_id":     agent.id,
                     "hostname":     agent.hostname,
                     "last_seen_at": agent.last_seen_at,
-                    "raw_name":     raw_name,
-                    "version":      version,
-                    "install_date": sw.get("install_date") or "—",
-                })
-    if not matches:
+                    "raw_names":    [],
+                    "versions":     [],
+                    "install_date": None,
+                }
+            if version not in entry["versions"]:
+                entry["versions"].append(version)
+            if raw_name and raw_name not in entry["raw_names"]:
+                entry["raw_names"].append(raw_name)
+            # Keep the first install date we see — the duplicate keys carry the
+            # same date, and an empty one shouldn't overwrite a real one.
+            if not entry["install_date"] and sw.get("install_date"):
+                entry["install_date"] = sw.get("install_date")
+    if not by_agent:
         return None
+
+    # Version spread is counted per endpoint, so a machine with duplicate
+    # registry entries for one version no longer inflates that version's share.
+    versions: dict[str, int] = defaultdict(int)
+    matches = []
+    for entry in by_agent.values():
+        for v in entry["versions"]:
+            versions[v] += 1
+        matches.append({
+            "agent_id":     entry["agent_id"],
+            "hostname":     entry["hostname"],
+            "last_seen_at": entry["last_seen_at"],
+            "raw_name":     ", ".join(entry["raw_names"]) or "—",
+            "version":      ", ".join(entry["versions"]) or "—",
+            "install_date": entry["install_date"] or "—",
+        })
     matches.sort(key=lambda m: m["hostname"].lower())
     return {
         "publisher":       publisher,
@@ -575,6 +622,10 @@ def export_csv(db: Session, tenant_id: int) -> str:
     ])
     for agent, payload in rows:
         snap_at = (payload or {}).get("collected_at") or ""
+        # One row per (endpoint, product, version), as the docstring promises.
+        # Without this the x86/x64 uninstall keys emit two rows for the same
+        # install and an auditor double-counts the licence.
+        seen: set[tuple[str, str, str]] = set()
         for sw in (payload or {}).get("software", []) or []:
             raw_name = sw.get("name") or ""
             bundle = _normalise_bundle(raw_name)
@@ -588,6 +639,10 @@ def export_csv(db: Session, tenant_id: int) -> str:
             if _is_os_package(name, publisher):
                 continue
             version = (sw.get("version") or "").strip() or ""
+            key = (publisher, name, version)
+            if key in seen:
+                continue
+            seen.add(key)
             w.writerow([
                 agent.hostname, agent.id, publisher, name, version,
                 sw.get("install_date") or "",
