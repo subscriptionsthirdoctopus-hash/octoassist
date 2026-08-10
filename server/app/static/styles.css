@@ -78,6 +78,10 @@
   --topbar-solid: #080d1c;
   --thead-solid:  #161e38;
   --surface-solid: #0d1426;  /* dropdowns, popovers, modal panels */
+  /* Alias — some pages pin their own table headers with
+     `background: var(--th-solid)`. Without this the var is undefined, the
+     declaration is dropped, and the header falls back to a translucent one. */
+  --th-solid: var(--thead-solid);
 
   /* Scrollbars - Dark */
   --scrollbar-track: rgba(3, 7, 18, 0.4);
@@ -126,6 +130,7 @@
   --topbar-solid: #ffffff;   /* opaque topbar for light theme */
   --thead-solid:  #eef2f8;   /* opaque table head for light theme */
   --surface-solid: #ffffff;  /* opaque dropdowns/popovers/modals */
+  --th-solid: var(--thead-solid);
 
   /* Scrollbars - Light */
   --scrollbar-track: rgba(244, 247, 252, 0.5);
@@ -626,8 +631,14 @@ table.data th, table.data td {
 }
 table.data thead th {
   /* Opaque (not translucent --surface-2): keeps the header readable and stops
-     data rows from bleeding through when the table scrolls under the topbar. */
-  background: var(--thead-solid);
+     data rows from bleeding through when the table scrolls under the topbar.
+     !important is required, not decorative: the global `th` rule near the end
+     of this file also sets the background with !important, and a plain
+     declaration here loses to it no matter how specific the selector is.
+     A deployment hit exactly that — a sticky header set `background:
+     var(--th-solid)` without !important, the global rule kept the header at
+     rgba(22,30,56,0.80), and rows showed through the pinned header. */
+  background: var(--thead-solid) !important;
   font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
