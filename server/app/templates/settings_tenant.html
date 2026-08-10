@@ -8,7 +8,7 @@
 </section>
 
 {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
-{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:var(--red);">{{ error }}</p></div>{% endif %}
 
 <div class="card">
   <form method="post" action="/settings/tenant/rename" style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--line); padding-bottom:20px;">

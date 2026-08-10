@@ -17,12 +17,12 @@
   .side .panel h4 { margin:0 0 8px; font-size:11.5px; text-transform:uppercase; letter-spacing:0.7px; color:var(--slate,#64748b); font-weight:700; }
   .side dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-size:13px; }
   .side dt { color:var(--slate,#64748b); }
-  .side dd { margin:0; color:#0f172a; font-weight:500; }
+  .side dd { margin:0; color:var(--text-1); font-weight:500; }
 
   /* Status quick-pick */
   .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
   .stat-btn  { padding:8px 6px !important; border-radius:6px; border:1px solid var(--line,#e2e8f0) !important; background:var(--surface-2) !important;
-               text-align:center; font-size:12px; font-weight:600; color:#334155 !important; cursor:pointer;
+               text-align:center; font-size:12px; font-weight:600; color:var(--text-2) !important; cursor:pointer;
                text-transform:capitalize; transition:all .12s; }
   .stat-btn:hover { background:#e2e8f0 !important; }
   .stat-btn.active.s-open        { background:#dbeafe !important; color:#1e3a8a !important; border-color:#93c5fd !important; }
@@ -36,7 +36,7 @@
   /* Priority pill row */
   .prio-row { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
   .prio-btn { padding:8px 6px !important; border-radius:6px; border:1px solid var(--line,#e2e8f0) !important; background:var(--surface-2) !important;
-              font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; color:#475569 !important; }
+              font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer; color:var(--text-2) !important; }
   .prio-btn:hover { background:#e2e8f0 !important; }
   .prio-btn.active.p-low      { background:#dbeafe !important; color:#1e3a8a !important; border-color:#93c5fd !important; }
   .prio-btn.active.p-medium   { background:#fef9c3 !important; color:#854d0e !important; border-color:#fde047 !important; }
@@ -47,14 +47,14 @@
   .assign-row { display:flex; gap:6px; align-items:stretch; }
   .assign-row select { flex:1; padding:6px 8px; font-size:13px; border:1px solid var(--line,#e2e8f0); border-radius:6px; background:var(--surface); }
   .assign-row button { padding:6px 10px; font-size:12px; }
-  .take-btn { width:100%; margin-top:6px; padding:7px; border-radius:6px; border:1px solid #2563eb; background:var(--surface); color:#2563eb; font-weight:600; cursor:pointer; font-size:12.5px; }
+  .take-btn { width:100%; margin-top:6px; padding:7px; border-radius:6px; border:1px solid #2563eb; background:var(--surface); color:var(--accent); font-weight:600; cursor:pointer; font-size:12.5px; }
   .take-btn:hover { background:#eff6ff; }
   .take-btn.mine { background:#2563eb; color:white; }
 
   /* SLA */
   .sla-row { display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; }
   .sla-row .lbl { color:var(--slate,#64748b); }
-  .sla-row .val { font-weight:600; color:#0f172a; }
+  .sla-row .val { font-weight:600; color:var(--text-1); }
   .sla-row .val.breach { color:#dc2626; }
   .sla-row .val.ok { color:#16a34a; }
 
@@ -64,18 +64,18 @@
   .msg.internal { background:#fef9c3; border-color:#fde68a; }
   .msg.reporter { background:#f0f9ff; border-color:#bae6fd; }
   .msg-head { display:flex; gap:8px; align-items:baseline; font-size:12.5px; margin-bottom:6px; flex-wrap:wrap; }
-  .msg-head .who { font-weight:700; color:#0f172a; }
+  .msg-head .who { font-weight:700; color:var(--text-1); }
   .msg-head .when { color:var(--slate,#64748b); }
   .msg-head .tag { font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase; letter-spacing:0.4px; }
   .msg-head .tag-int { background:#fde68a; color:#854d0e; }
   .msg-head .tag-rep { background:#bae6fd; color:#0c4a6e; }
-  .msg-body { font-size:13.5px; line-height:1.55; color:#1e293b; white-space:pre-wrap; }
+  .msg-body { font-size:13.5px; line-height:1.55; color:var(--text-1); white-space:pre-wrap; }
 
   /* Reply box */
   .reply-card { background:var(--surface); border:1px solid var(--line,#e2e8f0); border-radius:8px; padding:12px 14px; margin-top:14px; }
   .reply-tabs { display:flex; gap:0; margin-bottom:10px; border-bottom:1px solid var(--line,#e2e8f0); }
   .reply-tab { padding:6px 14px; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--slate,#64748b); border-bottom:2px solid transparent; margin-bottom:-1px; }
-  .reply-tab.active { color:#2563eb; border-bottom-color:#2563eb; }
+  .reply-tab.active { color:var(--accent); border-bottom-color:#2563eb; }
   .reply-tab.internal.active { color:#92400e; border-bottom-color:#d97706; }
   .reply-card textarea { width:100%; min-height:80px; padding:8px 10px; border:1px solid var(--line,#e2e8f0); border-radius:6px; font-size:13.5px; font-family:inherit; resize:vertical; }
   .reply-card.internal-mode { background:#fffbeb; border-color:#fde68a; }
@@ -85,7 +85,7 @@
   /* Attachments */
   .att-list { list-style:none; padding:0; margin:6px 0 0; display:flex; flex-direction:column; gap:5px; }
   .att-list li { display:flex; align-items:center; gap:8px; padding:6px 9px; background:var(--surface-2); border:1px solid var(--line,#e2e8f0); border-radius:5px; font-size:12px; }
-  .att-list .fname { flex:1; color:#0369a1; text-decoration:none; font-weight:600; }
+  .att-list .fname { flex:1; color:var(--accent); text-decoration:none; font-weight:600; }
   .att-list .fname:hover { text-decoration:underline; }
   .att-list .fmeta { color:var(--slate,#64748b); font-size:10.5px; }
 
@@ -94,15 +94,15 @@
   .audit-feed li { display:grid; grid-template-columns: 110px 1fr; gap:12px; padding:7px 0; border-bottom:1px dashed var(--line,#e2e8f0); font-size:12.5px; align-items:start; }
   .audit-feed li:last-child { border-bottom:0; }
   .audit-feed .when { color:var(--slate,#64748b); font-size:11.5px; }
-  .audit-feed .desc { color:#334155; }
-  .audit-feed .desc b { color:#0f172a; }
+  .audit-feed .desc { color:var(--text-2); }
+  .audit-feed .desc b { color:var(--text-1); }
   .audit-feed .actor { color:var(--slate,#64748b); font-size:11px; margin-left:6px; }
 
   /* KB hints */
   .kb-list { list-style:none; padding:0; margin:0; font-size:12.5px; line-height:1.5; }
   .kb-list li { padding:5px 0; border-bottom:1px dashed var(--line,#e2e8f0); }
   .kb-list li:last-child { border-bottom:0; }
-  .kb-list a { color:#0369a1; font-weight:600; text-decoration:none; }
+  .kb-list a { color:var(--accent); font-weight:600; text-decoration:none; }
   .kb-list a:hover { text-decoration:underline; }
 
   /* Status timeline ribbon */
@@ -114,9 +114,9 @@
 
   .desc-card { background:var(--surface); border:1px solid var(--line,#e2e8f0); border-radius:8px; padding:14px 16px; }
   .desc-card .desc-meta { color:var(--slate,#64748b); font-size:11.5px; margin-bottom:8px; }
-  .desc-card .desc-body { font-size:13.5px; line-height:1.6; white-space:pre-wrap; color:#1e293b; }
+  .desc-card .desc-body { font-size:13.5px; line-height:1.6; white-space:pre-wrap; color:var(--text-1); }
 
-  h3.section { font-size:14px; margin:18px 0 4px; color:#0f172a; }
+  h3.section { font-size:14px; margin:18px 0 4px; color:var(--text-1); }
 </style>
 
 <section class="page-head" style="margin-bottom: 20px;">
@@ -221,7 +221,7 @@
 
     {% if attach_error %}
     <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:9px 12px;border-radius:6px;margin-top:10px;">
-      <p style="margin:0;font-size:12.5px;color:#7f1d1d;">⚠ {{ attach_error }}</p>
+      <p style="margin:0;font-size:12.5px;color:var(--red);">⚠ {{ attach_error }}</p>
     </div>
     {% endif %}
 
@@ -335,7 +335,7 @@
       {% if ticket.reporter %}
       <dl>
         <dt>Name</dt><dd>{{ ticket.reporter.display_name }}</dd>
-        <dt>Email</dt><dd><a href="mailto:{{ ticket.reporter.email }}" style="color:#2563eb;text-decoration:none;">{{ ticket.reporter.email }}</a></dd>
+        <dt>Email</dt><dd><a href="mailto:{{ ticket.reporter.email }}" style="color:var(--accent);text-decoration:none;">{{ ticket.reporter.email }}</a></dd>
         {% if ticket.reporter.department %}<dt>Dept</dt><dd>{{ ticket.reporter.department }}</dd>{% endif %}
         {% if ticket.reporter.location %}<dt>Office</dt><dd>{{ ticket.reporter.location }}</dd>{% endif %}
       </dl>

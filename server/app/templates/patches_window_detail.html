@@ -22,13 +22,13 @@
 
 {% if error %}
 <section class="card" style="max-width:none;margin-bottom:16px;background:#fee2e2;border-left:4px solid #dc2626;">
-  <h3 style="margin:0 0 4px;font-size:14px;color:#991b1b;">Action blocked</h3>
-  <p style="margin:0;font-size:13px;line-height:1.5;color:#7f1d1d;">{{ error }}</p>
+  <h3 style="margin:0 0 4px;font-size:14px;color:var(--red);">Action blocked</h3>
+  <p style="margin:0;font-size:13px;line-height:1.5;color:var(--red);">{{ error }}</p>
 </section>
 {% endif %}
 {% if flash %}
 <section class="card" style="max-width:none;margin-bottom:16px;background:#dcfce7;border-left:4px solid #16a34a;">
-  <p style="margin:0;font-size:13px;line-height:1.5;color:#14532d;">{{ flash }}</p>
+  <p style="margin:0;font-size:13px;line-height:1.5;color:var(--green);">{{ flash }}</p>
 </section>
 {% endif %}
 

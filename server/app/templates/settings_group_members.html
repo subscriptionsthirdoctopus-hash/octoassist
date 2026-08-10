@@ -9,7 +9,7 @@
   </div>
 </section>
 
-{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p></div>{% endif %}
 
 <form method="post" action="/settings/groups/{{ group.id }}/members">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
