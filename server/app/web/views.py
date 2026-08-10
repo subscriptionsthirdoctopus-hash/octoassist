@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..auth import current_user, require_admin, require_staff
@@ -127,8 +128,11 @@ def assets_index(
         if d.display_name and d.display_name.strip().lower() in managed_hostnames:
             continue
         pu = d.primary_user
-        dept = pu.department if pu else None
-        loc  = pu.location   if pu else None
+        # Device-level value wins, then the assigned user's — same precedence
+        # as managed agents above (Agent.location or User.location), so a
+        # manually-added asset shows the same detail as an imported one.
+        dept = d.department or (pu.department if pu else None)
+        loc  = d.location   or (pu.location   if pu else None)
         if department and (dept or "").lower() != department.lower(): continue
         if location   and (loc  or "").lower() != location.lower():   continue
         if compliant == "yes" and d.is_compliant is not True:  continue
@@ -164,6 +168,14 @@ def assets_index(
     for (val,) in db.query(distinct(User.location)).filter(
             User.tenant_id == user.tenant_id, User.location.is_not(None)).all():
         if val: loc_set.add(val)
+    # Device-level values too, else a manually-added asset's location or
+    # department can be shown in the table but be missing from the filters.
+    for (val,) in db.query(distinct(EntraDevice.location)).filter(
+            EntraDevice.tenant_id == user.tenant_id, EntraDevice.location.is_not(None)).all():
+        if val: loc_set.add(val)
+    for (val,) in db.query(distinct(EntraDevice.department)).filter(
+            EntraDevice.tenant_id == user.tenant_id, EntraDevice.department.is_not(None)).all():
+        if val: dept_set.add(val)
     departments = sorted(dept_set)
     locations   = sorted(loc_set)
 
@@ -287,7 +299,9 @@ def manual_add_device(
     hostname: str = Form(...),
     primary_user_email: str = Form(""),
     operating_system: str = Form("Windows"),
+    os_version: str = Form(""),
     location: str = Form(""),
+    department: str = Form(""),
     manufacturer: str = Form(""),
     model: str = Form(""),
     user: User = Depends(require_admin),
@@ -301,13 +315,29 @@ def manual_add_device(
     hn = (hostname or "").strip()
     if not hn:
         return RedirectResponse(url="/assets?error=Hostname+is+required", status_code=303)
-    # Dedupe: don't create another row if hostname already exists
+    # Dedupe case-insensitively — everywhere else hostnames are compared with
+    # .strip().lower() (see managed_hostnames in the /assets view), so an
+    # exact-match check here would let 'lap-01' and 'LAP-01' both exist and
+    # then behave inconsistently across screens.
     existing = (db.query(EntraDevice)
                   .filter(EntraDevice.tenant_id == user.tenant_id,
-                           EntraDevice.display_name == hn).first())
+                          func.lower(func.trim(EntraDevice.display_name)) == hn.lower())
+                  .first())
     if existing:
         return RedirectResponse(
             url=f"/assets?error={quote(f'A device named {hn!r} already exists in the discovered list')}",
+            status_code=303,
+        )
+    # Also refuse a hostname already reporting as a managed agent: the row
+    # would be suppressed from the discovered list (agent data wins) and look
+    # like the add silently failed.
+    agent_clash = (db.query(Agent)
+                     .filter(Agent.tenant_id == user.tenant_id,
+                             func.lower(func.trim(Agent.hostname)) == hn.lower())
+                     .first())
+    if agent_clash:
+        return RedirectResponse(
+            url=f"/assets?error={quote(f'{hn!r} is already a managed OctoAssist endpoint — see the managed list above')}",
             status_code=303,
         )
     pu_id = None
@@ -322,13 +352,15 @@ def manual_add_device(
         entra_device_id=f"manual-{_uuid.uuid4().hex}",
         display_name=hn[:255],
         operating_system=(operating_system or "Windows")[:60],
+        os_version=(os_version or "").strip()[:60] or None,
         manufacturer=(manufacturer or None) and manufacturer.strip()[:120] or None,
         model=(model or None) and model.strip()[:120] or None,
         account_enabled=True,
         primary_user_id=pu_id,
+        location=(location or "").strip()[:200] or None,
+        department=(department or "").strip()[:200] or None,
         synced_at=datetime.now(timezone.utc),
     )
-    # Stash the manual location on the row's primary_user if missing — best-effort
     db.add(d); db.commit()
     return RedirectResponse(
         url=f"/assets?flash={quote(f'Manually added {hn} to the discovered list.')}",

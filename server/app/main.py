@@ -158,6 +158,8 @@ def _startup() -> None:
         db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS notification_settings JSONB DEFAULT '{}'::jsonb"))
         db.execute(text("ALTER TABLE patch_windows ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES asset_groups(id) ON DELETE SET NULL"))
         db.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_pending BOOLEAN NOT NULL DEFAULT FALSE"))
+        db.execute(text("ALTER TABLE entra_devices ADD COLUMN IF NOT EXISTS location VARCHAR(200)"))
+        db.execute(text("ALTER TABLE entra_devices ADD COLUMN IF NOT EXISTS department VARCHAR(200)"))
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id SERIAL PRIMARY KEY,
