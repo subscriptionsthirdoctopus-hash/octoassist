@@ -71,6 +71,12 @@
   --topbar-bg: rgba(3, 7, 18, 0.65);
   --topbar-border: rgba(255, 255, 255, 0.06);
   --topbar-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  /* Opaque variants for sticky / overlapping surfaces. The topbar and table
+     heads are sticky (or sit above scrolling rows); if they stay translucent,
+     rows scroll *through* them and the text ghosts/overlaps. These solids are
+     the flattened equivalents of --topbar-bg / --surface-2 over --bg. */
+  --topbar-solid: #080d1c;
+  --thead-solid:  #161e38;
 
   /* Scrollbars - Dark */
   --scrollbar-track: rgba(3, 7, 18, 0.4);
@@ -116,6 +122,8 @@
   --topbar-bg: rgba(255, 255, 255, 0.75);
   --topbar-border: rgba(15, 23, 42, 0.04);
   --topbar-shadow: 0 4px 20px rgba(15, 23, 42, 0.02);
+  --topbar-solid: #ffffff;   /* opaque topbar for light theme */
+  --thead-solid:  #eef2f8;   /* opaque table head for light theme */
 
   /* Scrollbars - Light */
   --scrollbar-track: rgba(244, 247, 252, 0.5);
@@ -247,9 +255,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
    it's a translucent white with backdrop blur. Both end up "floating above"
    content via a soft drop shadow. */
 .topbar {
-  background: var(--topbar-bg);
-  backdrop-filter: saturate(180%) blur(16px);
-  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  /* Opaque so table headers/rows can't ghost through the bar when scrolled. */
+  background: var(--topbar-solid);
   color: var(--text-1);
   border-bottom: 1px solid var(--topbar-border);
   box-shadow: var(--topbar-shadow);
@@ -613,7 +620,9 @@ table.data th, table.data td {
   font-size: 13.5px;
 }
 table.data thead th {
-  background: var(--surface-2);
+  /* Opaque (not translucent --surface-2): keeps the header readable and stops
+     data rows from bleeding through when the table scrolls under the topbar. */
+  background: var(--thead-solid);
   font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
@@ -2479,11 +2488,10 @@ button.primary:hover, .btn-primary:hover, a.button.primary:hover, .button.primar
   box-shadow: 0 0 12px rgba(244, 63, 94, 0.15) !important;
 }
 
-/* Frosted Glass Floating Topbar */
+/* Floating Topbar — opaque so scrolled table rows can't ghost/overlap
+   through it (was translucent + blur, which caused header/data overlap). */
 .topbar {
-  background: var(--topbar-bg) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  background: var(--topbar-solid) !important;
   border-bottom: 1px solid var(--topbar-border) !important;
   box-shadow: var(--topbar-shadow) !important;
   padding: 12px 32px !important;
@@ -2517,7 +2525,10 @@ table {
   background: var(--surface) !important;
 }
 th {
-  background: var(--surface-2) !important;
+  /* Opaque (not translucent --surface-2): stops data rows from bleeding
+     through the header. This global !important rule is what actually renders
+     table heads app-wide, so the overlap fix must live here. */
+  background: var(--thead-solid) !important;
   color: var(--text-1) !important;
   font-family: 'Plus Jakarta Sans', var(--font-sans) !important;
   font-weight: 700 !important;
