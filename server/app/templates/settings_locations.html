@@ -7,12 +7,49 @@
     <p class="meta"><a href="/settings">← All settings</a> · {{ rules|length }} rule{{ "" if rules|length == 1 else "s" }} configured</p>
   </div>
 </section>
-{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
-{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:var(--red);">{{ error }}</p></div>{% endif %}
 <section class="card" style="max-width:none;margin-bottom:16px;">
   <h3 style="margin-top:0;">How this works</h3>
   <p class="meta" style="margin:0;line-height:1.55;">When a new ticket is created, OctoAssist stamps it with a <strong>location</strong> derived from the reporter's primary laptop (or their Entra office). If that location matches one of the rules below, the ticket is automatically assigned to the named technician.</p>
 </section>
+{% if orphan_rules or stale_assignee_rules or unrouted_locations %}
+<section class="card" style="max-width:none;margin-bottom:16px;border-left:4px solid var(--amber);">
+  <h3 style="margin-top:0;">⚠ Routing gaps</h3>
+  {% if orphan_rules %}
+  <p style="margin:0 0 6px;font-size:13px;line-height:1.55;">
+    These rules match <strong>no user or asset location</strong>, so they never fire — usually a spelling mismatch:
+  </p>
+  <ul style="margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.6;">
+    {% for r in orphan_rules %}
+    <li><strong>{{ r.location }}</strong> → {{ r.default_assignee.display_name if r.default_assignee else "—" }}
+      {% if orphan_suggestions.get(r.id) %}
+        <span class="meta">— did you mean <strong>{{ orphan_suggestions[r.id] }}</strong>? Delete this rule and re-add it with the correct spelling.</span>
+      {% else %}
+        <span class="meta">— no user or asset is recorded at this location.</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if stale_assignee_rules %}
+  <p style="margin:0 0 6px;font-size:13px;line-height:1.55;">
+    These rules point at someone who can no longer be auto-assigned (inactive, or no longer an admin/agent), so they are skipped:
+  </p>
+  <ul style="margin:0 0 12px;padding-left:20px;font-size:13px;line-height:1.6;">
+    {% for r in stale_assignee_rules %}
+    <li><strong>{{ r.location }}</strong> → {{ r.default_assignee.display_name ~ " (" ~ r.default_assignee.role.value ~ ")" if r.default_assignee else "no assignee" }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if unrouted_locations %}
+  <p style="margin:0;font-size:13px;line-height:1.55;">
+    No rule for: {% for loc in unrouted_locations %}<strong>{{ loc }}</strong>{{ ", " if not loop.last }}{% endfor %}.
+    Tickets from {{ "these locations" if unrouted_locations|length > 1 else "this location" }} fall through to category routing.
+  </p>
+  {% endif %}
+</section>
+{% endif %}
 <div class="card form" style="max-width:none;">
   <h3 style="margin-top:0;">Add routing rule</h3>
   <form method="post" action="/settings/locations/new" class="row-form" style="align-items:end;gap:12px;">

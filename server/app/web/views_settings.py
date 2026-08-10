@@ -118,12 +118,50 @@ def settings_locations(
                        User.is_active == True,  # noqa: E712
                        User.role.in_([UserRole.admin, UserRole.agent]))
                .order_by(User.full_name, User.email).all())
+
+    # Routing only fires on an exact (case-insensitive) location match, so a
+    # typo'd rule silently does nothing and tickets fall through to category
+    # routing. Surface both halves of that mismatch instead of leaving the
+    # admin to spot it by eye.
+    _known_norm = {loc.strip().lower() for loc in known_locations}
+    _ruled_norm = {r.location.strip().lower() for r in rules if r.location}
+    # Rules whose location matches no user/asset — usually a misspelling.
+    orphan_rules = [r for r in rules
+                    if r.location and r.location.strip().lower() not in _known_norm]
+    # Real locations with nobody routing them — tickets there won't auto-assign.
+    unrouted_locations = [loc for loc in known_locations
+                          if loc.strip().lower() not in _ruled_norm]
+    # Rules pointing at someone who can no longer be auto-assigned.
+    stale_assignee_rules = [
+        r for r in rules
+        if r.default_assignee is None
+        or not r.default_assignee.is_active
+        or r.default_assignee.role not in (UserRole.admin, UserRole.agent)
+    ]
+
+    def _closest(loc: str) -> str | None:
+        """Best-guess intended location for an orphan rule, for the hint text."""
+        import difflib
+        m = difflib.get_close_matches(loc.strip().lower(), sorted(_known_norm), n=1, cutoff=0.7)
+        if not m:
+            return None
+        for k in known_locations:
+            if k.strip().lower() == m[0]:
+                return k
+        return None
+
+    orphan_suggestions = {r.id: _closest(r.location) for r in orphan_rules}
+
     return templates.TemplateResponse(
         request=request, name="settings_locations.html",
         context={
             "current_user": user, "tenant": tenant,
             "rules": rules, "known_locations": known_locations,
             "staff": staff, "flash": flash, "error": error,
+            "orphan_rules": orphan_rules,
+            "orphan_suggestions": orphan_suggestions,
+            "unrouted_locations": unrouted_locations,
+            "stale_assignee_rules": stale_assignee_rules,
         },
     )
 
