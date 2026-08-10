@@ -215,26 +215,35 @@ def reports_drilldown_api(
         }
         
     elif kpi == "patch_compliance":
+        # Mirror the KPI card's "N critical patches outstanding": critical
+        # severity, Windows-sourced, still missing. Keeps the drilldown row
+        # count reconciled with patch_kpis().total_critical.
         rows = (db.query(PatchObservation)
                   .join(Agent, Agent.id == PatchObservation.agent_id)
-                  .filter(Agent.tenant_id == tenant_id, PatchObservation.resolved_at.is_(None))
-                  .order_by(PatchObservation.severity.desc())
+                  .filter(Agent.tenant_id == tenant_id,
+                          PatchObservation.resolved_at.is_(None),
+                          PatchObservation.severity == PatchSeverity.critical,
+                          patches_svc.windows_source_filter())
+                  .order_by(PatchObservation.first_seen_at.asc())
                   .limit(100).all())
         return {
             "type": "patches",
-            "columns": ["Asset", "Patch Title", "Severity", "CVE ID", "Detected"],
+            "columns": ["Asset", "Patch", "Severity", "Package", "First Seen"],
             "data": [
                 {
                     "id": p.id,
                     "asset": p.agent.hostname if p.agent else "—",
-                    "title": p.title,
+                    "title": p.title or p.package_name,
                     "severity": p.severity.value.upper(),
-                    "cve": p.cve_id or "N/A",
-                    "detected": p.detected_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.detected_at else "—",
+                    "package": p.package_name,
+                    "detected": p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.first_seen_at else "—",
                     "detail": {
-                        "Vulnerability Description": p.description or "No outstanding advisory details.",
-                        "Remediation": "Run remote installation agent or apply immediate server patch deployment task.",
-                        "IP Address": p.agent.ip_address if p.agent else "Unknown"
+                        "Package": p.package_name,
+                        "Version": f"{p.current_version or 'unknown'} → {p.available_version or 'unknown'}",
+                        "Severity / Source": f"{p.severity.value} · {p.source}",
+                        "First seen missing": p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.first_seen_at else "—",
+                        "Last seen missing": p.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.last_seen_at else "—",
+                        "Remediation": "Deploy via the Patches module (Bulk Deploy) or run a remote install action on the endpoint.",
                     }
                 } for p in rows
             ]
