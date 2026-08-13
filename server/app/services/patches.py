@@ -42,6 +42,13 @@ def _windows_source_filter():
     return not_(or_(*[PatchObservation.source.like(p + "%") for p in _LINUX_SOURCE_PREFIXES]))
 
 
+def windows_source_filter():
+    """Public alias of :func:`_windows_source_filter` for callers outside this
+    module (e.g. the reports drilldown), so the Windows-only rule stays defined
+    in exactly one place."""
+    return _windows_source_filter()
+
+
 def is_windows_agent(latest_payload: dict | None) -> bool:
     """Inspect the latest snapshot to decide if an agent is a Windows host."""
     if not latest_payload:

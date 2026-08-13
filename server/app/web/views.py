@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from ..jinja_filters import install_on
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..auth import current_user, require_admin, require_staff
@@ -14,6 +15,8 @@ from ..models import (
     Tenant, User,
 )
 from ..services import entra_devices
+from ..services.hostnames import normalise as normalise_hostname
+from ..services import compliance
 from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -69,7 +72,34 @@ def assets_index(
     needle = (q or "").strip().lower()
     agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False)).order_by(Agent.hostname).all()
 
-    managed_hostnames = {a.hostname.strip().lower() for a in agents if a.hostname}
+    # Matching key, not a rename — see services/hostnames. Case- and FQDN-
+    # insensitive, so an agent reporting "LAP-01" and Entra reporting
+    # "lap-01.tema.local" are recognised as one endpoint instead of listing the
+    # machine twice. The empty key means "unknown" and must not match anything.
+    managed_hostnames = {normalise_hostname(a.hostname) for a in agents if a.hostname}
+    managed_hostnames.discard("")
+
+    # Compliance comes from the endpoint's Entra record — including for
+    # managed endpoints, whose Entra row is suppressed from the discovered
+    # list below but still holds the verdict. Without this the Compliance
+    # filter could only ever act on unmanaged devices, while the managed table
+    # and its count sat unchanged whichever value was picked.
+    entra_devices_q = (db.query(EntraDevice)
+                         .filter(EntraDevice.tenant_id == user.tenant_id)
+                         .order_by(EntraDevice.display_name).all())
+    compliance_by_host = compliance.by_hostname(entra_devices_q)
+
+    def _compliance_excluded(value: bool | None) -> bool:
+        return compliance.excluded(compliant, value)
+
+    # Nothing to filter on until Entra has actually reported a verdict — with
+    # no connector the column is all NULL, every pick returns an empty table,
+    # and the reason is invisible. The template says so rather than leaving it
+    # to be read as a bug.
+    compliance_data_available = any(v is not None for v in compliance_by_host.values())
+    managed_total = len(agents)
+    discovered_total = sum(1 for d in entra_devices_q
+                           if normalise_hostname(d.display_name) not in managed_hostnames)
 
     def _matches(*fields: str | None) -> bool:
         """Free-text needle test across the joined values of fields."""
@@ -95,6 +125,7 @@ def assets_index(
         loc = a.location or (pu.location if pu else None)
         dept = pu.department if pu else None
         state = _online_state(a.last_seen_at)
+        is_compliant = compliance_by_host.get(normalise_hostname(a.hostname))
         row = {
             "id": a.id,
             "hostname": a.hostname,
@@ -109,30 +140,32 @@ def assets_index(
             "last_seen_at":   a.last_seen_at,
             "online_state":   state,
             "software_count": len(payload.get("software", [])),
+            "is_compliant":   is_compliant,
         }
         if department and (dept or "").lower() != department.lower(): continue
         if location   and (loc  or "").lower() != location.lower():   continue
         if online     and state != online:                            continue
+        if _compliance_excluded(is_compliant):                        continue
         if not _matches(a.hostname, row["assigned_name"], dept, loc, row["os"]):
             continue
         rows.append(row)
 
     # Entra-discovered Windows endpoints that DON'T already have an OctoAssist
-    # agent reporting (matched by hostname, case-insensitive).
+    # agent reporting (matched on the normalised hostname — case- and
+    # FQDN-insensitive).
     discovered_rows = []
-    entra_devices_q = (db.query(EntraDevice)
-                         .filter(EntraDevice.tenant_id == user.tenant_id)
-                         .order_by(EntraDevice.display_name).all())
     for d in entra_devices_q:
-        if d.display_name and d.display_name.strip().lower() in managed_hostnames:
+        if normalise_hostname(d.display_name) in managed_hostnames:
             continue
         pu = d.primary_user
-        dept = pu.department if pu else None
-        loc  = pu.location   if pu else None
+        # Device-level value wins, then the assigned user's — same precedence
+        # as managed agents above (Agent.location or User.location), so a
+        # manually-added asset shows the same detail as an imported one.
+        dept = d.department or (pu.department if pu else None)
+        loc  = d.location   or (pu.location   if pu else None)
         if department and (dept or "").lower() != department.lower(): continue
         if location   and (loc  or "").lower() != location.lower():   continue
-        if compliant == "yes" and d.is_compliant is not True:  continue
-        if compliant == "no"  and d.is_compliant is not False: continue
+        if _compliance_excluded(d.is_compliant):                      continue
         if not _matches(d.display_name, (pu.full_name if pu else None) or (pu.email if pu else None),
                         dept, loc, d.operating_system, d.manufacturer, d.model):
             continue
@@ -164,6 +197,14 @@ def assets_index(
     for (val,) in db.query(distinct(User.location)).filter(
             User.tenant_id == user.tenant_id, User.location.is_not(None)).all():
         if val: loc_set.add(val)
+    # Device-level values too, else a manually-added asset's location or
+    # department can be shown in the table but be missing from the filters.
+    for (val,) in db.query(distinct(EntraDevice.location)).filter(
+            EntraDevice.tenant_id == user.tenant_id, EntraDevice.location.is_not(None)).all():
+        if val: loc_set.add(val)
+    for (val,) in db.query(distinct(EntraDevice.department)).filter(
+            EntraDevice.tenant_id == user.tenant_id, EntraDevice.department.is_not(None)).all():
+        if val: dept_set.add(val)
     departments = sorted(dept_set)
     locations   = sorted(loc_set)
 
@@ -183,6 +224,8 @@ def assets_index(
                      q=needle,
                      filter_department=department, filter_location=location,
                      filter_compliant=compliant, filter_online=online,
+                     compliance_data_available=compliance_data_available,
+                     managed_total=managed_total, discovered_total=discovered_total,
                      online_count=online_count, lagging_count=lagging_count,
                      offline_count=offline_count,
                      offline_threshold_hours=OFFLINE_THRESHOLD_HOURS,
@@ -287,7 +330,9 @@ def manual_add_device(
     hostname: str = Form(...),
     primary_user_email: str = Form(""),
     operating_system: str = Form("Windows"),
+    os_version: str = Form(""),
     location: str = Form(""),
+    department: str = Form(""),
     manufacturer: str = Form(""),
     model: str = Form(""),
     user: User = Depends(require_admin),
@@ -301,13 +346,29 @@ def manual_add_device(
     hn = (hostname or "").strip()
     if not hn:
         return RedirectResponse(url="/assets?error=Hostname+is+required", status_code=303)
-    # Dedupe: don't create another row if hostname already exists
+    # Dedupe case-insensitively — everywhere else hostnames are compared with
+    # .strip().lower() (see managed_hostnames in the /assets view), so an
+    # exact-match check here would let 'lap-01' and 'LAP-01' both exist and
+    # then behave inconsistently across screens.
     existing = (db.query(EntraDevice)
                   .filter(EntraDevice.tenant_id == user.tenant_id,
-                           EntraDevice.display_name == hn).first())
+                          func.lower(func.trim(EntraDevice.display_name)) == hn.lower())
+                  .first())
     if existing:
         return RedirectResponse(
             url=f"/assets?error={quote(f'A device named {hn!r} already exists in the discovered list')}",
+            status_code=303,
+        )
+    # Also refuse a hostname already reporting as a managed agent: the row
+    # would be suppressed from the discovered list (agent data wins) and look
+    # like the add silently failed.
+    agent_clash = (db.query(Agent)
+                     .filter(Agent.tenant_id == user.tenant_id,
+                             func.lower(func.trim(Agent.hostname)) == hn.lower())
+                     .first())
+    if agent_clash:
+        return RedirectResponse(
+            url=f"/assets?error={quote(f'{hn!r} is already a managed OctoAssist endpoint — see the managed list above')}",
             status_code=303,
         )
     pu_id = None
@@ -322,13 +383,15 @@ def manual_add_device(
         entra_device_id=f"manual-{_uuid.uuid4().hex}",
         display_name=hn[:255],
         operating_system=(operating_system or "Windows")[:60],
+        os_version=(os_version or "").strip()[:60] or None,
         manufacturer=(manufacturer or None) and manufacturer.strip()[:120] or None,
         model=(model or None) and model.strip()[:120] or None,
         account_enabled=True,
         primary_user_id=pu_id,
+        location=(location or "").strip()[:200] or None,
+        department=(department or "").strip()[:200] or None,
         synced_at=datetime.now(timezone.utc),
     )
-    # Stash the manual location on the row's primary_user if missing — best-effort
     db.add(d); db.commit()
     return RedirectResponse(
         url=f"/assets?flash={quote(f'Manually added {hn} to the discovered list.')}",

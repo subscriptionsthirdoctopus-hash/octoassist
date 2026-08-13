@@ -1,0 +1,51 @@
+name: Check Server
+
+# The agent build workflow covers agent/ and agent-py/ only. Nothing exercised
+# server/ at all, so a broken import or template would have shipped unnoticed.
+# This job is the cheap insurance: it runs in well under a minute and needs no
+# database, because every setting has a default and SQLAlchemy's create_engine
+# is lazy.
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  check-server:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          # Matches requires-python in server/pyproject.toml.
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: server/pyproject.toml
+
+      - name: Install Server Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./server
+          # Pinned so a future ruff release cannot turn a green build red by
+          # adding rules. Bump deliberately.
+          pip install ruff==0.15.8
+
+      # Error-class rules only: syntax errors (E9), undefined names (F821),
+      # invalid comparisons (F63) and misused constructs (F7). Style is
+      # deliberately not gated — the goal is to catch code that cannot run,
+      # not to churn the existing codebase. Widen this selection when the team
+      # is ready to act on it.
+      - name: Lint (errors only)
+        run: ruff check server/app --select E9,F63,F7,F82 --output-format concise
+
+      # Compiles every Jinja template and forces every lazily-included FastAPI
+      # route to resolve. See server/scripts/preflight.py for why each matters.
+      - name: Preflight (templates + routes)
+        run: python server/scripts/preflight.py

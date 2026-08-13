@@ -102,7 +102,7 @@ async def _attach_uploaded_files(
     create TicketAttachment rows. Returns (saved_count, rejected_filenames).
     Rejects any single file over TICKET_ATTACH_MAX_BYTES so callers can warn
     the user — silently dropping looked like a bug."""
-    from ..api.uploads import UPLOAD_DIR, _safe_ext
+    from ..api.uploads import ensure_upload_dir, _safe_ext
     import hashlib as _hl, uuid as _uuid
     form = await request.form()
     files = form.getlist(field_name) if hasattr(form, "getlist") else []
@@ -116,7 +116,7 @@ async def _attach_uploaded_files(
             continue
         file_id = _uuid.uuid4().hex
         ext = _safe_ext(f.filename)
-        target = UPLOAD_DIR / f"{file_id}{ext}"
+        target = ensure_upload_dir() / f"{file_id}{ext}"
         h = _hl.sha256(); written = 0
         try:
             with open(target, "wb") as out:

@@ -207,6 +207,19 @@ def bulk_deploy_form(
             "affected": int(n),
         })
 
+    # Which endpoints each package is actually pending on. Drives the
+    # group-aware package filter: selecting a group must narrow the package
+    # list to what those machines need, rather than showing the whole fleet's
+    # backlog and leaving the operator to guess which rows apply.
+    pkg_rows = (db.query(PatchObservation.package_name, PatchObservation.agent_id)
+                  .join(Agent, Agent.id == PatchObservation.agent_id)
+                  .filter(Agent.tenant_id == tid,
+                          PatchObservation.resolved_at.is_(None))
+                  .distinct().all())
+    package_agents: dict[str, list[int]] = {}
+    for name, agent_id in pkg_rows:
+        package_agents.setdefault(name, []).append(agent_id)
+
     from ..models import AssetGroup, AssetGroupMember
     import json
     groups = db.query(AssetGroup).filter(AssetGroup.tenant_id == tid).order_by(AssetGroup.name).all()
@@ -215,10 +228,16 @@ def bulk_deploy_form(
         members = db.query(AssetGroupMember.agent_id).filter(AssetGroupMember.group_id == g.id).all()
         group_map[g.id] = [m.agent_id for m in members]
     group_map_json = json.dumps(group_map)
+    # Restricted to the packages actually rendered, so the payload stays small.
+    package_agents_json = json.dumps(
+        {p["name"]: package_agents.get(p["name"], []) for p in packages}
+    )
 
     return templates.TemplateResponse(
         request=request, name="patches_bulk_deploy.html",
-        context=_ctx(user, db, endpoints=endpoints, packages=packages, groups=groups, group_map_json=group_map_json),
+        context=_ctx(user, db, endpoints=endpoints, packages=packages, groups=groups,
+                     group_map_json=group_map_json,
+                     package_agents_json=package_agents_json),
     )
 
 

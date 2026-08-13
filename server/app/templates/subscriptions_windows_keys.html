@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Windows keys on endpoints — OctoAssist{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="row-between">
+    <div>
+      <h1>Windows keys on endpoints</h1>
+      <p class="meta">
+        <a href="/subscriptions">← Subscriptions</a> ·
+        What each agent reports from firmware, straight from the latest snapshot.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="alert" style="margin-bottom:16px;">
+  Only the <strong>OEM key embedded in firmware</strong> (OA3xOriginalProductKey) can be read back.
+  Retail, MAK and KMS-activated machines legitimately report nothing — those rows are the ones that
+  still need a key entering by hand, which is why they are listed rather than hidden.
+</div>
+
+<section class="card" style="max-width:none;">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Endpoint</th>
+        <th>Edition</th>
+        <th>Product key</th>
+        <th>Activation</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><a href="/asset/{{ r.agent_id }}">{{ r.hostname }}</a></td>
+        <td>{{ r.edition }}</td>
+        <td>
+          {% if r.key %}
+            <code style="font-family:ui-monospace,monospace;font-size:12px;letter-spacing:0.4px;">{{ r.key }}</code>
+          {% else %}
+            <span class="meta">no OEM key in firmware — enter manually</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.activation == 'Licensed' %}
+            <span class="status status-resolved">{{ r.activation }}</span>
+          {% elif r.activation in ('Unlicensed', 'Non-Genuine Grace') %}
+            <span class="status status-cancelled">{{ r.activation }}</span>
+          {% elif r.activation %}
+            <span class="status status-on_hold">{{ r.activation }}</span>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if not rows %}
+  <div class="empty">
+    <h2>No Windows endpoints reporting yet</h2>
+    <p>Keys appear here once an agent has checked in with an OS snapshot.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

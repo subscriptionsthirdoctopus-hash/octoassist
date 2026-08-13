@@ -37,7 +37,7 @@ from ..models import (
     RemoteAction, RemoteActionKind, RemoteActionStatus,
     Tenant, Ticket, TicketEvent, TicketKind, TicketStatus, User, UserRole,
 )
-from ..services import charts, patches as patches_svc, reporting
+from ..services import charts, patches as patches_svc, reporting, subscriptions as subs_svc
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -82,6 +82,9 @@ def reports_home(
     sla = reporting.sla_compliance(db, tenant_id, days=days, priority=priority, category_id=category_id)
     workload = reporting.workload_by_assignee(db, tenant_id, top=8, days=days, priority=priority, category_id=category_id)
     patch_kpi = patches_svc.patch_kpis(db, tenant_id)
+    # Counted through the same query the drilldown lists, never from a separate
+    # predicate — see services/subscriptions._attention_query.
+    software_expiring = subs_svc.expiring_soon_count(db, tenant_id)
 
     sparkline_values = [v for _, v in per_day]
 
@@ -90,6 +93,8 @@ def reports_home(
         context=_ctx(user, db,
                      kpi=kpi,
                      patch_kpi=patch_kpi,
+                     software_expiring=software_expiring,
+                     software_expiry_horizon=subs_svc.DEFAULT_HORIZON_DAYS,
                      spark_tickets=charts.sparkline(sparkline_values, width=160, height=40),
                      chart_status=charts.donut(by_status, size=200),
                      chart_priority=charts.donut(by_priority, size=200),
@@ -215,31 +220,74 @@ def reports_drilldown_api(
         }
         
     elif kpi == "patch_compliance":
+        # Mirror the KPI card's "N critical patches outstanding": critical
+        # severity, Windows-sourced, still missing. Keeps the drilldown row
+        # count reconciled with patch_kpis().total_critical.
         rows = (db.query(PatchObservation)
                   .join(Agent, Agent.id == PatchObservation.agent_id)
-                  .filter(Agent.tenant_id == tenant_id, PatchObservation.resolved_at.is_(None))
-                  .order_by(PatchObservation.severity.desc())
+                  .filter(Agent.tenant_id == tenant_id,
+                          PatchObservation.resolved_at.is_(None),
+                          PatchObservation.severity == PatchSeverity.critical,
+                          patches_svc.windows_source_filter())
+                  .order_by(PatchObservation.first_seen_at.asc())
                   .limit(100).all())
         return {
             "type": "patches",
-            "columns": ["Asset", "Patch Title", "Severity", "CVE ID", "Detected"],
+            "columns": ["Asset", "Patch", "Severity", "Package", "First Seen"],
             "data": [
                 {
                     "id": p.id,
                     "asset": p.agent.hostname if p.agent else "—",
-                    "title": p.title,
+                    "title": p.title or p.package_name,
                     "severity": p.severity.value.upper(),
-                    "cve": p.cve_id or "N/A",
-                    "detected": p.detected_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.detected_at else "—",
+                    "package": p.package_name,
+                    "detected": p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.first_seen_at else "—",
                     "detail": {
-                        "Vulnerability Description": p.description or "No outstanding advisory details.",
-                        "Remediation": "Run remote installation agent or apply immediate server patch deployment task.",
-                        "IP Address": p.agent.ip_address if p.agent else "Unknown"
+                        "Package": p.package_name,
+                        "Version": f"{p.current_version or 'unknown'} → {p.available_version or 'unknown'}",
+                        "Severity / Source": f"{p.severity.value} · {p.source}",
+                        "First seen missing": p.first_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.first_seen_at else "—",
+                        "Last seen missing": p.last_seen_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if p.last_seen_at else "—",
+                        "Remediation": "Deploy via the Patches module (Bulk Deploy) or run a remote install action on the endpoint.",
                     }
                 } for p in rows
             ]
         }
-    
+
+    elif kpi == "software_expiring":
+        # Deliberately the same call the card counts through, so the number on
+        # the card is always len() of what opens here. TEMA saw a 0 on the card
+        # with rows in the list because the two used different predicates.
+        rows = subs_svc.expiring_soon(db, tenant_id)
+        today = subs_svc._today()
+
+        def _status(days: int) -> str:
+            if days < 0:  return f"EXPIRED {abs(days)}d AGO"
+            if days == 0: return "EXPIRES TODAY"
+            return f"IN {days}d"
+
+        return {
+            "type": "software_expiring",
+            "columns": ["Software", "Vendor", "Seats", "Expires", "Status", "PO"],
+            "data": [
+                {
+                    "id": s.id,
+                    "software": s.software_name,
+                    "vendor": s.vendor or "—",
+                    "seats": s.seats if s.seats else "—",
+                    "expires": s.expires_on.strftime("%Y-%m-%d"),
+                    "status": _status((s.expires_on - today).days),
+                    "po": s.po_reference or "—",
+                    "detail": {
+                        "Licence key": "recorded" if s.license_key else "not recorded",
+                        "Purchased on": s.purchased_on.strftime("%Y-%m-%d") if s.purchased_on else "—",
+                        "Notes": s.notes or "—",
+                        "Remediation": "Raise the renewal PO from Subscriptions, or set an expiry date if this licence is perpetual.",
+                    }
+                } for s in rows
+            ]
+        }
+
     return {"type": "empty", "columns": [], "data": []}
 
 

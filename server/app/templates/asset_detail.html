@@ -34,6 +34,10 @@
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;">
+    {# Run PowerShell leads the grid — it is the action the TEMA team reaches
+       for most often, and hunting for it at the bottom cost them time. The
+       modal it opens still carries the full break-glass confirmation. #}
+    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">⚠️ Run PowerShell</button>
     {# Single-click actions — POST with hidden 'kind' #}
     <form method="post" action="/asset/{{ agent.id }}/action">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
@@ -56,13 +60,12 @@
     <button type="button" class="button" style="width:100%;" onclick="openAct('toast')">🔔 Send notification</button>
     <button type="button" class="button" style="width:100%;" onclick="openAct('wallpaper')">🖼️ Set wallpaper</button>
     <button type="button" class="button" style="width:100%;" onclick="openAct('password')">🔑 Reset password</button>
-    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">⚠️ Run PowerShell</button>
   </div>
 </section>
 
 {# Modal forms for actions with parameters #}
 <div id="act-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;align-items:center;justify-content:center;padding:24px;">
-  <div style="background:var(--surface);max-width:640px;width:100%;border-radius:8px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow:auto;">
+  <div style="background:var(--surface-solid);max-width:640px;width:100%;border-radius:8px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow:auto;">
     <div class="row-between" style="margin-bottom:10px;">
       <h2 id="act-title" style="margin:0;font-size:18px;">—</h2>
       <button type="button" onclick="closeAct()" class="link-button" style="font-size:22px;line-height:1;padding:0 6px;">×</button>
@@ -262,7 +265,7 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
         <td>{{ s.name }}</td>
         <td>{{ s.version or "—" }}</td>
         <td>{{ s.publisher or "—" }}</td>
-        <td>{{ s.install_date or "—" }}</td>
+        <td>{{ s.install_date | dmy }}</td>
         {% if current_user.role == 'admin' %}
         <td>
           <div style="display: flex; gap: 6px;">

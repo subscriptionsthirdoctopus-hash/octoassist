@@ -23,8 +23,8 @@
   </div>
 </section>
 
-{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
-{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:var(--red);">{{ error }}</p></div>{% endif %}
 
 <style>
   .conn-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
@@ -69,6 +69,18 @@
 </div>
 {% endif %}
 
+{# The tiles above stay a fleet-wide rollup whatever is filtered, so a filter
+   that changes the tables but not the tiles reads as "the count didn't move".
+   Spell out both sides of the comparison instead. #}
+{% if filter_compliant %}
+<div class="alert info" style="margin-bottom:12px;">
+  Compliance: <strong>{% if filter_compliant == "yes" %}compliant{% elif filter_compliant == "no" %}non-compliant{% else %}not reported{% endif %}</strong> —
+  showing {{ agent_count }} of {{ managed_total }} managed endpoint{{ "" if managed_total == 1 else "s" }}
+  and {{ discovered_rows|length }} of {{ discovered_total }} discovered device{{ "" if discovered_total == 1 else "s" }}.
+  <a href="/assets" style="font-weight:600;">Clear filter</a>
+</div>
+{% endif %}
+
 
 <form method="get" action="/assets" class="card" style="max-width:none;margin-bottom:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
   <label style="flex:1;min-width:240px;">Search
@@ -96,7 +108,11 @@
       <option value="">All</option>
       <option value="yes" {% if filter_compliant == "yes" %}selected{% endif %}>compliant</option>
       <option value="no"  {% if filter_compliant == "no"  %}selected{% endif %}>non-compliant</option>
+      <option value="unknown" {% if filter_compliant == "unknown" %}selected{% endif %}>not reported</option>
     </select>
+    {% if not compliance_data_available %}
+    <span class="meta" style="display:block;font-size:11px;">No compliance data — needs an Entra sync</span>
+    {% endif %}
   </label>
   <button type="submit" class="button">Apply</button>
   {% if q or filter_department or filter_location or filter_compliant %}<a href="/assets" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
@@ -116,6 +132,17 @@
       </label>
       <label>OS
         <input type="text" name="operating_system" value="Windows" style="width:120px;">
+      </label>
+      <label>OS version
+        <input type="text" name="os_version" placeholder="10.0.22631" style="width:130px;">
+      </label>
+      <label>Department
+        <input type="text" name="department" list="known-departments" placeholder="e.g. Production" style="width:150px;">
+        <datalist id="known-departments">{% for dpt in departments %}<option value="{{ dpt }}">{% endfor %}</datalist>
+      </label>
+      <label>Location
+        <input type="text" name="location" list="known-locations" placeholder="e.g. Achhad" style="width:150px;">
+        <datalist id="known-locations">{% for loc in locations %}<option value="{{ loc }}">{% endfor %}</datalist>
       </label>
       <label>Make
         <input type="text" name="manufacturer" placeholder="Dell" style="width:140px;">
@@ -150,6 +177,7 @@
         <th>CPU</th>
         <th>RAM</th>
         <th>Software</th>
+        <th>Compliant?</th>
         <th>Last Seen</th>
       </tr>
     </thead>
@@ -171,6 +199,13 @@
           <a href="/asset/{{ r.id }}#installed-software" style="font-weight:600;color:var(--accent,#2563eb);text-decoration:none;">
             {{ r.software_count }}
           </a>
+        </td>
+        <td>
+          {# From the endpoint's Entra record — the agent reports no compliance
+             signal of its own, so a machine Entra has never seen reads "—". #}
+          {% if r.is_compliant is true %}<span style="color:#16a34a;">✓ yes</span>
+          {% elif r.is_compliant is false %}<span style="color:#dc2626;">✗ no</span>
+          {% else %}<span style="color:var(--text-3);" title="Not reported by Entra">—</span>{% endif %}
         </td>
         <td>
           {% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}<span style="color:var(--red);">never</span>{% endif %}

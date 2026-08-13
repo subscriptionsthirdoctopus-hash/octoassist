@@ -60,27 +60,48 @@ def isttime(value: Any) -> str:
     return dt.strftime("%H:%M") if dt else "—"
 
 
+# Date shapes our collectors actually emit. Deliberately excludes dd/mm/yyyy
+# and mm/dd/yyyy: those two are indistinguishable for days 1-12, so guessing
+# would silently render a wrong date. Anything unrecognised falls through to
+# the raw string instead.
+_DATE_FORMATS = (
+    "%Y-%m-%d",   # agent OS install_date (Win32_OperatingSystem, dpkg, macOS)
+    "%Y%m%d",     # HKLM\...\Uninstall\*\InstallDate — Windows registry format
+    "%Y/%m/%d",   # occasional vendor variant in the same registry key
+)
+
+
 def dmy(value: Any) -> str:
     """Render a date or ISO date string as dd/mm/yyyy (Indian / UK locale).
 
+    This is the single date presentation used by both the Asset and the
+    Software modules — the two report install dates from different sources
+    (Win32_OperatingSystem vs the HKLM Uninstall keys, which use the
+    undelimited yyyyMMdd form) and used to render them in different shapes.
+
     Accepts:
-      - "yyyy-MM-dd" (the format the Windows agent emits for OS install_date)
+      - "yyyy-MM-dd" (the format the agent emits for OS install_date)
+      - "yyyyMMdd"   (the format Windows writes into Uninstall\\*\\InstallDate)
+      - full ISO timestamps — the date portion is used
       - datetime objects (any tz; date portion only)
-      - empty / None / "" → "—"
+      - empty / None / "" / "—" → "—"
     """
     if value is None or value == "":
         return "—"
     if isinstance(value, datetime):
         return value.strftime("%d/%m/%Y")
     s = str(value).strip()
-    if not s:
+    if not s or s == "—":
         return "—"
-    # Try ISO yyyy-MM-dd first, then fall back to fromisoformat for full timestamps.
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(s[: len(fmt) + 5], fmt).strftime("%d/%m/%Y")
-        except ValueError:
-            continue
+    # Full ISO timestamps ("2026-03-15T10:22:33" / "2026-03-15 10:22:33") —
+    # keep the date portion only.
+    head = s.replace("T", " ").split(" ", 1)[0]
+    for fmt in _DATE_FORMATS:
+        for candidate in (head, s):
+            try:
+                return datetime.strptime(candidate, fmt).strftime("%d/%m/%Y")
+            except ValueError:
+                continue
     try:
         return datetime.fromisoformat(s).strftime("%d/%m/%Y")
     except ValueError:

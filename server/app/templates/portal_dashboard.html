@@ -17,13 +17,13 @@
 
 {% if kb_suggestions %}
 <section class="card" style="background:#f0f9ff;border-left:4px solid #0284c7;margin-bottom:14px;">
-  <h3 style="margin:0 0 8px;font-size:14px;color:#075985;">💡 Before you log a ticket — try these articles</h3>
+  <h3 style="margin:0 0 8px;font-size:14px;color:var(--accent);">💡 Before you log a ticket — try these articles</h3>
   <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7;">
     {% for a in kb_suggestions %}
-    <li><a href="/portal/kb/{{ a.slug }}" style="color:#0369a1;">{{ a.title }}</a>{% if a.summary %} <span class="meta">— {{ a.summary[:90] }}{% if a.summary|length > 90 %}…{% endif %}</span>{% endif %}</li>
+    <li><a href="/portal/kb/{{ a.slug }}" style="color:var(--accent);">{{ a.title }}</a>{% if a.summary %} <span class="meta">— {{ a.summary[:90] }}{% if a.summary|length > 90 %}…{% endif %}</span>{% endif %}</li>
     {% endfor %}
   </ul>
-  <p class="meta" style="margin:8px 0 0;font-size:11.5px;"><a href="/portal/kb" style="color:#0369a1;">Browse all help articles →</a></p>
+  <p class="meta" style="margin:8px 0 0;font-size:11.5px;"><a href="/portal/kb" style="color:var(--accent);">Browse all help articles →</a></p>
 </section>
 {% endif %}
 

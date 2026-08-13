@@ -8,8 +8,8 @@
   </div>
 </section>
 
-{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
-{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:var(--red);">{{ error }}</p></div>{% endif %}
 
 <section class="card" style="max-width:none;margin-bottom:16px;">
   <h3 style="margin-top:0;">How this works</h3>
@@ -45,7 +45,7 @@
     <button type="submit" class="primary">Add rule</button>
   </form>
   {% elif not available_cats %}
-  <p class="meta" style="color:#64748b;">All active categories already have a rule. Delete one below to re-add.</p>
+  <p class="meta" style="color:var(--text-3);">All active categories already have a rule. Delete one below to re-add.</p>
   {% else %}
   <p class="meta" style="color:#dc2626;">No active admin/agent users. <a href="/users">Promote a user to agent</a> first.</p>
   {% endif %}

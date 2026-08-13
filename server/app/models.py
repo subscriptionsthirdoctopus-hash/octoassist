@@ -113,6 +113,13 @@ class EntraDevice(Base):
     is_compliant: Mapped[bool | None]       = mapped_column(Boolean,     nullable=True)
     is_managed: Mapped[bool | None]         = mapped_column(Boolean,     nullable=True)
     account_enabled: Mapped[bool | None]    = mapped_column(Boolean,     nullable=True)
+    # Device-level location/department, captured when a device is added
+    # manually. Graph does not supply either, so sync_devices never writes
+    # them — a manually entered value survives every subsequent Entra sync.
+    # Displayed with the primary user's values as fallback, mirroring how
+    # Agent.location falls back to User.location.
+    location: Mapped[str | None]            = mapped_column(String(200), nullable=True)
+    department: Mapped[str | None]          = mapped_column(String(200), nullable=True)
     approx_last_signin_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     primary_user_id: Mapped[int | None]     = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -1170,3 +1177,59 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     user: Mapped["User | None"] = relationship()
+
+
+class SoftwareSubscription(Base):
+    """A purchased software licence / subscription the customer owns.
+
+    Distinct from the SAM inventory in services/sam.py: that reports what is
+    *installed* (discovered from endpoints), this records what has been *bought*
+    — the licence key, the seat count, the PO, and when it lapses. The two
+    answer different questions, and reconciling them is the point of a SAM
+    audit.
+
+    Windows OEM keys can be seeded straight from endpoint snapshots via
+    services/subscriptions.import_windows_keys, so the common case does not
+    need re-typing by hand.
+    """
+    __tablename__ = "software_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+
+    software_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    vendor: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    license_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    seats: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    po_reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    purchased_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    starts_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Drives the consolidated expiry digest. NULL means perpetual — a licence
+    # that never lapses must never appear in the digest.
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # PO / licence certificate. Reuses the existing UploadedFile pipeline rather
+    # than inventing a second storage path. SET NULL so deleting the file leaves
+    # the subscription record intact.
+    attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("uploaded_files.id", ondelete="SET NULL"), nullable=True
+    )
+    # Optional tie to the endpoint a per-device key belongs to (OEM Windows).
+    agent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    attachment: Mapped["UploadedFile | None"] = relationship()
+    agent: Mapped["Agent | None"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        Index("ix_software_subscriptions_tenant_expiry", "tenant_id", "expires_on"),
+    )

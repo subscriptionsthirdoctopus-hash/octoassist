@@ -32,6 +32,7 @@ from .web.views_problems import router as problems_router
 from .web.views_reports import router as reports_router
 from .web.views_settings import router as settings_router
 from .web.views_software import router as software_router
+from .web.views_subscriptions import router as subscriptions_router
 from .web.views_sso import router as sso_router
 from .web.views_tickets import router as tickets_router
 from .web.views_users import router as users_router
@@ -135,6 +136,7 @@ app.include_router(changes_router)      # /changes, /changes/{id}, ...
 app.include_router(reports_router)      # /reports, /reports/{tickets,sla,assets,changes}, /reports/export/*
 app.include_router(patches_router)      # /patches, /patches/{agent_id}, /patches/export.csv
 app.include_router(software_router)     # /software (SAM), /software/product/{pub}/{prod}, /software/export.csv
+app.include_router(subscriptions_router)  # /subscriptions — owned licences, keys, POs, expiry
 app.include_router(actions_router)      # /actions, /asset/{id}/{actions,processes,action}
 app.include_router(uploads_router)      # /api/v1/uploads, /files/{uuid}.{ext}
 app.include_router(agent_download_router) # /agent (download index), /agent/files/<name>
@@ -158,6 +160,8 @@ def _startup() -> None:
         db.execute(text("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS notification_settings JSONB DEFAULT '{}'::jsonb"))
         db.execute(text("ALTER TABLE patch_windows ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES asset_groups(id) ON DELETE SET NULL"))
         db.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_pending BOOLEAN NOT NULL DEFAULT FALSE"))
+        db.execute(text("ALTER TABLE entra_devices ADD COLUMN IF NOT EXISTS location VARCHAR(200)"))
+        db.execute(text("ALTER TABLE entra_devices ADD COLUMN IF NOT EXISTS department VARCHAR(200)"))
         db.execute(text("""
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id SERIAL PRIMARY KEY,
