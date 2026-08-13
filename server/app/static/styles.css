@@ -71,6 +71,17 @@
   --topbar-bg: rgba(3, 7, 18, 0.65);
   --topbar-border: rgba(255, 255, 255, 0.06);
   --topbar-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  /* Opaque variants for sticky / overlapping surfaces. The topbar and table
+     heads are sticky (or sit above scrolling rows); if they stay translucent,
+     rows scroll *through* them and the text ghosts/overlaps. These solids are
+     the flattened equivalents of --topbar-bg / --surface-2 over --bg. */
+  --topbar-solid: #080d1c;
+  --thead-solid:  #161e38;
+  --surface-solid: #0d1426;  /* dropdowns, popovers, modal panels */
+  /* Alias — some pages pin their own table headers with
+     `background: var(--th-solid)`. Without this the var is undefined, the
+     declaration is dropped, and the header falls back to a translucent one. */
+  --th-solid: var(--thead-solid);
 
   /* Scrollbars - Dark */
   --scrollbar-track: rgba(3, 7, 18, 0.4);
@@ -116,6 +127,10 @@
   --topbar-bg: rgba(255, 255, 255, 0.75);
   --topbar-border: rgba(15, 23, 42, 0.04);
   --topbar-shadow: 0 4px 20px rgba(15, 23, 42, 0.02);
+  --topbar-solid: #ffffff;   /* opaque topbar for light theme */
+  --thead-solid:  #eef2f8;   /* opaque table head for light theme */
+  --surface-solid: #ffffff;  /* opaque dropdowns/popovers/modals */
+  --th-solid: var(--thead-solid);
 
   /* Scrollbars - Light */
   --scrollbar-track: rgba(244, 247, 252, 0.5);
@@ -247,9 +262,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
    it's a translucent white with backdrop blur. Both end up "floating above"
    content via a soft drop shadow. */
 .topbar {
-  background: var(--topbar-bg);
-  backdrop-filter: saturate(180%) blur(16px);
-  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  /* Opaque so table headers/rows can't ghost through the bar when scrolled. */
+  background: var(--topbar-solid);
   color: var(--text-1);
   border-bottom: 1px solid var(--topbar-border);
   box-shadow: var(--topbar-shadow);
@@ -445,7 +459,9 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 
 .gs-dropdown {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0;
-  background: var(--surface); color: var(--text-1);
+  /* Opaque: this floats over page content, and a translucent panel lets the
+     text underneath show through and read as overlapping. */
+  background: var(--surface-solid); color: var(--text-1);
   border: 1px solid var(--line); border-radius: var(--r-md);
   box-shadow: var(--shadow-3);
   max-height: 480px; overflow-y: auto; z-index: 100;
@@ -543,7 +559,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 .bell-dropdown {
   position: absolute; top: calc(100% + 8px); right: 0;
   width: 320px;
-  background: var(--surface); color: var(--text-1);
+  /* Opaque — see .gs-dropdown. */
+  background: var(--surface-solid); color: var(--text-1);
   border: 1px solid var(--line); border-radius: var(--r-md);
   box-shadow: var(--shadow-3);
   z-index: 100;
@@ -613,7 +630,15 @@ table.data th, table.data td {
   font-size: 13.5px;
 }
 table.data thead th {
-  background: var(--surface-2);
+  /* Opaque (not translucent --surface-2): keeps the header readable and stops
+     data rows from bleeding through when the table scrolls under the topbar.
+     !important is required, not decorative: the global `th` rule near the end
+     of this file also sets the background with !important, and a plain
+     declaration here loses to it no matter how specific the selector is.
+     A deployment hit exactly that — a sticky header set `background:
+     var(--th-solid)` without !important, the global rule kept the header at
+     rgba(22,30,56,0.80), and rows showed through the pinned header. */
+  background: var(--thead-solid) !important;
   font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
@@ -2501,11 +2526,10 @@ button.primary:hover, .btn-primary:hover, a.button.primary:hover, .button.primar
   box-shadow: 0 0 12px rgba(244, 63, 94, 0.15) !important;
 }
 
-/* Frosted Glass Floating Topbar */
+/* Floating Topbar — opaque so scrolled table rows can't ghost/overlap
+   through it (was translucent + blur, which caused header/data overlap). */
 .topbar {
-  background: var(--topbar-bg) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  background: var(--topbar-solid) !important;
   border-bottom: 1px solid var(--topbar-border) !important;
   box-shadow: var(--topbar-shadow) !important;
   padding: 12px 32px !important;
@@ -2539,7 +2563,10 @@ table {
   background: var(--surface) !important;
 }
 th {
-  background: var(--surface-2) !important;
+  /* Opaque (not translucent --surface-2): stops data rows from bleeding
+     through the header. This global !important rule is what actually renders
+     table heads app-wide, so the overlap fix must live here. */
+  background: var(--thead-solid) !important;
   color: var(--text-1) !important;
   font-family: 'Plus Jakarta Sans', var(--font-sans) !important;
   font-weight: 700 !important;
@@ -2548,6 +2575,21 @@ th {
   letter-spacing: 0.8px !important;
   padding: 14px 18px !important;
   border-bottom: 1px solid var(--line) !important;
+}
+/* Header rows must always win against the rows beneath them.
+   Two independent things produce the "header overlapping the data" report:
+   a translucent header (the opaque background above), and a pinned header
+   that rows paint over because nothing raised it in the stacking order.
+   thead carries the opaque background too, in case a table sets it on the
+   row rather than the cells.
+   The z-index deliberately comes WITHOUT a `position` declaration: it takes
+   effect only once something positions the header (a sticky header), and is
+   inert otherwise — so this cannot break a page that pins its own headers. */
+thead {
+  background: var(--thead-solid) !important;
+}
+thead th {
+  z-index: 3;
 }
 td {
   padding: 14px 18px !important;

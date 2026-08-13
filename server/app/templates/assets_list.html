@@ -23,8 +23,8 @@
   </div>
 </section>
 
-{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
-{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:#7f1d1d;">{{ error }}</p></div>{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p></div>{% endif %}
+{% if error %}<div class="card" style="max-width:none;margin-bottom:12px;background:#fee2e2;border-left:4px solid #dc2626;"><p style="margin:0;font-size:13px;color:var(--red);">{{ error }}</p></div>{% endif %}
 
 <style>
   .conn-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
@@ -116,6 +116,17 @@
       </label>
       <label>OS
         <input type="text" name="operating_system" value="Windows" style="width:120px;">
+      </label>
+      <label>OS version
+        <input type="text" name="os_version" placeholder="10.0.22631" style="width:130px;">
+      </label>
+      <label>Department
+        <input type="text" name="department" list="known-departments" placeholder="e.g. Production" style="width:150px;">
+        <datalist id="known-departments">{% for dpt in departments %}<option value="{{ dpt }}">{% endfor %}</datalist>
+      </label>
+      <label>Location
+        <input type="text" name="location" list="known-locations" placeholder="e.g. Achhad" style="width:150px;">
+        <datalist id="known-locations">{% for loc in locations %}<option value="{{ loc }}">{% endfor %}</datalist>
       </label>
       <label>Make
         <input type="text" name="manufacturer" placeholder="Dell" style="width:140px;">

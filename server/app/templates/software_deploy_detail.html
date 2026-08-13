@@ -18,8 +18,8 @@
     {% if s == 'succeeded' %}<p style="font-size:22px;margin:0;color:#16a34a;font-weight:700;">✓ Succeeded</p>
     {% elif s == 'failed' %}<p style="font-size:22px;margin:0;color:#dc2626;font-weight:700;">✗ Failed</p>
     {% elif s == 'in_progress' %}<p style="font-size:22px;margin:0;color:#d97706;font-weight:700;">⏳ Running</p>
-    {% elif s == 'cancelled' %}<p style="font-size:22px;margin:0;color:#64748b;font-weight:700;">⊘ Cancelled</p>
-    {% else %}<p style="font-size:22px;margin:0;color:#64748b;font-weight:700;">⏱ Queued</p>{% endif %}
+    {% elif s == 'cancelled' %}<p style="font-size:22px;margin:0;color:var(--text-3);font-weight:700;">⊘ Cancelled</p>
+    {% else %}<p style="font-size:22px;margin:0;color:var(--text-3);font-weight:700;">⏱ Queued</p>{% endif %}
     {% if action.exit_code is not none %}
     <p class="meta" style="margin:6px 0 0;">Exit code: <strong>{{ action.exit_code }}</strong></p>
     {% endif %}

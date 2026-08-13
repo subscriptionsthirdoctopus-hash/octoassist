@@ -113,6 +113,13 @@ class EntraDevice(Base):
     is_compliant: Mapped[bool | None]       = mapped_column(Boolean,     nullable=True)
     is_managed: Mapped[bool | None]         = mapped_column(Boolean,     nullable=True)
     account_enabled: Mapped[bool | None]    = mapped_column(Boolean,     nullable=True)
+    # Device-level location/department, captured when a device is added
+    # manually. Graph does not supply either, so sync_devices never writes
+    # them — a manually entered value survives every subsequent Entra sync.
+    # Displayed with the primary user's values as fallback, mirroring how
+    # Agent.location falls back to User.location.
+    location: Mapped[str | None]            = mapped_column(String(200), nullable=True)
+    department: Mapped[str | None]          = mapped_column(String(200), nullable=True)
     approx_last_signin_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     primary_user_id: Mapped[int | None]     = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True

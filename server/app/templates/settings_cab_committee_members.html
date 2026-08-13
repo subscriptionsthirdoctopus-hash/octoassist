@@ -10,16 +10,16 @@
 
 {% if flash %}
 <div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;">
-  <p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p>
+  <p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p>
 </div>
 {% endif %}
 
 <section class="card" style="max-width:none;margin-bottom:18px;">
   <h3 style="margin-top:0; font-size:15px; color:var(--text-1);"> Mandate: {{ committee.name }}</h3>
-  <p class="meta" style="margin:0;line-height:1.55; color: #475569;">
+  <p class="meta" style="margin:0;line-height:1.55; color: var(--text-2);">
     {{ committee.description or "No description specified for this committee yet." }}
   </p>
-  <p class="meta" style="margin:8px 0 0;font-size:12.5px;color:#64748b;">
+  <p class="meta" style="margin:8px 0 0;font-size:12.5px;color:var(--text-3);">
     Select active technicians and user directories from below. Toggle the checkbox to instantly assign or remove them.
   </p>
 </section>
@@ -54,13 +54,13 @@
               <input type="checkbox" {% if is_member %}checked{% endif %}
                      onchange="this.form.submit()" style="cursor:pointer;width:16px;height:16px;">
               {% if is_member %}
-                <span style="font-size:11px;color:#0369a1;font-weight:700;letter-spacing:0.5px;">ACTIVE</span>
+                <span style="font-size:11px;color:var(--accent);font-weight:700;letter-spacing:0.5px;">ACTIVE</span>
               {% endif %}
             </label>
           </form>
         </td>
         <td><strong>{{ u.display_name }}</strong></td>
-        <td><a href="mailto:{{ u.email }}" style="color:#2563eb;text-decoration:none;">{{ u.email }}</a></td>
+        <td><a href="mailto:{{ u.email }}" style="color:var(--accent);text-decoration:none;">{{ u.email }}</a></td>
         <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
         <td>{{ u.department or "—" }}</td>
         <td>{{ u.location or "—" }}</td>

@@ -20,9 +20,27 @@ import logging
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models import Agent, CategoryRule, LocationRule, User
+from ..models import Agent, CategoryRule, LocationRule, User, UserRole
 
 log = logging.getLogger("octoassist.location_routing")
+
+# Auto-assignment may only target staff who can actually work a ticket.
+_ASSIGNABLE_ROLES = (UserRole.admin, UserRole.agent)
+
+
+def _assignable(assignee: User | None) -> User | None:
+    """Return `assignee` only if they can actually be given a ticket: active
+    staff (admin/agent). A requester must never be auto-assigned — they cannot
+    work the queue, and the ticket would look owned while nobody is on it.
+    The settings UI enforces this when a rule is created, but a rule outlives
+    the role it was created against (e.g. an agent later becomes a requester),
+    so it has to be re-checked at assignment time.
+    """
+    if assignee is None or not assignee.is_active:
+        return None
+    if assignee.role not in _ASSIGNABLE_ROLES:
+        return None
+    return assignee
 
 
 def derive_location_for(*, user: User, db: Session) -> str | None:
@@ -55,19 +73,18 @@ def auto_assignee_for(
     `location` (case-insensitive, exact match), scoped to tenant. None if
     no rule matches or the location is blank.
     """
-    if not location:
+    if not location or not location.strip():
         return None
+    # Trim BOTH sides: the stored rule may carry stray whitespace from an
+    # earlier free-text entry, which would otherwise silently never match.
     rule = (db.query(LocationRule)
               .filter(LocationRule.tenant_id == tenant_id,
-                      func.lower(LocationRule.location) == location.strip().lower())
+                      func.lower(func.trim(LocationRule.location))
+                      == location.strip().lower())
               .first())
     if rule is None:
         return None
-    # Sanity: only auto-assign to active staff (admin/agent).
-    assignee = rule.default_assignee
-    if assignee is None or not assignee.is_active:
-        return None
-    return assignee
+    return _assignable(rule.default_assignee)
 
 
 def category_assignee_for(
@@ -83,7 +100,4 @@ def category_assignee_for(
                       CategoryRule.category_id == category_id).first())
     if rule is None:
         return None
-    assignee = rule.default_assignee
-    if assignee is None or not assignee.is_active:
-        return None
-    return assignee
+    return _assignable(rule.default_assignee)

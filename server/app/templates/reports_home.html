@@ -221,7 +221,7 @@
     
     <div style="overflow-x: auto; max-height: 520px; border-radius: 8px; border: 1px solid var(--line);">
       <table class="table" style="width: 100%; border-collapse: collapse; margin: 0;" id="drilldownTable">
-        <thead id="drilldownThead" style="background: var(--surface-2); border-bottom: 2px solid var(--line);">
+        <thead id="drilldownThead" style="background: var(--thead-solid); border-bottom: 2px solid var(--line);">
           <!-- Filled dynamically -->
         </thead>
         <tbody id="drilldownTbody">
@@ -427,7 +427,7 @@
         cells.push('<strong>💻 ' + escapeHtml(item.asset) + '</strong>');
         cells.push('<strong>' + escapeHtml(item.title) + '</strong>');
         cells.push('<span class="prio prio-' + (item.severity === "CRITICAL" ? "critical" : item.severity === "HIGH" ? "high" : "medium") + '" style="font-size:9.5px; padding:1px 6px;">' + item.severity + '</span>');
-        cells.push('<span style="font-family:monospace; font-size:11.5px;">' + item.cve + '</span>');
+        cells.push('<span style="font-family:monospace; font-size:11.5px;">' + escapeHtml(item.package) + '</span>');
         cells.push('<span style="font-size:11.5px;">' + item.detected + '</span>');
       }
 

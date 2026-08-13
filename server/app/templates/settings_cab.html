@@ -9,11 +9,11 @@
 </section>
 
 <div style="display:flex; gap:16px; margin: 0 0 16px; border-bottom:1px solid var(--line,#e2e8f0); padding-bottom:8px;">
-  <a href="/settings/cab" style="font-weight:700; color:#2563eb; text-decoration:none; border-bottom:2px solid #2563eb; padding-bottom:8px;">CAB Members</a>
-  <a href="/settings/cab/committees" style="color:#64748b; text-decoration:none; padding-bottom:8px; font-weight:500; transition: color 0.2s;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='#64748b'">CAB Committees</a>
+  <a href="/settings/cab" style="font-weight:700; color:var(--accent); text-decoration:none; border-bottom:2px solid #2563eb; padding-bottom:8px;">CAB Members</a>
+  <a href="/settings/cab/committees" style="color:var(--text-3); text-decoration:none; padding-bottom:8px; font-weight:500; transition: color 0.2s;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='#64748b'">CAB Committees</a>
 </div>
 
-{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:#14532d;">{{ flash }}</p></div>{% endif %}
+{% if flash %}<div class="card" style="max-width:none;margin-bottom:12px;background:#dcfce7;border-left:4px solid #16a34a;"><p style="margin:0;font-size:13px;color:var(--green);">{{ flash }}</p></div>{% endif %}
 
 <section class="card" style="max-width:none;margin-bottom:14px;">
   <h3 style="margin-top:0;">How this works</h3>
@@ -21,11 +21,11 @@
     CAB (Change Advisory Board) members are the people who review and approve production changes.
     Once a user is in the CAB:
   </p>
-  <ul class="meta" style="margin:6px 0 0;line-height:1.6;font-size:13px;color:#475569;">
+  <ul class="meta" style="margin:6px 0 0;line-height:1.6;font-size:13px;color:var(--text-2);">
     <li>They get emailed on every new <strong>change</strong> submitted (review + approve at <code>/changes</code>).</li>
     <li>They get FYI emails on every new <strong>incident / service request</strong> created — so leadership sees what's hitting the helpdesk.</li>
   </ul>
-  <p class="meta" style="margin:8px 0 0;font-size:12.5px;color:#64748b;">Users in this list come from your Entra ID directory sync (or were created locally). Toggle the checkbox to add or remove.</p>
+  <p class="meta" style="margin:8px 0 0;font-size:12.5px;color:var(--text-3);">Users in this list come from your Entra ID directory sync (or were created locally). Toggle the checkbox to add or remove.</p>
 </section>
 
 <form method="get" action="/settings/cab" style="margin-bottom:12px;">
@@ -47,12 +47,12 @@
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
             <input type="checkbox" {% if u.is_cab_member %}checked{% endif %}
                    onchange="this.form.submit()" style="cursor:pointer;width:16px;height:16px;">
-            {% if u.is_cab_member %}<span style="font-size:11px;color:#0369a1;font-weight:700;">CAB</span>{% endif %}
+            {% if u.is_cab_member %}<span style="font-size:11px;color:var(--accent);font-weight:700;">CAB</span>{% endif %}
           </label>
         </form>
       </td>
       <td><strong>{{ u.display_name }}</strong></td>
-      <td><a href="mailto:{{ u.email }}" style="color:#2563eb;text-decoration:none;">{{ u.email }}</a></td>
+      <td><a href="mailto:{{ u.email }}" style="color:var(--accent);text-decoration:none;">{{ u.email }}</a></td>
       <td><span class="role-pill role-{{ u.role.value }}">{{ u.role.value }}</span></td>
       <td>{{ u.department or "—" }}</td>
       <td>{{ u.location or "—" }}</td>

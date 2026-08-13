@@ -19,12 +19,12 @@
   .tl-dot { width:28px; height:28px; border-radius:50%; background:#e2e8f0; color:#64748b;
             margin:0 auto 6px; display:flex; align-items:center; justify-content:center;
             font-weight:700; font-size:13px; border:2px solid #e2e8f0; }
-  .tl-label { font-size:11.5px; color:#64748b; font-weight:600; }
+  .tl-label { font-size:11.5px; color:var(--text-3); font-weight:600; }
   .tl-step.done .tl-dot     { background:#16a34a; color:white; border-color:#16a34a; }
-  .tl-step.done .tl-label   { color:#14532d; }
+  .tl-step.done .tl-label   { color:var(--green); }
   .tl-step.current .tl-dot  { background:#2563eb; color:white; border-color:#2563eb;
                               box-shadow:0 0 0 4px rgba(37,99,235,.18); }
-  .tl-step.current .tl-label{ color:#1e3a8a; }
+  .tl-step.current .tl-label{ color:var(--accent); }
   .tl-step.cancelled .tl-dot{ background:#dc2626; color:white; border-color:#dc2626; }
   .tl-bar { flex:0 0 auto; width:100%; height:3px; background:#e2e8f0; margin:0 -4px; align-self:flex-start;
             margin-top:13px; }
@@ -32,9 +32,9 @@
   .attach-list { list-style:none; padding:0; margin:6px 0 0; }
   .attach-list li { padding:8px 10px; background:var(--surface-2); border:1px solid var(--line,#e2e8f0);
                     border-radius:6px; margin-bottom:6px; display:flex; align-items:center; gap:10px; font-size:13px; }
-  .attach-list .fname { flex:1; font-weight:600; color:#0f172a; text-decoration:none; }
+  .attach-list .fname { flex:1; font-weight:600; color:var(--text-1); text-decoration:none; }
   .attach-list .fname:hover { text-decoration:underline; }
-  .attach-list .fmeta { color:#64748b; font-size:11.5px; }
+  .attach-list .fmeta { color:var(--text-3); font-size:11.5px; }
   .file-icon { font-size:18px; }
 </style>
 
@@ -109,7 +109,7 @@
 
   {% if attach_error %}
   <div class="card" style="background:#fee2e2;border-left:4px solid #dc2626;margin-bottom:10px;">
-    <p style="margin:0;font-size:13px;color:#7f1d1d;">⚠ {{ attach_error }}</p>
+    <p style="margin:0;font-size:13px;color:var(--red);">⚠ {{ attach_error }}</p>
   </div>
   {% endif %}
 
