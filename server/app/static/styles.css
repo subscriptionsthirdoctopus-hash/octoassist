@@ -77,6 +77,10 @@
      the flattened equivalents of --topbar-bg / --surface-2 over --bg. */
   --topbar-solid: #080d1c;
   --thead-solid:  #161e38;
+  /* Height of the sticky topbar (12px padding + ~35px content + 1px border,
+     measured at 59.25px). Pinned table headers rest just below it instead of
+     sliding underneath. Theme-independent, so it is defined once here. */
+  --topbar-h: 60px;
   --surface-solid: #0d1426;  /* dropdowns, popovers, modal panels */
   /* Alias — some pages pin their own table headers with
      `background: var(--th-solid)`. Without this the var is undefined, the
@@ -2558,7 +2562,16 @@ table {
   border-spacing: 0 !important;
   width: 100% !important;
   border-radius: var(--r-md) !important;
+  /* `hidden` first, `clip` second — both clip the rounded corners, but `hidden`
+     makes the table its own scroll container, which silently breaks
+     `position: sticky` on the header: the header stops pinning at the table's
+     own box while the browser still composites it over the rows scrolling
+     past. That is the "header overlapping the data" TEMA photographed. `clip`
+     clips identically without creating a scroll container. Declared as a pair
+     so a browser without `clip` keeps `hidden` and merely loses the pinning —
+     the header stays opaque either way, so it can never be ghosted through. */
   overflow: hidden !important;
+  overflow: clip !important;
   border: 1px solid var(--line) !important;
   background: var(--surface) !important;
 }
@@ -2588,8 +2601,28 @@ th {
 thead {
   background: var(--thead-solid) !important;
 }
+/* Pin the header, and pin it in the one place it cannot collide with anything.
+   `top` is the topbar's height, not 0: the topbar is sticky at 0 with z-index
+   50, so a header pinned at 0 slides underneath it and the two occupy the same
+   band — which is what the row-behind-the-header screenshots actually show.
+   Sitting at --topbar-h it comes to rest immediately below the bar, rows pass
+   beneath an opaque background, and z-index 3 keeps it above those rows while
+   staying well below the topbar's 50.
+
+   --sticky-top lets a table inside its own scrolling box override the offset:
+   there the header must pin at 0 of that box, not at the page's topbar. */
 thead th {
+  position: sticky;
+  top: var(--sticky-top, var(--topbar-h));
   z-index: 3;
+}
+/* A scroll box establishes its own coordinates — the topbar is irrelevant
+   inside it. Covers the report drilldown (max-height + overflow) and any table
+   rendered inside a modal. */
+[style*="overflow"] table,
+.modal table,
+#act-modal table {
+  --sticky-top: 0px;
 }
 td {
   padding: 14px 18px !important;
@@ -2648,8 +2681,23 @@ tr:hover td {
   }
 }
 
-/* Apply entrance animations to page elements */
-.card, .kpi-card, .report-card, .comment, table.data, .filters, .empty, .auth-card {
+/* Tables fade in place; everything else slides up.
+   slideUp animates `transform`, and `animation-fill-mode: both` keeps the
+   final keyframe applied forever — so a table stayed permanently transformed
+   at translateY(0). An identity transform is still a transform: it makes the
+   table the containing block for its own descendants, which silently disables
+   `position: sticky` on the header for the life of the page. The header then
+   scrolls away with the rows, and on a build that pins it at top:0 it lands
+   under the topbar in the same band as the data. Tables therefore animate
+   opacity only — no transform, no containing block, sticky intact. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+table.data {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.card, .kpi-card, .report-card, .comment, .filters, .empty, .auth-card {
   animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
