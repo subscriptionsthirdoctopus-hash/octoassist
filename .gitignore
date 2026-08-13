@@ -29,6 +29,9 @@ deploy/docker/.env
 .idea/
 *.swp
 .DS_Store
+# macOS AppleDouble resource forks — these are binary and break linters that
+# try to read them as source (server/app/web/._views.py was committed once).
+._*
 
 # Coding agent tool configs (Antigravity)
 .gemini/

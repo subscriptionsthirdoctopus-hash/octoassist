@@ -141,7 +141,7 @@ async def software_deploy_submit(
 ):
     """Accept either an uploaded installer file OR a pasted URL. Multipart form."""
     from fastapi import UploadFile
-    from ..api.uploads import UPLOAD_DIR
+    from ..api.uploads import ensure_upload_dir
     import hashlib, os, uuid as _uuid
     from ..models import UploadedFile
 
@@ -168,7 +168,7 @@ async def software_deploy_submit(
         from ..api.uploads import _safe_ext, MAX_BYTES
         file_id = _uuid.uuid4().hex
         ext = _safe_ext(installer_file.filename)
-        target_path = UPLOAD_DIR / f"{file_id}{ext}"
+        target_path = ensure_upload_dir() / f"{file_id}{ext}"
         h = hashlib.sha256()
         written = 0
         try:

@@ -71,13 +71,14 @@
     </div>
 
     <div>
-      <h2 style="margin:0 0 8px;">Packages ({{ packages|length }} distinct, Windows-only)</h2>
+      <h2 style="margin:0 0 8px;">Packages (<span id="pkg-shown">{{ packages|length }}</span> distinct, Windows-only)</h2>
+      <p class="meta" id="pkg-scope" style="margin:-4px 0 8px;display:none;"></p>
       <div class="card" style="max-width:none;padding:8px 12px;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <label style="font-size:13px;">
           <input type="checkbox" onclick="document.querySelectorAll('#pkg-table input[name=package_names]').forEach(c=>{if(c.closest('tr').style.display!=='none')c.checked=this.checked;});updateCounts();">
           Select all (visible)
         </label>
-        <input type="search" id="pkg-filter" placeholder="filter packages…" oninput="filterPkgs(this.value);"
+        <input type="search" id="pkg-filter" placeholder="filter packages…" oninput="applyPkgFilters();"
                style="flex:1;min-width:160px;padding:4px 8px;font-size:13px;">
         <span id="pkg-count" class="meta">0 selected</span>
       </div>
@@ -85,11 +86,11 @@
         <thead><tr><th style="width:32px;"></th><th>Package</th><th>Severity</th><th>Affected</th></tr></thead>
         <tbody>
           {% for p in packages %}
-          <tr data-name="{{ p.name|lower }}">
+          <tr data-name="{{ p.name|lower }}" data-pkg="{{ p.name }}">
             <td><input type="checkbox" name="package_names" value="{{ p.name }}" onclick="updateCounts();"></td>
             <td title="{{ p.source }}">{{ p.name }}</td>
             <td><span class="prio prio-{{ p.severity }}">{{ p.severity }}</span></td>
-            <td>{{ p.affected }}</td>
+            <td class="pkg-affected" data-affected="{{ p.affected }}">{{ p.affected }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -101,19 +102,66 @@
 
 <script>
   const groupMap = {{ group_map_json | safe }};
+  // package name -> agent ids the package is still pending on
+  const packageAgents = {{ package_agents_json | safe }};
+
+  // Member ids of the group currently chosen, or null for "whole fleet".
+  let activeGroup = null;
 
   function selectByGroup(groupId) {
     if (!groupId) {
+      activeGroup = null;
       document.querySelectorAll('input[name=agent_ids]').forEach(c => c.checked = false);
-      updateCounts();
-      return;
+    } else {
+      activeGroup = new Set(groupMap[groupId] || []);
+      document.querySelectorAll('input[name=agent_ids]').forEach(c => {
+        c.checked = activeGroup.has(parseInt(c.value));
+      });
     }
-    const memberIds = groupMap[groupId] || [];
-    const idSet = new Set(memberIds);
-    document.querySelectorAll('input[name=agent_ids]').forEach(c => {
-      const aid = parseInt(c.value);
-      c.checked = idSet.has(aid);
+    applyPkgFilters();
+  }
+
+  // How many endpoints in the current scope still need this package.
+  function affectedInScope(pkgName) {
+    const agents = packageAgents[pkgName] || [];
+    if (!activeGroup) return agents.length;
+    return agents.filter(a => activeGroup.has(a)).length;
+  }
+
+  // Single place that decides package-row visibility, so the group selector
+  // and the search box compose instead of overwriting each other.
+  function applyPkgFilters() {
+    const needle = (document.getElementById('pkg-filter').value || '').toLowerCase();
+    let shown = 0;
+    document.querySelectorAll('#pkg-table tbody tr').forEach(row => {
+      const pkg = row.getAttribute('data-pkg');
+      const inScope = affectedInScope(pkg);
+      const matchesText = !needle || (row.getAttribute('data-name') || '').indexOf(needle) >= 0;
+      const visible = matchesText && inScope > 0;
+      row.style.display = visible ? '' : 'none';
+      // Never submit a package the operator can no longer see.
+      if (!visible) {
+        const cb = row.querySelector('input[name=package_names]');
+        if (cb) cb.checked = false;
+      } else {
+        shown++;
+      }
+      const cell = row.querySelector('.pkg-affected');
+      if (cell) {
+        cell.textContent = activeGroup
+          ? inScope + ' of ' + cell.getAttribute('data-affected')
+          : cell.getAttribute('data-affected');
+      }
     });
+    document.getElementById('pkg-shown').textContent = shown;
+    const scope = document.getElementById('pkg-scope');
+    if (activeGroup) {
+      scope.style.display = '';
+      scope.textContent = 'Showing only packages pending on the selected group. '
+        + 'Affected counts read in-group of fleet-wide.';
+    } else {
+      scope.style.display = 'none';
+    }
     updateCounts();
   }
 
@@ -124,12 +172,6 @@
     document.getElementById('pkg-count').textContent = pks + ' selected';
     document.getElementById('deploy-btn').textContent = '↪ Deploy ' + eps + ' endpoint(s) × ' + pks + ' package(s)';
   }
-  function filterPkgs(needle) {
-    const n = (needle || '').toLowerCase();
-    document.querySelectorAll('#pkg-table tbody tr').forEach(row => {
-      const hay = (row.getAttribute('data-name') || '');
-      row.style.display = (!n || hay.indexOf(n) >= 0) ? '' : 'none';
-    });
-  }
+  function filterPkgs() { applyPkgFilters(); }
 </script>
 {% endblock %}

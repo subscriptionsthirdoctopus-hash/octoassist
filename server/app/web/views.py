@@ -14,6 +14,7 @@ from ..models import (
     Tenant, User,
 )
 from ..services import entra_devices
+from ..services.hostnames import normalise as normalise_hostname
 from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -69,7 +70,12 @@ def assets_index(
     needle = (q or "").strip().lower()
     agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False)).order_by(Agent.hostname).all()
 
-    managed_hostnames = {a.hostname.strip().lower() for a in agents if a.hostname}
+    # Matching key, not a rename — see services/hostnames. Case- and FQDN-
+    # insensitive, so an agent reporting "LAP-01" and Entra reporting
+    # "lap-01.tema.local" are recognised as one endpoint instead of listing the
+    # machine twice. The empty key means "unknown" and must not match anything.
+    managed_hostnames = {normalise_hostname(a.hostname) for a in agents if a.hostname}
+    managed_hostnames.discard("")
 
     def _matches(*fields: str | None) -> bool:
         """Free-text needle test across the joined values of fields."""
@@ -118,13 +124,14 @@ def assets_index(
         rows.append(row)
 
     # Entra-discovered Windows endpoints that DON'T already have an OctoAssist
-    # agent reporting (matched by hostname, case-insensitive).
+    # agent reporting (matched on the normalised hostname — case- and
+    # FQDN-insensitive).
     discovered_rows = []
     entra_devices_q = (db.query(EntraDevice)
                          .filter(EntraDevice.tenant_id == user.tenant_id)
                          .order_by(EntraDevice.display_name).all())
     for d in entra_devices_q:
-        if d.display_name and d.display_name.strip().lower() in managed_hostnames:
+        if normalise_hostname(d.display_name) in managed_hostnames:
             continue
         pu = d.primary_user
         dept = pu.department if pu else None

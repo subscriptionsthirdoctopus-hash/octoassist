@@ -27,8 +27,26 @@ from ..models import Tenant, UploadedFile, User
 
 UPLOAD_DIR = Path(os.environ.get("OCTOASSIST_UPLOAD_DIR",
                                  "/srv/octoassist/uploads"))
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_BYTES = 1024 * 1024 * 1024  # 1 GB cap per upload
+
+
+def ensure_upload_dir() -> Path:
+    """Return UPLOAD_DIR, creating it on first write.
+
+    Deliberately not done at import time. UPLOAD_DIR defaults to a path the
+    production container owns, so creating it on import made merely importing
+    the app a privileged filesystem write — it raised PermissionError anywhere
+    that path is not writable (CI, a developer laptop) and, when the process
+    did happen to be root, silently created /srv/octoassist on a machine that
+    had no business having it.
+
+    mkdir is idempotent and costs a stat, so calling it per upload is cheap.
+    Reads (serve_file) do not call this: serving a file never needs to create
+    the directory, and a missing directory there is already a 404.
+    """
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    return UPLOAD_DIR
+
 
 router = APIRouter(tags=["uploads"])
 
@@ -55,7 +73,10 @@ async def upload_file(
 
     file_id = uuid.uuid4().hex
     ext = _safe_ext(file.filename)
-    target = UPLOAD_DIR / f"{file_id}{ext}"
+    try:
+        target = ensure_upload_dir() / f"{file_id}{ext}"
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"upload directory unavailable: {e}")
 
     h = hashlib.sha256()
     written = 0

@@ -53,8 +53,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.2">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.3">
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  {# Makes every table.data sortable. Deferred: it enhances existing markup,
+     so nothing depends on it having run. #}
+  <script src="/static/sortable-tables.js?v=1.0.0" defer></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
@@ -75,6 +78,7 @@
           <a href="/kb">Knowledge Base</a>
           <a href="/assets">Assets</a>
           <a href="/software">Software</a>
+          <a href="/subscriptions">Subscriptions</a>
           <a href="/patches">Patches</a>
           {% if current_user.role.value == 'admin' %}
             <a href="/settings">Settings</a>
