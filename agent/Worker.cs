@@ -39,6 +39,14 @@ public class Worker : BackgroundService
 
         _api.Configure(_cfg.ServerUrl);
 
+        // A restart the user postponed may have happened anyway — they rebooted
+        // themselves, or IT did. That satisfies the pending reboot, so the
+        // deferral budget starts fresh rather than being carried over.
+        if (_cfg.ResetRebootStateIfRebooted())
+        {
+            _log.LogInformation("Machine rebooted since the last deferral — restart state cleared");
+        }
+
         if (!_cfg.IsRegistered)
         {
             await EnsureRegistered(ct);
@@ -326,24 +334,241 @@ public class Worker : BackgroundService
         };
     }
 
+    /// <summary>
+    /// Re-ask once a deferral has expired. Driven from the fast poll rather
+    /// than an in-process timer so a postponed restart survives the service
+    /// being restarted or the machine being suspended over the deferral
+    /// window — the due time lives in agent.json, not in memory.
+    /// </summary>
+    private async Task SafeRePromptDeferredRebootAsync(CancellationToken ct)
+    {
+        try
+        {
+            var due = _cfg.NextRebootPromptAt;
+            if (due == null || DateTime.UtcNow < due.Value) return;
+
+            // Clear the due time first: if the prompt throws, the next poll
+            // must not re-enter it 30 seconds later and spam the user. A
+            // deferral path re-arms it, and every other path restarts.
+            _cfg.NextRebootPromptAtUtc = null;
+            _cfg.Save();
+
+            _log.LogInformation("Deferred restart is due — re-prompting");
+            await PromptOrScheduleRebootAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Deferred restart prompt failed");
+        }
+    }
+
+    /// <summary>What the logged-in user(s) said to the restart prompt.</summary>
+    private enum RebootChoice
+    {
+        /// <summary>Someone asked to restart now.</summary>
+        Now,
+        /// <summary>Someone asked to postpone. Wins over Now — see PromptForRebootAsync.</summary>
+        Later,
+        /// <summary>Prompt shown, nobody answered before the timeout.</summary>
+        NoAnswer,
+        /// <summary>Nobody is logged in, or the prompt could not be delivered.</summary>
+        NoSession,
+    }
+
+    /// <summary>
+    /// Ask the user to restart, honouring "Restart later" up to the configured
+    /// deferral budget.
+    ///
+    /// The restart itself is not optional — a patch that needs a reboot is not
+    /// actually applied until it happens — so every path here ends in a
+    /// restart. What the user controls is when: each deferral buys
+    /// RebootDeferralMinutes, and once MaxRebootDeferrals is spent the restart
+    /// proceeds after a final warning with no choice offered.
+    ///
+    /// An unattended machine (nobody logged in, or nobody answering) restarts
+    /// rather than waiting forever: there is no work to lose, and the previous
+    /// behaviour was an unconditional restart.
+    /// </summary>
     private async Task PromptOrScheduleRebootAsync(CancellationToken ct)
     {
-        // WTSSendMessage to alert users of pending reboot in 5 minutes, then trigger shutdown.exe
-        var title = "Security Updates Installed";
-        var body = "OctoAssist has successfully installed critical security updates on your workstation. Your computer will automatically reboot in 5 minutes to complete the installation. Please save your work immediately.";
-        
-        await ActionSendToastAsync(new Dictionary<string, object>
-        {
-            { "title", title },
-            { "body", body }
-        }, ct);
+        var deferralsLeft = Math.Max(0, _cfg.MaxRebootDeferrals - _cfg.RebootDeferralsUsed);
 
-        // Queue shutdown sequence in 5 minutes (300 seconds)
+        if (deferralsLeft <= 0)
+        {
+            var mins = Math.Max(1, _cfg.RebootFinalWarningSeconds / 60);
+            // MaxRebootDeferrals = 0 lands here on the first pass, which is the
+            // documented way to switch the fleet back to a forced restart — so
+            // the wording must not claim a postponement that never happened.
+            var postponed = _cfg.RebootDeferralsUsed > 0
+                ? $", and this restart has already been postponed {_cfg.RebootDeferralsUsed} time(s)"
+                : "";
+            await SendOneWayNoticeAsync(
+                "Restart required",
+                $"OctoAssist installed security updates that need a restart{postponed}. "
+                + $"Your computer will restart in {mins} minute(s). Please save your work now.",
+                ct);
+            await CommitRebootAsync(_cfg.RebootFinalWarningSeconds, ct);
+            return;
+        }
+
+        var choice = await PromptForRebootAsync(deferralsLeft, ct);
+        _log.LogInformation("Restart prompt answered: {choice} (deferrals used {used}/{max})",
+            choice, _cfg.RebootDeferralsUsed, _cfg.MaxRebootDeferrals);
+
+        if (choice == RebootChoice.Later)
+        {
+            _cfg.RebootDeferralsUsed++;
+            var next = DateTime.UtcNow.AddMinutes(Math.Max(1, _cfg.RebootDeferralMinutes));
+            _cfg.ScheduleRebootPrompt(next);
+            // A countdown may already be armed — a second deployment can finish
+            // while an earlier restart is ticking, and the server can queue a
+            // reboot action independently. Cancel it, or "later" would be
+            // honoured in the dialog and ignored by the machine.
+            await AbortPendingShutdownAsync(ct);
+            return;
+        }
+
+        // Now / NoAnswer / NoSession all restart. Someone who clicked "Restart
+        // now" still gets a short grace period to close what they are in.
+        var delay = choice == RebootChoice.Now ? 60 : _cfg.RebootFinalWarningSeconds;
+        if (choice != RebootChoice.Now)
+        {
+            var mins = Math.Max(1, delay / 60);
+            await SendOneWayNoticeAsync(
+                "Restart required",
+                $"OctoAssist installed security updates that need a restart. Your computer will restart in {mins} minute(s). "
+                + "Please save your work now.",
+                ct);
+        }
+        await CommitRebootAsync(delay, ct);
+    }
+
+    /// <summary>Arm the restart and drop the deferral state that led here.</summary>
+    private async Task CommitRebootAsync(int delaySeconds, CancellationToken ct)
+    {
         await ActionRebootAsync(new Dictionary<string, object>
         {
-            { "delay_seconds", 300 },
-            { "reason", "Security updates installed; mandatory restart." }
+            { "delay_seconds", delaySeconds },
+            { "reason", "Security updates installed; restart required." }
         }, ct);
+        _cfg.ClearPendingReboot();
+    }
+
+    /// <summary>Cancel a countdown started by a previous pass. Exit code 1116
+    /// ("no shutdown in progress") is the normal case and not an error.</summary>
+    private async Task AbortPendingShutdownAsync(CancellationToken ct)
+    {
+        var res = await RunProcessAsync("shutdown.exe", "/a", 10000);
+        if (res.ExitCode != 0 && res.ExitCode != 1116)
+        {
+            _log.LogDebug("shutdown /a returned {code}: {err}", res.ExitCode, res.Stderr);
+        }
+    }
+
+    /// <summary>
+    /// Show a Restart now / Restart later choice in every interactive session
+    /// and collect the answers.
+    ///
+    /// WTSSendMessage blocks per session when waiting for a response, so the
+    /// sessions are walked against a shared deadline: three logged-in users
+    /// cannot turn a 5-minute prompt into a 15-minute stall. Any single
+    /// "later" wins — with several people on one machine, the safe reading of
+    /// a split vote is that somebody still has unsaved work.
+    /// </summary>
+    private async Task<RebootChoice> PromptForRebootAsync(int deferralsLeft, CancellationToken ct)
+    {
+        var timeout = Math.Max(30, _cfg.RebootPromptTimeoutSeconds);
+        var title = "Restart required — security updates";
+        var body =
+            "OctoAssist has installed critical security updates. They only take effect once this computer restarts.\r\n\r\n"
+            + "Yes — restart now.\r\n"
+            + $"No — remind me in {Math.Max(1, _cfg.RebootDeferralMinutes / 60.0):0.#} hour(s). "
+            + $"You can postpone {deferralsLeft} more time(s), after which the restart goes ahead automatically.\r\n\r\n"
+            + $"If nobody answers within {Math.Max(1, timeout / 60)} minute(s), the computer will restart.";
+
+        var titleBase64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(title));
+        var bodyBase64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(body));
+
+        // MB_YESNO (0x4) | MB_ICONEXCLAMATION (0x30) | MB_SYSTEMMODAL (0x1000)
+        // — system modal so it is not lost behind a full-screen window.
+        // Responses: IDYES 6, IDNO 7, IDTIMEOUT 32000.
+        var psScript = @"$ErrorActionPreference = 'Stop'
+$src = @""
+using System;
+using System.Runtime.InteropServices;
+public class OctoPrompt {
+    [DllImport(""wtsapi32.dll"", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool WTSSendMessage(
+        IntPtr hServer, int SessionId,
+        [MarshalAs(UnmanagedType.LPWStr)] string pTitle, int TitleLength,
+        [MarshalAs(UnmanagedType.LPWStr)] string pMessage, int MessageLength,
+        int Style, int Timeout, out int pResponse, bool bWait);
+}
+""@
+Add-Type -TypeDefinition $src
+$title = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('__TITLE_B64__'))
+$body  = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('__BODY_B64__'))
+$budget = __TIMEOUT__
+$sessions = @()
+try {
+    quser 2>$null | Select-Object -Skip 1 | ForEach-Object {
+        if ($_ -match '\s+(\d+)\s+Active') { $sessions += [int]$matches[1] }
+    }
+} catch {}
+$deadline = (Get-Date).AddSeconds($budget)
+foreach ($sid in $sessions) {
+    $remaining = [int]($deadline - (Get-Date)).TotalSeconds
+    if ($remaining -lt 5) { ""RESP:${sid}:32000""; continue }
+    $resp = 0
+    try {
+        $ok = [OctoPrompt]::WTSSendMessage([IntPtr]::Zero, $sid, $title,
+                $title.Length*2, $body, $body.Length*2, 0x1034, $remaining, [ref]$resp, $true)
+        if ($ok) { ""RESP:${sid}:${resp}"" } else { ""ERR:${sid}:"" + [Runtime.InteropServices.Marshal]::GetLastWin32Error() }
+    } catch {
+        ""ERR:${sid}:"" + $_.Exception.Message
+    }
+}
+""SESSIONS:$($sessions.Count)"""
+            .Replace("__TITLE_B64__", titleBase64)
+            .Replace("__BODY_B64__", bodyBase64)
+            .Replace("__TIMEOUT__", timeout.ToString());
+
+        // The script blocks for up to `timeout`; give PowerShell headroom on
+        // top so the host is never killed mid-prompt and read as "no answer".
+        var res = await RunPowerShellAsync(psScript, (timeout + 60) * 1000);
+        var stdout = res.Stdout ?? "";
+
+        var sessionCount = 0;
+        var sessionMatch = System.Text.RegularExpressions.Regex.Match(stdout, @"SESSIONS:(\d+)");
+        if (sessionMatch.Success) sessionCount = int.Parse(sessionMatch.Groups[1].Value);
+        if (sessionCount == 0) return RebootChoice.NoSession;
+
+        var answers = System.Text.RegularExpressions.Regex.Matches(stdout, @"RESP:\d+:(\d+)")
+            .Select(m => int.Parse(m.Groups[1].Value))
+            .ToList();
+        if (answers.Count == 0) return RebootChoice.NoSession;   // delivery failed in every session
+        if (answers.Contains(7)) return RebootChoice.Later;      // IDNO — any one "later" wins
+        if (answers.Contains(6)) return RebootChoice.Now;        // IDYES
+        return RebootChoice.NoAnswer;                            // IDTIMEOUT / unrecognised
+    }
+
+    /// <summary>One-way notice with no buttons — used for the final warning,
+    /// where there is nothing left to decide.</summary>
+    private async Task SendOneWayNoticeAsync(string title, string body, CancellationToken ct)
+    {
+        try
+        {
+            await ActionSendToastAsync(new Dictionary<string, object>
+            {
+                { "title", title },
+                { "body", body }
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            // A notice that cannot be delivered must not stop the restart.
+            _log.LogWarning(ex, "Could not deliver restart notice");
+        }
     }
 
     private async Task FastPollingLoopAsync(CancellationToken ct)
@@ -358,6 +583,7 @@ public class Worker : BackgroundService
             {
                 if (!_cfg.IsRegistered) continue;
                 await PollAndExecuteActions(ct);
+                await SafeRePromptDeferredRebootAsync(ct);
             }
         }
         catch (OperationCanceledException) { /* shutdown */ }
