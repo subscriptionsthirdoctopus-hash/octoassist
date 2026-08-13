@@ -37,7 +37,7 @@ from ..models import (
     RemoteAction, RemoteActionKind, RemoteActionStatus,
     Tenant, Ticket, TicketEvent, TicketKind, TicketStatus, User, UserRole,
 )
-from ..services import charts, patches as patches_svc, reporting
+from ..services import charts, patches as patches_svc, reporting, subscriptions as subs_svc
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -82,6 +82,9 @@ def reports_home(
     sla = reporting.sla_compliance(db, tenant_id, days=days, priority=priority, category_id=category_id)
     workload = reporting.workload_by_assignee(db, tenant_id, top=8, days=days, priority=priority, category_id=category_id)
     patch_kpi = patches_svc.patch_kpis(db, tenant_id)
+    # Counted through the same query the drilldown lists, never from a separate
+    # predicate — see services/subscriptions._attention_query.
+    software_expiring = subs_svc.expiring_soon_count(db, tenant_id)
 
     sparkline_values = [v for _, v in per_day]
 
@@ -90,6 +93,8 @@ def reports_home(
         context=_ctx(user, db,
                      kpi=kpi,
                      patch_kpi=patch_kpi,
+                     software_expiring=software_expiring,
+                     software_expiry_horizon=subs_svc.DEFAULT_HORIZON_DAYS,
                      spark_tickets=charts.sparkline(sparkline_values, width=160, height=40),
                      chart_status=charts.donut(by_status, size=200),
                      chart_priority=charts.donut(by_priority, size=200),
@@ -248,7 +253,41 @@ def reports_drilldown_api(
                 } for p in rows
             ]
         }
-    
+
+    elif kpi == "software_expiring":
+        # Deliberately the same call the card counts through, so the number on
+        # the card is always len() of what opens here. TEMA saw a 0 on the card
+        # with rows in the list because the two used different predicates.
+        rows = subs_svc.expiring_soon(db, tenant_id)
+        today = subs_svc._today()
+
+        def _status(days: int) -> str:
+            if days < 0:  return f"EXPIRED {abs(days)}d AGO"
+            if days == 0: return "EXPIRES TODAY"
+            return f"IN {days}d"
+
+        return {
+            "type": "software_expiring",
+            "columns": ["Software", "Vendor", "Seats", "Expires", "Status", "PO"],
+            "data": [
+                {
+                    "id": s.id,
+                    "software": s.software_name,
+                    "vendor": s.vendor or "—",
+                    "seats": s.seats if s.seats else "—",
+                    "expires": s.expires_on.strftime("%Y-%m-%d"),
+                    "status": _status((s.expires_on - today).days),
+                    "po": s.po_reference or "—",
+                    "detail": {
+                        "Licence key": "recorded" if s.license_key else "not recorded",
+                        "Purchased on": s.purchased_on.strftime("%Y-%m-%d") if s.purchased_on else "—",
+                        "Notes": s.notes or "—",
+                        "Remediation": "Raise the renewal PO from Subscriptions, or set an expiry date if this licence is perpetual.",
+                    }
+                } for s in rows
+            ]
+        }
+
     return {"type": "empty", "columns": [], "data": []}
 
 

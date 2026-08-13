@@ -200,6 +200,15 @@
     <p class="kpi-value">{{ patch_kpi.compliance_pct }}<span class="kpi-unit">%</span></p>
     <p class="kpi-sub">{{ patch_kpi.total_critical }} critical patches outstanding</p>
   </div>
+  {# Counts through subscriptions.expiring_soon_count, which the drilldown
+     lists through expiring_soon — one predicate, so the card and the list it
+     opens can never disagree. Already-lapsed licences are included; they are
+     the most urgent rows, not the least. #}
+  <div class="kpi-card" data-kpi="software_expiring">
+    <p class="kpi-label">Software expiring ({{ software_expiry_horizon }} days)</p>
+    <p class="kpi-value">{{ software_expiring }}</p>
+    <p class="kpi-sub">licences lapsed or due for renewal</p>
+  </div>
 </section>
 
 <!-- LEVEL 1 & LEVEL 2 DOWNWARD DRILL-DOWN PANEL -->
@@ -288,7 +297,8 @@
     "tickets_resolved_7d": { title: "Resolved Tickets (Last 7 Days)", icon: "✅", subtitle: "Recently resolved tickets showing closure resolver" },
     "changes_in_flight": { title: "Changes In Flight", icon: "🔄", subtitle: "Planned Change Requests under active review or implementation" },
     "problems_open": { title: "Open Problem Investigations", icon: "🧩", subtitle: "Root cause analyses and lessons learned logs" },
-    "patch_compliance": { title: "Outstanding Critical Patches", icon: "💻", subtitle: "Vulnerability outstanding missing patches awaiting RMM deployment" }
+    "patch_compliance": { title: "Outstanding Critical Patches", icon: "💻", subtitle: "Vulnerability outstanding missing patches awaiting RMM deployment" },
+    "software_expiring": { title: "Software Expiring or Lapsed", icon: "🔑", subtitle: "Licences already past their renewal date or due within the horizon" }
   };
 
   kpiCards.forEach(function(card) {
@@ -429,6 +439,16 @@
         cells.push('<span class="prio prio-' + (item.severity === "CRITICAL" ? "critical" : item.severity === "HIGH" ? "high" : "medium") + '" style="font-size:9.5px; padding:1px 6px;">' + item.severity + '</span>');
         cells.push('<span style="font-family:monospace; font-size:11.5px;">' + escapeHtml(item.package) + '</span>');
         cells.push('<span style="font-size:11.5px;">' + item.detected + '</span>');
+      } else if (type === "software_expiring") {
+        // Lapsed rows read as critical: they are already out of compliance,
+        // not merely approaching it.
+        var lapsed = item.status.indexOf("EXPIRED") === 0;
+        cells.push('<strong>' + escapeHtml(item.software) + '</strong>');
+        cells.push(escapeHtml(item.vendor));
+        cells.push('<span style="font-size:11.5px;">' + escapeHtml(String(item.seats)) + '</span>');
+        cells.push('<span style="font-size:11.5px;">' + item.expires + '</span>');
+        cells.push('<span class="prio prio-' + (lapsed ? "critical" : "high") + '" style="font-size:9.5px; padding:1px 6px;">' + escapeHtml(item.status) + '</span>');
+        cells.push('<span style="font-family:monospace; font-size:11.5px;">' + escapeHtml(item.po) + '</span>');
       }
 
       cells.forEach(function(cellHtml) {

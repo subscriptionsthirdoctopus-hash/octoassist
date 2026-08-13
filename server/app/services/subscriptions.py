@@ -70,14 +70,16 @@ def status_of(sub: SoftwareSubscription, today: date | None = None,
     return "active"
 
 
-def expiring_soon(db: Session, tenant_id: int,
-                  horizon_days: int = DEFAULT_HORIZON_DAYS,
-                  include_expired: bool = True) -> list[SoftwareSubscription]:
-    """Subscriptions needing attention, soonest first.
+def _attention_query(db: Session, tenant_id: int,
+                     horizon_days: int = DEFAULT_HORIZON_DAYS,
+                     include_expired: bool = True):
+    """The one definition of "needs attention within the horizon".
 
-    Perpetual licences are excluded outright — they have no expiry to chase.
-    Already-lapsed ones are included by default: dropping them would silently
-    hide the most urgent rows once they tip past zero.
+    Every count and every list of expiring software must come from here. A card
+    that counts one predicate while its drilldown lists another is the bug TEMA
+    reported on 07 Aug: the widget read 0 while opening a populated list,
+    because the count excluded already-lapsed rows and the list included them.
+    Sharing the query makes that class of mismatch unrepresentable.
     """
     today = _today()
     cutoff = today + timedelta(days=horizon_days)
@@ -87,8 +89,32 @@ def expiring_soon(db: Session, tenant_id: int,
                        SoftwareSubscription.expires_on <= cutoff))
     if not include_expired:
         query = query.filter(SoftwareSubscription.expires_on >= today)
-    return query.order_by(SoftwareSubscription.expires_on.asc(),
-                          SoftwareSubscription.software_name.asc()).all()
+    return query
+
+
+def expiring_soon(db: Session, tenant_id: int,
+                  horizon_days: int = DEFAULT_HORIZON_DAYS,
+                  include_expired: bool = True) -> list[SoftwareSubscription]:
+    """Subscriptions needing attention, soonest first.
+
+    Perpetual licences are excluded outright — they have no expiry to chase.
+    Already-lapsed ones are included by default: dropping them would silently
+    hide the most urgent rows once they tip past zero.
+    """
+    return (_attention_query(db, tenant_id, horizon_days, include_expired)
+            .order_by(SoftwareSubscription.expires_on.asc(),
+                      SoftwareSubscription.software_name.asc()).all())
+
+
+def expiring_soon_count(db: Session, tenant_id: int,
+                        horizon_days: int = DEFAULT_HORIZON_DAYS,
+                        include_expired: bool = True) -> int:
+    """How many rows expiring_soon() would return, counted in the database.
+
+    Use this for any headline number whose drilldown is expiring_soon(), so the
+    two cannot drift apart.
+    """
+    return _attention_query(db, tenant_id, horizon_days, include_expired).count()
 
 
 def kpis(db: Session, tenant_id: int, horizon_days: int = DEFAULT_HORIZON_DAYS) -> dict:
@@ -100,6 +126,11 @@ def kpis(db: Session, tenant_id: int, horizon_days: int = DEFAULT_HORIZON_DAYS) 
         counts[status_of(r, today, horizon_days)] += 1
         seats += r.seats or 0
     counts["seats"] = seats
+    # "expiring" is strictly the not-yet-lapsed window, which is only meaningful
+    # next to "expired". `attention` is the pair together — the number that
+    # matches what expiring_soon() lists, and the only one safe to put on a
+    # card that opens that list.
+    counts["attention"] = counts["expired"] + counts["expiring"]
     return counts
 
 
