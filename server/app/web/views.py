@@ -16,6 +16,7 @@ from ..models import (
 )
 from ..services import entra_devices
 from ..services.hostnames import normalise as normalise_hostname
+from ..services import compliance
 from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -78,6 +79,28 @@ def assets_index(
     managed_hostnames = {normalise_hostname(a.hostname) for a in agents if a.hostname}
     managed_hostnames.discard("")
 
+    # Compliance comes from the endpoint's Entra record — including for
+    # managed endpoints, whose Entra row is suppressed from the discovered
+    # list below but still holds the verdict. Without this the Compliance
+    # filter could only ever act on unmanaged devices, while the managed table
+    # and its count sat unchanged whichever value was picked.
+    entra_devices_q = (db.query(EntraDevice)
+                         .filter(EntraDevice.tenant_id == user.tenant_id)
+                         .order_by(EntraDevice.display_name).all())
+    compliance_by_host = compliance.by_hostname(entra_devices_q)
+
+    def _compliance_excluded(value: bool | None) -> bool:
+        return compliance.excluded(compliant, value)
+
+    # Nothing to filter on until Entra has actually reported a verdict — with
+    # no connector the column is all NULL, every pick returns an empty table,
+    # and the reason is invisible. The template says so rather than leaving it
+    # to be read as a bug.
+    compliance_data_available = any(v is not None for v in compliance_by_host.values())
+    managed_total = len(agents)
+    discovered_total = sum(1 for d in entra_devices_q
+                           if normalise_hostname(d.display_name) not in managed_hostnames)
+
     def _matches(*fields: str | None) -> bool:
         """Free-text needle test across the joined values of fields."""
         if not needle:
@@ -102,6 +125,7 @@ def assets_index(
         loc = a.location or (pu.location if pu else None)
         dept = pu.department if pu else None
         state = _online_state(a.last_seen_at)
+        is_compliant = compliance_by_host.get(normalise_hostname(a.hostname))
         row = {
             "id": a.id,
             "hostname": a.hostname,
@@ -116,10 +140,12 @@ def assets_index(
             "last_seen_at":   a.last_seen_at,
             "online_state":   state,
             "software_count": len(payload.get("software", [])),
+            "is_compliant":   is_compliant,
         }
         if department and (dept or "").lower() != department.lower(): continue
         if location   and (loc  or "").lower() != location.lower():   continue
         if online     and state != online:                            continue
+        if _compliance_excluded(is_compliant):                        continue
         if not _matches(a.hostname, row["assigned_name"], dept, loc, row["os"]):
             continue
         rows.append(row)
@@ -128,9 +154,6 @@ def assets_index(
     # agent reporting (matched on the normalised hostname — case- and
     # FQDN-insensitive).
     discovered_rows = []
-    entra_devices_q = (db.query(EntraDevice)
-                         .filter(EntraDevice.tenant_id == user.tenant_id)
-                         .order_by(EntraDevice.display_name).all())
     for d in entra_devices_q:
         if normalise_hostname(d.display_name) in managed_hostnames:
             continue
@@ -142,8 +165,7 @@ def assets_index(
         loc  = d.location   or (pu.location   if pu else None)
         if department and (dept or "").lower() != department.lower(): continue
         if location   and (loc  or "").lower() != location.lower():   continue
-        if compliant == "yes" and d.is_compliant is not True:  continue
-        if compliant == "no"  and d.is_compliant is not False: continue
+        if _compliance_excluded(d.is_compliant):                      continue
         if not _matches(d.display_name, (pu.full_name if pu else None) or (pu.email if pu else None),
                         dept, loc, d.operating_system, d.manufacturer, d.model):
             continue
@@ -202,6 +224,8 @@ def assets_index(
                      q=needle,
                      filter_department=department, filter_location=location,
                      filter_compliant=compliant, filter_online=online,
+                     compliance_data_available=compliance_data_available,
+                     managed_total=managed_total, discovered_total=discovered_total,
                      online_count=online_count, lagging_count=lagging_count,
                      offline_count=offline_count,
                      offline_threshold_hours=OFFLINE_THRESHOLD_HOURS,
