@@ -1,0 +1,68 @@
+/* ===========================================================================
+   OctoAssist — table header / row overlap fix
+   For the TEMA India build at octoassist.temaindia.com (Aug 2026)
+
+   APPEND THIS TO THE END OF  server/app/static/styles.css  ON THEIR SERVER.
+   Purely additive: it overrides by !important and defines nothing that must
+   match the rest of the file, so it applies cleanly even though that build has
+   diverged from the Third Octopus repo. Then hard-refresh (Ctrl/Cmd-Shift-R)
+   or bump the stylesheet's ?v= query so browsers pick it up.
+
+   Three independent faults put the header labels and the row values in the
+   same strip. All three are addressed below; fixing only one leaves the
+   artefact visible.
+   =========================================================================== */
+
+@keyframes octoTableFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+table.data {
+  /* FAULT 1 — the table is permanently transformed.
+     table.data is in the slideUp entrance animation, which animates
+     `transform`, with animation-fill-mode `both`. `both` keeps the final
+     keyframe applied for the life of the page, and an identity translateY(0)
+     is still a transform. A transformed element becomes the containing block
+     for its descendants, which displaces `position: sticky` on the header —
+     measured on this build as transform: matrix(1, 0, 0, 1, 0, 16), i.e. the
+     header comes to rest 16px lower than it should, inside the first row's
+     band. Tables now fade in without moving. */
+  animation: octoTableFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  transform: none !important;
+
+  /* FAULT 2 — the table is its own scroll container.
+     `overflow: hidden` (there for the rounded corners) makes the table a
+     scrollport, which confines the sticky header to the table's own box: it
+     stops pinning and scrolls away with the rows. `overflow: clip` clips
+     identically without creating a scrollport. Declared as a pair so a
+     browser without `clip` keeps `hidden` and merely loses the pinning. */
+  overflow: hidden !important;
+  overflow: clip !important;
+}
+
+/* FAULT 3 — the header is translucent.
+   This build paints the header with --surface-2, which is
+   rgba(240, 244, 249, 0.90) in light and translucent in dark, so the row
+   scrolling underneath reads straight through the header. These are the same
+   colours at full opacity. (--thead-solid does not exist in this build, so the
+   values are written out rather than referenced.) */
+table.data thead th,
+table.data thead tr,
+table.data thead {
+  background: #eef2f8 !important;   /* light theme, and the no-theme fallback */
+}
+html[data-theme="dark"] table.data thead th,
+html[data-theme="dark"] table.data thead tr,
+html[data-theme="dark"] table.data thead {
+  background: #161e38 !important;
+}
+
+/* The header must also win the stacking order against the rows passing under
+   it. This build already sets z-index 5 and top: var(--topbar-h) — both
+   correct — so they are restated only to survive any later rule. */
+table.data thead th {
+  position: sticky !important;
+  top: var(--topbar-h, 75px) !important;
+  z-index: 5 !important;
+}
