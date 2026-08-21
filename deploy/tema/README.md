@@ -28,6 +28,7 @@ Only 443 is open on that host — no SSH from outside. Access is RDP on
 | direct edit, 19 Aug | Item 1 — Sophos duplicate endpoint rows | `app/services/sam.py` `product_detail()` keyed by agent; `software_detail.html` drill-down matches a versions list | **yes** |
 | direct edit, 19 Aug | Item 4 — Asset Register compliance filter inert | `app/web/views.py` reads compliance from the Entra record for managed endpoints; `assets_list.html` gains a Compliant? column and a "not reported" pick | **yes** |
 | direct edit, 19 Aug | Mojibake in topbar icons and sort arrows (self-inflicted, see below) | restored `base.html` / `styles.css` from pre-change backups, re-applied both changes UTF-8-safely | **yes** |
+| `Fix-PlusUrl404.ps1` (21 Aug, **applied**) | SAM product pages 404 when the name contains `+` (125 products) — IIS request filtering, not the app | `iis-site\web.config` (site-scoped) | no (app-pool recycle) |
 | `Apply-MastersReconcile.ps1` + `masters-reconcile-append.py` (21 Aug) | **Dipesh's actual ticket** — Masters list in insertion order; 13 assets with no location unreachable by any filter; adds a Masters CSV export | 4 one-line edits + an appended block in `app/web/views_asset_mgmt.py`; 3 inserts in `asset_list.html` | **yes** |
 | `Apply-AssetReconcile.ps1` + `asset-reconcile-append.py` (21 Aug, **staged, NOT applied**) | `/assets` only: byte-order sort, unlocated assets invisible to every location filter, location filter ignoring AD aliases; adds `/assets/export.csv`. **Does not fix Dipesh's ticket** — that is the `am_assets` Masters module | 4 one-line edits + a 3-line sort + an appended block in `app/web/views.py`; 2 inserts in `assets_list.html` | **yes** |
 
@@ -174,6 +175,55 @@ re-run is a no-op, and `-Rollback` restores byte-identical files.
 
 **Still a data fix outstanding:** TEMA must set a location on those 13 rows.
 This patch stops the books hiding them; it cannot know where they are.
+
+## SAM product pages 404 on "+" in the name (21 Aug) — APPLIED
+
+`Fix-PlusUrl404.ps1`. Reported from the Software (SAM) screen: clicking
+**Microsoft Visual C++ 2015-2022 Redistributable** returned IIS's own
+*"404 - File or directory not found"*.
+
+**Not an application bug.** Requested directly on `127.0.0.1:8091`, that exact
+URL returns **200**. IIS never forwarded it. The template encodes the name
+correctly (`|urlencode`, so `+` → `%2B`), and IIS **Request Filtering** rejects
+`%2B` in a path as double escaping — its second unescape pass reads a literal
+`+` as a space, so the two passes disagree. The check runs *before* the rewrite
+rule, which is why nothing appeared in the app logs.
+
+**Fix:** `allowDoubleEscaping="true"` in **this site's own `web.config`**.
+
+Safe here specifically because this site is a pure reverse proxy: it rewrites
+`(.*)` to `127.0.0.1:8091` and its physical folder contains nothing but that
+`web.config`. IIS never resolves a request path to a file, so the traversal the
+filter exists to stop has nothing to reach. Scoped to the site, so it cannot
+affect the other seven on SRV81. Editing `web.config` recycles the app pool by
+itself — the OctoAssist service is not restarted.
+
+Verified before → after on production: `%2B` URL **404 → 303**, plain URL 303
+throughout; `/login` 200, `/agent/files/...` 200, `/api/v1/agent/actions` 401
+(auth, correct) — no regression.
+
+### Still broken: 31 products whose name contains "/"
+
+e.g. `Microsoft Visual Basic/C++ Runtime (x86)`, `Python 3.13.0 Tcl/Tk Support`,
+and the `Windows Driver Package - … (03/21/2017 …)` family. An encoded slash
+(`%2F`) in a path is rejected by **http.sys**, below IIS request filtering, and
+`allowDoubleEscaping` does not cover it. Allowing it needs a server-wide
+registry change on a box hosting eight sites — not worth it.
+
+Counts across 2,419 distinct product names: **125 with `+` (now fixed)**,
+**31 with `/` (still 404)**, 17 with other risky characters (`?`, `#`, `%`).
+
+**The durable fix is application-side:** arbitrary text like a product name
+belongs in a query string, not a path segment — `/software/product?publisher=…&product=…`.
+That fixes all three groups at once and makes the IIS setting unnecessary.
+Affects `/software/product/{publisher}/{product}` and its `/export.csv`, plus
+the links in `software_list.html`, `software_dashboard.html` and
+`software_detail.html`. Not built yet.
+
+    .\Fix-PlusUrl404.ps1 -Check      # report only
+    .\Fix-PlusUrl404.ps1             # apply
+    .\Fix-PlusUrl404.ps1 -Verify     # probe the URLs through IIS
+    .\Fix-PlusUrl404.ps1 -Rollback   # restore web.config
 
 ## These are temporary — read before v6
 
