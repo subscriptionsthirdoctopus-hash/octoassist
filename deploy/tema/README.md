@@ -28,6 +28,7 @@ Only 443 is open on that host — no SSH from outside. Access is RDP on
 | direct edit, 19 Aug | Item 1 — Sophos duplicate endpoint rows | `app/services/sam.py` `product_detail()` keyed by agent; `software_detail.html` drill-down matches a versions list | **yes** |
 | direct edit, 19 Aug | Item 4 — Asset Register compliance filter inert | `app/web/views.py` reads compliance from the Entra record for managed endpoints; `assets_list.html` gains a Compliant? column and a "not reported" pick | **yes** |
 | direct edit, 19 Aug | Mojibake in topbar icons and sort arrows (self-inflicted, see below) | restored `base.html` / `styles.css` from pre-change backups, re-applied both changes UTF-8-safely | **yes** |
+| `Fix-SamProductUrls.ps1` + `sam-product-urls-append.py` (21 Aug, **applied**) | SAM product pages addressed by query string — fixes `+`, `/` and `?#%` names for good | appends 2 routes to `views_software.py`; 6 links across 3 templates | **yes** |
 | `Fix-PlusUrl404.ps1` (21 Aug, **applied**) | SAM product pages 404 when the name contains `+` (125 products) — IIS request filtering, not the app | `iis-site\web.config` (site-scoped) | no (app-pool recycle) |
 | `Apply-MastersReconcile.ps1` + `masters-reconcile-append.py` (21 Aug) | **Dipesh's actual ticket** — Masters list in insertion order; 13 assets with no location unreachable by any filter; adds a Masters CSV export | 4 one-line edits + an appended block in `app/web/views_asset_mgmt.py`; 3 inserts in `asset_list.html` | **yes** |
 | `Apply-AssetReconcile.ps1` + `asset-reconcile-append.py` (21 Aug, **staged, NOT applied**) | `/assets` only: byte-order sort, unlocated assets invisible to every location filter, location filter ignoring AD aliases; adds `/assets/export.csv`. **Does not fix Dipesh's ticket** — that is the `am_assets` Masters module | 4 one-line edits + a 3-line sort + an appended block in `app/web/views.py`; 2 inserts in `assets_list.html` | **yes** |
@@ -213,17 +214,67 @@ registry change on a box hosting eight sites — not worth it.
 Counts across 2,419 distinct product names: **125 with `+` (now fixed)**,
 **31 with `/` (still 404)**, 17 with other risky characters (`?`, `#`, `%`).
 
-**The durable fix is application-side:** arbitrary text like a product name
-belongs in a query string, not a path segment — `/software/product?publisher=…&product=…`.
-That fixes all three groups at once and makes the IIS setting unnecessary.
-Affects `/software/product/{publisher}/{product}` and its `/export.csv`, plus
-the links in `software_list.html`, `software_dashboard.html` and
-`software_detail.html`. Not built yet.
+**Now fixed properly** by `Fix-SamProductUrls.ps1` — see below.
 
     .\Fix-PlusUrl404.ps1 -Check      # report only
     .\Fix-PlusUrl404.ps1             # apply
     .\Fix-PlusUrl404.ps1 -Verify     # probe the URLs through IIS
     .\Fix-PlusUrl404.ps1 -Rollback   # restore web.config
+
+## SAM product pages by query string (21 Aug) — APPLIED
+
+`Fix-SamProductUrls.ps1` + `sam-product-urls-append.py`. The durable fix for the
+whole class of problem, replacing the character-by-character firefight at the
+web-server layer.
+
+A product name is arbitrary vendor text. Putting it in a URL **path** means
+every character has to survive path filtering. Of the **1,671** products the
+SAM list links to: **40 contain `+`**, **20 contain `/`**, **17 contain `?`,
+`#` or `%`**.
+
+Two things were broken, and they were not the same bug:
+
+- `+` → IIS rejected `%2B` as double escaping (unblocked earlier by
+  `Fix-PlusUrl404.ps1`).
+- `/` → **Jinja's `urlencode` uses `safe='/'`, so slashes were never encoded at
+  all.** `Canon Inkjet Printer/Scanner/Fax` produced
+  `/software/product/Canon/Canon%20Inkjet%20Printer/Scanner/Fax…` — extra path
+  segments, matching no route. That was never an IIS problem, and no IIS
+  setting would have fixed it.
+
+**Fix:** two appended routes — `GET /software/product` and
+`GET /software/product/export.csv` — taking `?publisher=…&product=…`. A query
+string is not path-filtered and is delimited rather than split into segments,
+so all three groups work.
+
+The new routes **delegate to the existing handlers**, so there is one
+implementation reachable two ways. They re-encode with `quote(value, safe="")`
+first, because both existing handlers begin with `unquote()`: handing them an
+already-decoded value would unquote it twice and corrupt any name containing a
+percent sign (`Discount 50%2Boff` → `Discount 50+off`). The old path routes stay
+registered, so bookmarks still resolve.
+
+Verified on production, after restart:
+
+- the rendered Jinja links for 14 hard names — including
+  `Canon Inkjet Printer/Scanner/Fax`, `Intelr PROSet/Wireless`, and the
+  `Autodesk Navisworks … ??` family — all reach the app (**was 404**)
+- `sam.product_detail` resolves every `+` and `/` product through the new
+  encoding; `Microsoft Visual C++ 2015-2022 Redistributable` returns its
+  **266 endpoints**, matching the UI
+- the export handler returns `text/csv` with a `Hostname,…` header row
+- old path routes still serve; `/software`, `/software/dashboard`,
+  `/software/licenses`, `/assets`, Masters, `/login`, agent API and agent file
+  download all unchanged
+
+    .\Fix-SamProductUrls.ps1 -Check
+    .\Fix-SamProductUrls.ps1
+    Restart-Service OctoAssistServer
+    .\Fix-SamProductUrls.ps1 -Verify
+    .\Fix-SamProductUrls.ps1 -Rollback   # if needed
+
+With this in, `allowDoubleEscaping` is belt-and-braces rather than
+load-bearing.
 
 ## These are temporary — read before v6
 
