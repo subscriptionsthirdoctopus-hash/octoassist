@@ -154,14 +154,21 @@ if ($missing) {
 # --------------------------------------------------------------- the edits ---
 # Each entry: name, regex, replacement, how many matches are expected.
 $edits = @(
-    @{ Name = 'sort/remove byte-order ORDER BY'
-       Rx   = [regex]'\.order_by\(Agent\.hostname\)\.all\(\)'
-       New  = '.all()'
+    # Resolve this build's AD office list ONCE per request and hand it to the
+    # row filters, rather than per row -- ad_offices() runs a query and the
+    # register renders hundreds of rows.
+    @{ Name = 'setup/resolve the AD office list once per request'
+       Rx   = [regex]'(\r?\n)([ \t]*)needle = \(q or ""\)\.strip\(\)\.lower\(\)'
+       New  = '$1$2needle = (q or "").strip().lower()$1$2_octo_offices = _octo_office_list(db, user)   # OCTO-ASSETREC'
        Min  = 1 }
 
-    @{ Name = 'filter/location honours trim, case and the no-location pick'
+    # The dropdown already offers canonical AD offices and already folds
+    # "acchad" onto "Achhad" (services/offices.OFFICE_ALIASES). The ROW filter
+    # did not -- it compared the raw stored string -- so an asset saved as
+    # "Acchad" matched no site at all while still counting in the total.
+    @{ Name = 'filter/location matches on canonical AD office'
        Rx   = [regex]'if\s+location\s+and\s+\(\s*loc\s+or\s+""\s*\)\.lower\(\)\s*!=\s*location\.lower\(\)\s*:\s*continue'
-       New  = 'if _octo_loc_excluded(loc, location):                        continue'
+       New  = 'if _octo_loc_excluded(loc, location, _octo_offices):        continue'
        Min  = 1 }
 
     @{ Name = 'filter/department honours trim and case'
@@ -169,12 +176,7 @@ $edits = @(
        New  = 'if _octo_dim_excluded(dept, department):                     continue'
        Min  = 1 }
 
-    @{ Name = 'dropdown/one entry per location, not per spelling'
-       Rx   = [regex]'locations(\s*)=(\s*)sorted\(loc_set\)'
-       New  = 'locations$1=$2_octo_fold_variants(loc_set)'
-       Min  = 1 }
-
-    @{ Name = 'dropdown/one entry per department, not per spelling'
+    @{ Name = 'dropdown/one department entry per spelling variant'
        Rx   = [regex]'departments(\s*)=(\s*)sorted\(dept_set\)'
        New  = 'departments$1=$2_octo_fold_variants(dept_set)'
        Min  = 1 }
@@ -193,24 +195,32 @@ foreach ($e in $edits) {
     }
 }
 
-# Numeric ordering of the two tables, inserted just before the dropdown block.
-# Guarded on both list names actually existing, so nothing is inserted into a
-# function that builds its rows differently.
+# Numeric ordering, inserted just before the dropdown block. This build
+# splits endpoints across three lists -- rows, discovered_rows and manual_rows
+# -- so the sort is built from whichever of them the file actually defines.
+# Note the ORDER BY on the agents query is deliberately LEFT IN PLACE: sorting
+# again in Python makes it redundant, not wrong, and the identical clause in
+# assets_dashboard() must not be disturbed.
 $sortAnchor = [regex]'([ \t]*)#\s*Distinct values for filter dropdowns'
-if ($work -match 'rows\.append\(' -and $work -match 'discovered_rows\.append\(' -and $sortAnchor.IsMatch($work)) {
-    $sortCode = @'
-$1# Human order, not byte order: "TEMA-PC-2" before "TEMA-PC-10". Sorted here
-$1# because the two tables are merged in Python and only one of them was ever
-$1# a database ordering.   OCTO-ASSETREC
-$1rows.sort(key=lambda r: _octo_natural_key(r["hostname"]))
-$1discovered_rows.sort(key=lambda r: _octo_natural_key(r["hostname"]))
-
-$1# Distinct values for filter dropdowns
-'@
+$lists = @()
+foreach ($name in @('rows', 'discovered_rows', 'manual_rows')) {
+    if ($work -match ('(?m)^\s*' + $name + '\s*=\s*\[\]') -or
+        $work -match ('(?m)^\s*' + $name + '\.append\(') -or
+        $work -match ('\b' + $name + '\)\.append\(')) { $lists += $name }
+}
+if ($lists.Count -and $sortAnchor.IsMatch($work)) {
+    $body = ''
+    foreach ($l in $lists) {
+        $body += '$1' + $l + '.sort(key=lambda r: _octo_natural_key(r["hostname"]))' + "`r`n"
+    }
+    $sortCode = '$1# Human order, not byte order: "TEMA-PC-2" before "TEMA-PC-10". Sorted' + "`r`n" +
+                '$1# here because these lists are built in Python.   OCTO-ASSETREC' + "`r`n" +
+                $body + "`r`n" +
+                '$1# Distinct values for filter dropdowns'
     $work = $sortAnchor.Replace($work, $sortCode, 1)
-    $applied += 'sort/numeric ordering of both tables  [1]'
+    $applied += ('sort/numeric ordering of ' + ($lists -join ', ') + '  [' + $lists.Count + ']')
 } else {
-    $skipped += 'sort/numeric ordering of both tables  [anchor or row lists not found]'
+    $skipped += 'sort/numeric ordering  [anchor or row lists not found]'
 }
 
 # The appended helper block + the export route.
