@@ -28,6 +28,7 @@ Only 443 is open on that host — no SSH from outside. Access is RDP on
 | direct edit, 19 Aug | Item 1 — Sophos duplicate endpoint rows | `app/services/sam.py` `product_detail()` keyed by agent; `software_detail.html` drill-down matches a versions list | **yes** |
 | direct edit, 19 Aug | Item 4 — Asset Register compliance filter inert | `app/web/views.py` reads compliance from the Entra record for managed endpoints; `assets_list.html` gains a Compliant? column and a "not reported" pick | **yes** |
 | direct edit, 19 Aug | Mojibake in topbar icons and sort arrows (self-inflicted, see below) | restored `base.html` / `styles.css` from pre-change backups, re-applied both changes UTF-8-safely | **yes** |
+| `Apply-MastersReconcile.ps1` + `masters-reconcile-append.py` (21 Aug) | **Dipesh's actual ticket** — Masters list in insertion order; 13 assets with no location unreachable by any filter; adds a Masters CSV export | 4 one-line edits + an appended block in `app/web/views_asset_mgmt.py`; 3 inserts in `asset_list.html` | **yes** |
 | `Apply-AssetReconcile.ps1` + `asset-reconcile-append.py` (21 Aug, **staged, NOT applied**) | `/assets` only: byte-order sort, unlocated assets invisible to every location filter, location filter ignoring AD aliases; adds `/assets/export.csv`. **Does not fix Dipesh's ticket** — that is the `am_assets` Masters module | 4 one-line edits + a 3-line sort + an appended block in `app/web/views.py`; 2 inserts in `assets_list.html` | **yes** |
 
 `apply-header-fix.sh` is the Linux equivalent of the header fix, kept for the
@@ -127,6 +128,52 @@ byte-identical files; the script is pure ASCII and writes UTF-8 without a BOM.
 **Before applying, decide whether it is worth it** — it improves `/assets` but
 does **not** address Dipesh's ticket. The ticket needs the Masters module: a
 "no location" view there, plus assigning `location_id` to those 13 rows.
+
+## Asset Management (Masters) reconciliation (21 Aug) — the actual ticket
+
+`Apply-MastersReconcile.ps1` + `masters-reconcile-append.py`. This is the patch
+for the screen Dipesh reported: **Settings → Asset Management → Assets**, served
+by `views_asset_mgmt.py` off the `am_assets` / `ManagedAsset` table. Different
+module and different table from the Asset Register, which is why
+`Apply-AssetReconcile.ps1` does not address his ticket.
+
+Confirmed against the production database:
+
+- Achhad holds exactly **110** rows — 106 `in_use`, 3 `stock`, 1 `retired`. The
+  number is not wrong; it just could not be reconciled.
+- The list was ordered by `ManagedAsset.id DESC` — **insertion order**. That is
+  the "numeric order" he asked for.
+- **13 rows have `location_id NULL`.** They count toward the total but match no
+  location filter, and the Location dropdown is built only from assets that
+  *have* a location, so they could not be selected at all. Exactly one resolves
+  to Achhad (serial `PG047VPT`, `AU-TIPL-LAP-027`) — one of his three.
+
+| Edit | File |
+|---|---|
+| sort by hostname then serial, natural-numeric, after every filter | `views_asset_mgmt.py` |
+| reuse the hostname map instead of rebuilding it | `views_asset_mgmt.py` |
+| location filter can select the rows that have none | `views_asset_mgmt.py` |
+| report how many assets carry no location | `views_asset_mgmt.py` |
+| append helpers + `GET /settings/asset-management/assets/export.csv` | `views_asset_mgmt.py` |
+| `-- No location set --` option, Export button, unlocated count | `asset_list.html` |
+
+Rows with neither hostname nor product name display as `#<id>` and are sorted
+to the **end** — left to sort naturally they lead the table, since `#` precedes
+every letter, pushing the identifiable assets off the first screen.
+
+    .\Apply-MastersReconcile.ps1 -Check
+    .\Apply-MastersReconcile.ps1
+    Restart-Service OctoAssistServer
+    .\Apply-MastersReconcile.ps1 -Rollback    # if needed
+
+Verified against the captured production sources: all 8 edits match, the
+patched file compiles, `asset_list.html` still parses as Jinja, the helpers are
+unit-tested (numeric order, `#id` rows last, serial tie-break, the no-location
+pick reaching exactly the NULL rows and never leaking them into a real site),
+re-run is a no-op, and `-Rollback` restores byte-identical files.
+
+**Still a data fix outstanding:** TEMA must set a location on those 13 rows.
+This patch stops the books hiding them; it cannot know where they are.
 
 ## These are temporary — read before v6
 
