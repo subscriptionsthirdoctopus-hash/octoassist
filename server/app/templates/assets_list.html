@@ -10,8 +10,17 @@
         {% if discovered_rows %} • {{ discovered_rows|length }} discovered Windows device{{ "" if discovered_rows|length == 1 else "s" }} without agent{% endif %}
         {% if tenant %} • {{ tenant.name }}{% endif %}
       </p>
+      {% if unlocated_total and filter_location != no_location_value %}
+      <p class="meta" style="margin-top:2px;">
+        <a href="/assets?location={{ no_location_value }}">{{ unlocated_total }} endpoint{{ "" if unlocated_total == 1 else "s" }} have no location recorded</a>
+        — these are counted in the total above but appear under no location filter.
+      </p>
+      {% endif %}
     </div>
     <div class="actions" style="display:flex;gap:8px;align-items:center;">
+      <a class="button primary" style="text-decoration:none;"
+         href="/assets/export.csv{% if export_query %}?{{ export_query }}{% endif %}"
+         title="Downloads exactly the rows shown below, with the current filters applied">⭳ Export this view (CSV)</a>
       {% if entra_idp %}
       <form method="post" action="/assets/sync-entra" class="inline-form"
             onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…';">
@@ -100,6 +109,7 @@
     <select name="location" style="padding:6px;">
       <option value="">All</option>
       {% for l in locations %}<option value="{{ l }}" {% if filter_location == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      <option value="{{ no_location_value }}" {% if filter_location == no_location_value %}selected{% endif %}>— No location set —</option>
     </select>
   </label>
   {% endif %}
@@ -115,7 +125,7 @@
     {% endif %}
   </label>
   <button type="submit" class="button">Apply</button>
-  {% if q or filter_department or filter_location or filter_compliant %}<a href="/assets" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
+  {% if q or filter_department or filter_location or filter_compliant or filter_online %}<a href="/assets" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
 </form>
 
 <details style="margin-bottom:16px;">

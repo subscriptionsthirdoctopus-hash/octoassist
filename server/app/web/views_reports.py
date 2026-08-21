@@ -37,7 +37,7 @@ from ..models import (
     RemoteAction, RemoteActionKind, RemoteActionStatus,
     Tenant, Ticket, TicketEvent, TicketKind, TicketStatus, User, UserRole,
 )
-from ..services import charts, patches as patches_svc, reporting, subscriptions as subs_svc
+from ..services import charts, csv_export, patches as patches_svc, reporting, subscriptions as subs_svc
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -410,18 +410,9 @@ def report_changes(
 
 # ----------  CSV exports ----------
 
-def _stream_csv(rows_iter, headers: list[str], filename: str) -> StreamingResponse:
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(headers)
-    for row in rows_iter:
-        w.writerow(row)
-    buf.seek(0)
-    return StreamingResponse(
-        iter([buf.read()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+# Now lives in services/csv_export so the Asset Register's own export cannot
+# drift from these. Kept under the old name: it has a dozen call sites below.
+_stream_csv = csv_export.stream
 
 
 @router.get("/reports/export/tickets.csv")

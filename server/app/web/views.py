@@ -1,10 +1,11 @@
+import re
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from ..jinja_filters import install_on
+from ..jinja_filters import IST, install_on
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,7 @@ from ..models import (
 from ..services import entra_devices
 from ..services.hostnames import normalise as normalise_hostname
 from ..services import compliance
+from ..services import csv_export, natural_sort
 from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -40,19 +42,56 @@ def _latest_snapshot(db: Session, agent_id: int) -> AssetSnapshot | None:
     )
 
 
-@router.get("/assets", response_class=HTMLResponse)
-def assets_index(
-    request: Request,
-    flash: str | None = None,
-    error: str | None = None,
-    q: str = "",
-    department: str = "",
-    location: str = "",
-    compliant: str = "",
-    online: str = "",
-    user: User = Depends(require_staff),
-    db: Session = Depends(get_db),
-):
+def _fold_variants(values) -> list[str]:
+    """Collapse spellings that differ only by case or padding into one entry.
+
+    The filter compares dimensions trimmed and lowercased, so "Achhad",
+    "achhad " and "Achhad " all select the same endpoints. Offering three
+    dropdown entries that each return the identical rows reads as a broken
+    filter, and -- worse for anyone reconciling a count -- invites the reader
+    to assume the site's assets are split across them.
+
+    One entry is shown per distinct place, spelled the way it is most likely to
+    have been meant: a capitalised variant wins over an all-lowercase one, and
+    ties are broken alphabetically so the list is stable between requests.
+
+    This is presentation only. The underlying records keep their own spelling,
+    because collapsing them for real is a data correction that belongs to the
+    customer -- and the routing rules read those same columns.
+    """
+    by_key: dict[str, list[str]] = {}
+    for raw in values:
+        cleaned = (raw or "").strip()
+        if not cleaned:
+            continue
+        by_key.setdefault(cleaned.lower(), []).append(cleaned)
+
+    def _preferred(variants: list[str]) -> str:
+        # not-lowercase first, then alphabetical — deterministic either way.
+        return sorted(variants, key=lambda v: (v.islower(), v))[0]
+
+    return sorted((_preferred(v) for v in by_key.values()), key=natural_sort.key)
+
+
+# Sentinel for "this asset has no location recorded at all". Those rows match
+# no location filter -- they are not at any location -- so before this existed
+# they were visible only in the unfiltered register. That is what made a
+# location count disagree with a spreadsheet with no way to see which rows were
+# responsible: the total counted them, every filtered view silently did not.
+# The value is not a legal location name, so it cannot collide with real data.
+NO_LOCATION = "__none__"
+
+
+def _collect_assets(db: Session, user: User, q: str, department: str,
+                    location: str, compliant: str, online: str) -> dict:
+    """Build the Asset Register rows for one set of filters.
+
+    Shared by the HTML view and the CSV export so the file a reconciler
+    downloads is by construction the same set of rows they were looking at.
+    Exporting through a second, similar-but-separate query is what lets the two
+    drift apart, which for a reconciliation tool is the one failure that
+    matters.
+    """
     from datetime import datetime, timedelta, timezone as _tz
     OFFLINE_THRESHOLD_HOURS = 24
     LAGGING_THRESHOLD_HOURS = 2
@@ -70,7 +109,24 @@ def assets_index(
         return "online"
 
     needle = (q or "").strip().lower()
-    agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False)).order_by(Agent.hostname).all()
+
+    # Both sides of a dimension match are trimmed and lowercased. Untrimmed
+    # comparison let "Achhad" and "Achhad " behave as two different places:
+    # they appear as two entries in the dropdown, each holding part of the
+    # count, and neither agrees with the site's own total.
+    want_dept = (department or "").strip().lower()
+    want_loc = (location or "").strip().lower()
+    want_unlocated = want_loc == NO_LOCATION
+
+    def _dim_excluded(value: str | None, wanted: str) -> bool:
+        return bool(wanted) and (value or "").strip().lower() != wanted
+
+    def _loc_excluded(value: str | None) -> bool:
+        if want_unlocated:
+            return bool((value or "").strip())
+        return _dim_excluded(value, want_loc)
+
+    agents = db.query(Agent).filter(Agent.tenant_id == user.tenant_id, Agent.uninstall_pending.is_(False)).all()
 
     # Matching key, not a rename — see services/hostnames. Case- and FQDN-
     # insensitive, so an agent reporting "LAP-01" and Entra reporting
@@ -85,8 +141,7 @@ def assets_index(
     # filter could only ever act on unmanaged devices, while the managed table
     # and its count sat unchanged whichever value was picked.
     entra_devices_q = (db.query(EntraDevice)
-                         .filter(EntraDevice.tenant_id == user.tenant_id)
-                         .order_by(EntraDevice.display_name).all())
+                         .filter(EntraDevice.tenant_id == user.tenant_id).all())
     compliance_by_host = compliance.by_hostname(entra_devices_q)
 
     def _compliance_excluded(value: bool | None) -> bool:
@@ -117,6 +172,12 @@ def assets_index(
         elif st == "lagging": lagging_count += 1
         else: offline_count += 1
 
+    # Endpoints carrying no location at all, counted across both tables. The
+    # register reports this so the gap between a site count and a spreadsheet
+    # has a visible cause on screen rather than being left to be discovered by
+    # subtraction.
+    unlocated_total = 0
+
     rows = []
     for a in agents:
         snap = _latest_snapshot(db, a.id)
@@ -126,9 +187,12 @@ def assets_index(
         dept = pu.department if pu else None
         state = _online_state(a.last_seen_at)
         is_compliant = compliance_by_host.get(normalise_hostname(a.hostname))
+        if not (loc or "").strip():
+            unlocated_total += 1
         row = {
             "id": a.id,
             "hostname": a.hostname,
+            "machine_id": a.machine_id,
             "os": payload.get("os", {}).get("caption", "—"),
             "cpu": payload.get("cpu", {}).get("name", "—"),
             "ram_gb": payload.get("memory", {}).get("total_gb"),
@@ -142,8 +206,8 @@ def assets_index(
             "software_count": len(payload.get("software", [])),
             "is_compliant":   is_compliant,
         }
-        if department and (dept or "").lower() != department.lower(): continue
-        if location   and (loc  or "").lower() != location.lower():   continue
+        if _dim_excluded(dept, want_dept):                            continue
+        if _loc_excluded(loc):                                        continue
         if online     and state != online:                            continue
         if _compliance_excluded(is_compliant):                        continue
         if not _matches(a.hostname, row["assigned_name"], dept, loc, row["os"]):
@@ -163,8 +227,10 @@ def assets_index(
         # manually-added asset shows the same detail as an imported one.
         dept = d.department or (pu.department if pu else None)
         loc  = d.location   or (pu.location   if pu else None)
-        if department and (dept or "").lower() != department.lower(): continue
-        if location   and (loc  or "").lower() != location.lower():   continue
+        if not (loc or "").strip():
+            unlocated_total += 1
+        if _dim_excluded(dept, want_dept):                            continue
+        if _loc_excluded(loc):                                        continue
         if _compliance_excluded(d.is_compliant):                      continue
         if not _matches(d.display_name, (pu.full_name if pu else None) or (pu.email if pu else None),
                         dept, loc, d.operating_system, d.manufacturer, d.model):
@@ -172,6 +238,7 @@ def assets_index(
         discovered_rows.append({
             "id": d.id,
             "hostname": d.display_name,
+            "machine_id": "",
             "assigned_name": (pu.full_name if pu else None) or (pu.email if pu else None),
             "department": dept,
             "location":   loc,
@@ -182,6 +249,12 @@ def assets_index(
             "is_compliant": d.is_compliant,
             "last_signin_at": d.approx_last_signin_at,
         })
+
+    # Human order, not byte order: "TEMA-PC-2" before "TEMA-PC-10". Sorted here
+    # rather than in SQL because the two tables are merged in Python and only
+    # one of them is a database ordering to begin with.
+    rows.sort(key=lambda r: natural_sort.key(r["hostname"]))
+    discovered_rows.sort(key=lambda r: natural_sort.key(r["hostname"]))
 
     # Distinct values for filter dropdowns — from the full tenant set so admin
     # can always pivot. Union of agent + entra-device dimensions.
@@ -205,8 +278,38 @@ def assets_index(
     for (val,) in db.query(distinct(EntraDevice.department)).filter(
             EntraDevice.tenant_id == user.tenant_id, EntraDevice.department.is_not(None)).all():
         if val: dept_set.add(val)
-    departments = sorted(dept_set)
-    locations   = sorted(loc_set)
+
+    departments = _fold_variants(dept_set)
+    locations   = _fold_variants(loc_set)
+
+    return dict(
+        rows=rows, discovered_rows=discovered_rows,
+        departments=departments, locations=locations,
+        q=needle,
+        compliance_data_available=compliance_data_available,
+        managed_total=managed_total, discovered_total=discovered_total,
+        unlocated_total=unlocated_total,
+        online_count=online_count, lagging_count=lagging_count,
+        offline_count=offline_count,
+        offline_threshold_hours=OFFLINE_THRESHOLD_HOURS,
+        lagging_threshold_hours=LAGGING_THRESHOLD_HOURS,
+    )
+
+
+@router.get("/assets", response_class=HTMLResponse)
+def assets_index(
+    request: Request,
+    flash: str | None = None,
+    error: str | None = None,
+    q: str = "",
+    department: str = "",
+    location: str = "",
+    compliant: str = "",
+    online: str = "",
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    data = _collect_assets(db, user, q, department, location, compliant, online)
 
     entra_idp = (db.query(IdentityProvider)
                    .filter(IdentityProvider.tenant_id == user.tenant_id,
@@ -217,22 +320,69 @@ def assets_index(
     return templates.TemplateResponse(
         request=request, name="assets_list.html",
         context=_ctx(user, db,
-                     rows=rows, agent_count=len(rows),
-                     discovered_rows=discovered_rows,
+                     agent_count=len(data["rows"]),
                      entra_idp=entra_idp,
-                     departments=departments, locations=locations,
-                     q=needle,
+                     no_location_value=NO_LOCATION,
                      filter_department=department, filter_location=location,
                      filter_compliant=compliant, filter_online=online,
-                     compliance_data_available=compliance_data_available,
-                     managed_total=managed_total, discovered_total=discovered_total,
-                     online_count=online_count, lagging_count=lagging_count,
-                     offline_count=offline_count,
-                     offline_threshold_hours=OFFLINE_THRESHOLD_HOURS,
-                     lagging_threshold_hours=LAGGING_THRESHOLD_HOURS,
-                     flash=flash, error=error),
+                     export_query=urlencode({k: v for k, v in (
+                         ("q", q), ("department", department), ("location", location),
+                         ("compliant", compliant), ("online", online)) if v}),
+                     flash=flash, error=error, **data),
     )
 
+
+@router.get("/assets/export.csv")
+def assets_export_csv(
+    q: str = "",
+    department: str = "",
+    location: str = "",
+    compliant: str = "",
+    online: str = "",
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    """The register as it is currently filtered, as CSV.
+
+    Exists so a site owner can diff OctoAssist against their own spreadsheet
+    instead of comparing two counts and being told only that they differ. The
+    `source` column distinguishes an endpoint the agent reports from one only
+    Entra has seen, since those two go missing for different reasons.
+    """
+    data = _collect_assets(db, user, q, department, location, compliant, online)
+
+    def _fmt(dt):
+        return dt.astimezone(IST).strftime("%Y-%m-%d %H:%M:%S") if dt else ""
+
+    def _plain(value):
+        """Empty cell, not the table's em-dash placeholder.
+
+        A spreadsheet treats "—" as a value: it sorts, it fails an ISBLANK, and
+        it survives a de-duplicate. The dash is a reading aid for the HTML
+        table and has no business in an export meant for reconciliation.
+        """
+        v = (value or "").strip()
+        return "" if v in {"—", "-"} else v
+
+    def gen():
+        for r in data["rows"]:
+            yield ["agent", r["hostname"], _plain(r.get("machine_id")),
+                   _plain(r["assigned_name"]), _plain(r["department"]), _plain(r["location"]),
+                   _plain(r["os"]), r["online_state"], _fmt(r["last_seen_at"])]
+        for d in data["discovered_rows"]:
+            yield ["entra-discovered", d["hostname"], "",
+                   _plain(d["assigned_name"]), _plain(d["department"]), _plain(d["location"]),
+                   _plain(d["os"]), "", _fmt(d["last_signin_at"])]
+
+    # Name the file after the filter, so a folder of exports for several sites
+    # is still readable a week later.
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", (location or "all-locations")).strip("-").lower()
+    return csv_export.stream(
+        gen(),
+        ["source", "hostname", "machine_id", "assigned_to", "department",
+         "location", "operating_system", "online_state", "last_seen_at"],
+        filename=f"octoassist-assets-{slug or 'all'}.csv",
+    )
 
 @router.post("/assets/bulk-delete-managed")
 async def bulk_delete_managed(
