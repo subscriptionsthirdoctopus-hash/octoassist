@@ -32,6 +32,7 @@ Only 443 is open on that host — no SSH from outside. Access is RDP on
 | `Fix-PlusUrl404.ps1` (21 Aug, **applied**) | SAM product pages 404 when the name contains `+` (125 products) — IIS request filtering, not the app | `iis-site\web.config` (site-scoped) | no (app-pool recycle) |
 | `Apply-MastersReconcile.ps1` + `masters-reconcile-append.py` (21 Aug) | **Dipesh's actual ticket** — Masters list in insertion order; 13 assets with no location unreachable by any filter; adds a Masters CSV export | 4 one-line edits + an appended block in `app/web/views_asset_mgmt.py`; 3 inserts in `asset_list.html` | **yes** |
 | `Apply-AssetReconcile.ps1` + `asset-reconcile-append.py` (21 Aug, **staged, NOT applied**) | `/assets` only: byte-order sort, unlocated assets invisible to every location filter, location filter ignoring AD aliases; adds `/assets/export.csv`. **Does not fix Dipesh's ticket** — that is the `am_assets` Masters module | 4 one-line edits + a 3-line sort + an appended block in `app/web/views.py`; 2 inserts in `assets_list.html` | **yes** |
+| `Paste-NoSpark.ps1` / `Remove-KpiSparkline.ps1 -CssOnly` (25 Aug, **applied — CSS step only; verified over HTTPS, 109,302 -> 110,617 bytes**) | Sparkline on the "Open tickets" KPI card overlaps the "N past resolution SLA" sub-line | appends a `display:none` rule to `app/static/styles.css`; optionally drops the `<div class="kpi-spark">` from `app/templates/reports_home.html` | no (CSS only; the template step and its restart are still outstanding) |
 
 `apply-header-fix.sh` is the Linux equivalent of the header fix, kept for the
 droplet and any future Linux host.
@@ -53,6 +54,9 @@ The stylesheet link in `app/templates/base.html` was also version-bumped to
 | Header overlap | `79e3b81` |
 | Patch Compliance 500 | `83e9b07` |
 | Asset count discrepancy | `7c025b9` |
+| KPI-card sparkline removed | working tree, not yet committed |
+
+**Note on the 25 Aug false success:** the first paste printed "Applied" without writing — the write needs an **elevated** PowerShell, and `Copy-Item` created the `.bak` even though the overwrite failed. Verify by fetching `/static/styles.css` from outside and grepping for the marker, never by trusting the script's own message.
 
 ## Asset Register reconciliation (21 Aug) — staged, NOT applied
 
