@@ -212,36 +212,6 @@ def bars_h(
             f'{"".join(rows)}</svg>')
 
 
-# ----------  Sparkline (tiny line chart for KPI cards) ----------
-
-def sparkline(values: list[float], *, width: int = 140, height: int = 36) -> str:
-    if not values:
-        return ""
-    pts = []
-    fill_pts = []
-    max_v = max(values) or 1
-    min_v = min(values) if min(values) >= 0 else 0
-    span = max_v - min_v or 1
-    n = len(values)
-    for i, v in enumerate(values):
-        x = (i / max(1, n - 1)) * (width - 2) + 1
-        y = height - 2 - ((v - min_v) / span) * (height - 4)
-        pts.append(f"{x:.2f},{y:.2f}")
-        fill_pts.append((x, y))
-    polyline = " ".join(pts)
-    fill_path = (
-        f"M {fill_pts[0][0]:.2f} {height} "
-        + " ".join(f"L {x:.2f} {y:.2f}" for x, y in fill_pts)
-        + f" L {fill_pts[-1][0]:.2f} {height} Z"
-    )
-    return (
-        f'<svg class="sparkline" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
-        f'<path d="{fill_path}" fill="{TEAL}" fill-opacity="0.12"/>'
-        f'<polyline points="{polyline}" fill="none" stroke="{TEAL}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
-        f'</svg>'
-    )
-
-
 # ----------  Time-series line ----------
 
 def line_series(

@@ -86,8 +86,6 @@ def reports_home(
     # predicate — see services/subscriptions._attention_query.
     software_expiring = subs_svc.expiring_soon_count(db, tenant_id)
 
-    sparkline_values = [v for _, v in per_day]
-
     return templates.TemplateResponse(
         request=request, name="reports_home.html",
         context=_ctx(user, db,
@@ -95,7 +93,6 @@ def reports_home(
                      patch_kpi=patch_kpi,
                      software_expiring=software_expiring,
                      software_expiry_horizon=subs_svc.DEFAULT_HORIZON_DAYS,
-                     spark_tickets=charts.sparkline(sparkline_values, width=160, height=40),
                      chart_status=charts.donut(by_status, size=200),
                      chart_priority=charts.donut(by_priority, size=200),
                      chart_per_day=charts.line_series(per_day, height=220),

@@ -447,8 +447,8 @@ async function buildDeck() {
       s.addText(f[1], { x: 9.35, y: y + 0.40, w: 3.6, h: 0.40, fontFace: FONT, fontSize: 11, color: "374151" });
     });
     s.addText("On the page you also get", { x: 9.35, y: 4.65, w: 3.6, h: 0.4, fontFace: FONT, fontSize: 13, bold: true, color: NAVY });
-    s.addText("KPI cards · trend sparklines · status & priority breakdowns · SLA compliance · workload by assignee", { x: 9.35, y: 5.05, w: 3.6, h: 1.75, fontFace: FONT, fontSize: 11, color: "374151" });
-    addNotes(s, "Filters auto-submit when you change them. Sparklines redraw in under a second.");
+    s.addText("KPI cards · status & priority breakdowns · SLA compliance · workload by assignee", { x: 9.35, y: 5.05, w: 3.6, h: 1.75, fontFace: FONT, fontSize: 11, color: "374151" });
+    addNotes(s, "Filters auto-submit when you change them. The page redraws in under a second.");
   }
 
   // ─── 14. Reports library ───────────────────────────────────────────
