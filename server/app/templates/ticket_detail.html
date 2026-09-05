@@ -280,8 +280,17 @@
     {# STATUS quick-pick — each button is a tiny form #}
     <div class="panel">
       <h4>Status</h4>
+      {% if close_error %}
+      <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:9px 12px;border-radius:6px;margin-bottom:10px;">
+        <p style="margin:0;font-size:12.5px;color:var(--red);">&#9888; {{ close_error }}</p>
+      </div>
+      {% endif %}
+
+      {# "closed" is handled separately below: TEMA item 6 requires a reply to
+         the requester before a ticket can be closed, so it cannot be a
+         one-click button like the other statuses. #}
       <div class="stat-grid">
-        {% for s in statuses %}
+        {% for s in statuses if s != "closed" %}
         <form method="post" action="/tickets/{{ ticket.id }}/status" class="stat-form">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
           <input type="hidden" name="new_status" value="{{ s }}">
@@ -291,6 +300,36 @@
         </form>
         {% endfor %}
       </div>
+
+      {% if ticket.status.value == "closed" %}
+      <p class="meta" style="margin:10px 0 0;">
+        &#10003; Closed. Pick another status above to reopen.
+      </p>
+      {% else %}
+      {# <details> keeps this to plain HTML - no JS, so it cannot be defeated
+         by a script error. The server enforces the rule regardless. #}
+      <details style="margin-top:10px;" {% if close_error %}open{% endif %}>
+        <summary class="stat-btn s-closed" style="cursor:pointer;list-style:none;text-align:center;display:block;">
+          close ticket&hellip;
+        </summary>
+        <form method="post" action="/tickets/{{ ticket.id }}/status" style="margin-top:8px;">
+          <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <input type="hidden" name="new_status" value="closed">
+          <label style="display:block;font-size:12px;color:var(--text-2);margin-bottom:4px;">
+            Closure response to requester <span style="color:var(--red);">*</span>
+          </label>
+          <textarea name="closure_note" rows="4" required
+                    placeholder="Explain what was done to resolve this. The requester receives this reply."
+                    style="width:100%;box-sizing:border-box;font-size:12.5px;padding:7px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--text-1);"></textarea>
+          <p class="meta" style="margin:5px 0 7px;font-size:11.5px;">
+            Sent to the requester as a public reply, then the ticket is closed.
+          </p>
+          <button type="submit" class="stat-btn s-closed" style="width:100%;">
+            Send reply &amp; close
+          </button>
+        </form>
+      </details>
+      {% endif %}
     </div>
 
     {# PRIORITY #}

@@ -238,6 +238,7 @@ def ticket_detail(
     ticket_id: int,
     request: Request,
     attach_error: str | None = None,
+    close_error: str | None = None,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -307,6 +308,7 @@ def ticket_detail(
                      asset_snapshot=asset_snapshot,
                      pending_patches_count=pending_patches_count,
                      attach_error=attach_error,
+                     close_error=close_error,
                      statuses=[s.value for s in TicketStatus],
                      priorities=[p.value for p in TicketPriority],
                      reply_templates=reply_templates,
@@ -343,6 +345,7 @@ async def post_comment(
 def change_status(
     ticket_id: int,
     new_status: str = Form(...),
+    closure_note: str = Form(""),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -353,6 +356,31 @@ def change_status(
         ns = TicketStatus(new_status)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid status")
+
+    # TEMA India, item 6 of the 26 Aug 2026 change list: a technician must not
+    # be able to close a ticket without replying to the requester.
+    #
+    # Enforced HERE rather than in the template, because the template is only a
+    # convenience -- this endpoint is reachable by anyone who can post a form,
+    # so a client-side "required" attribute is not a control.
+    #
+    # Scoped to `closed` on purpose: TEMA asked for the closure reply, not for
+    # `resolved` to be gated too. Applies to every staff role including admin;
+    # there is no override, because an override is the thing that gets used.
+    if ns == TicketStatus.closed and t.status != TicketStatus.closed:
+        note = (closure_note or "").strip()
+        if not note:
+            from urllib.parse import quote
+            msg = ("A closure response to the requester is required before this "
+                   "ticket can be closed.")
+            return RedirectResponse(url=f"/tickets/{ticket_id}?close_error={quote(msg)}",
+                                    status_code=303)
+        # Posted BEFORE the transition, and deliberately NOT internal:
+        # add_comment() notifies the reporter, so this is what actually reaches
+        # the requester. Closing first would email them a bare "status updated"
+        # with the explanation arriving afterwards.
+        ticketing.add_comment(db, ticket=t, author=user, body=note, is_internal=False)
+
     ticketing.transition_status(db, ticket=t, actor=user, new_status=ns)
     return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=303)
 
