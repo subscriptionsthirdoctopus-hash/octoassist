@@ -12,6 +12,8 @@ re-capture after editing there (`scp`/`tar` — see paths below).
 | `letsencrypt/renewal-hooks/deploy/*.sh` | `/etc/letsencrypt/renewal-hooks/deploy/` | per-site: copy renewed cert into `/opt/hrms-erp/nginx/ssl/<site>/`, `nginx -s reload` |
 | `letsencrypt/renewal-hooks/post/copy-certs.sh` | `.../renewal-hooks/post/` | legacy bulk copy for octoassist/thirdoctopus/octovault/license |
 | `letsencrypt/renewal-hooks-disabled/` | `/etc/letsencrypt/renewal-hooks-disabled/` | the old standalone-mode stop/start-nginx hooks — kept for history, must stay disabled |
+| `nginx/conf.d/security-headers.inc` | `/opt/hrms-erp/nginx/conf.d/` | included inside every HTTPS server block (nginx drops http-level `add_header` once a vhost sets its own) |
+| `backup-octoassist.sh` | `/opt/octoassist/bin/`, root cron `15 21 * * *` UTC | nightly `pg_dump` to `/opt/octoassist/backups`, 14-day rotation, log in `backup.log` |
 | `harden-ssh.sh` | run once, 5 Sep 2026 | keys-only sshd, fail2ban, ufw (22 limited, 80, 443, 8005 from docker) |
 | `provision-entra-demo.sh` | run once, 5 Sep 2026 | Entra app registration for the OctoAssist demo SSO |
 
