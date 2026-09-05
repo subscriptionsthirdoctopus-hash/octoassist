@@ -25,7 +25,7 @@
       </p>
     </div>
     <div class="actions">
-      <a class="button primary" href="/software/product/{{ detail.publisher|urlencode }}/{{ detail.product|urlencode }}/export.csv" style="background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: white; display: inline-flex; align-items: center; gap: 6px;">{{ icon("download") }} Export Installs CSV</a>
+      <a class="button primary" href="/software/product/export.csv?publisher={{ detail.publisher|urlencode }}&amp;product={{ detail.product|urlencode }}" style="background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: white; display: inline-flex; align-items: center; gap: 6px;">{{ icon("download") }} Export Installs CSV</a>
     </div>
   </div>
 </section>

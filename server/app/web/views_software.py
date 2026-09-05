@@ -2,7 +2,8 @@
 
 Routes:
     GET  /software                              — fleet rollup with category + license filters
-    GET  /software/product/{publisher}/{product} — per-product detail (endpoint list)
+    GET  /software/product?publisher=&product= — per-product detail (endpoint list)
+    GET  /software/product/{publisher}/{product} — legacy path form, kept for bookmarks
     GET  /software/export.csv                    — long-form CSV for SAM audits
 """
 from pathlib import Path
@@ -282,6 +283,34 @@ def software_deploy_detail(
     )
 
 
+# Product pages are addressed by query string: a product name can contain "/"
+# ("Canon Inkjet Printer/Scanner/Fax …", "Intel PROSet/Wireless …"), and Jinja's
+# urlencode leaves "/" unescaped, so as a path segment the name split into
+# extra segments that matched no route and 404'd. The path form stays
+# registered so old bookmarks keep working.
+@router.get("/software/product", response_class=HTMLResponse)
+def software_product_detail_q(
+    publisher: str,
+    product: str,
+    request: Request,
+    flash: str | None = None,
+    error: str | None = None,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return _product_detail_response(publisher, product, request, flash, error, user, db)
+
+
+@router.get("/software/product/export.csv")
+def software_product_export_q(
+    publisher: str,
+    product: str,
+    user: User = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return _product_export_response(publisher, product, user, db)
+
+
 @router.get("/software/product/{publisher}/{product}", response_class=HTMLResponse)
 def software_product_detail(
     publisher: str,
@@ -292,8 +321,10 @@ def software_product_detail(
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    publisher = unquote(publisher)
-    product   = unquote(product)
+    return _product_detail_response(unquote(publisher), unquote(product), request, flash, error, user, db)
+
+
+def _product_detail_response(publisher, product, request, flash, error, user, db):
     detail = sam.product_detail(db, user.tenant_id, publisher, product)
     if detail is None:
         raise HTTPException(status_code=404)
@@ -327,8 +358,10 @@ def software_product_export(
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    publisher = unquote(publisher)
-    product   = unquote(product)
+    return _product_export_response(unquote(publisher), unquote(product), user, db)
+
+
+def _product_export_response(publisher, product, user, db):
     detail = sam.product_detail(db, user.tenant_id, publisher, product)
     if detail is None:
         raise HTTPException(status_code=404)
@@ -512,7 +545,7 @@ async def software_product_action(
     if action_type in ("install", "update"):
         if not package:
             return RedirectResponse(
-                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=No+active+package+found+for+'{quote(product)}'+in+the+Software+Catalog.+Please+create+one+first+to+enable+remote+fleet+deployment.",
+                url=f"/software/product?publisher={pub_quoted}&product={prod_quoted}&error=No+active+package+found+for+'{quote(product)}'+in+the+Software+Catalog.+Please+create+one+first+to+enable+remote+fleet+deployment.",
                 status_code=303
             )
         kind = RemoteActionKind.run_executable
@@ -546,7 +579,7 @@ async def software_product_action(
         detail = sam.product_detail(db, user.tenant_id, publisher, product)
         if not detail or not detail.get("endpoints"):
             return RedirectResponse(
-                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=No+endpoints+found+with+this+software+installed",
+                url=f"/software/product?publisher={pub_quoted}&product={prod_quoted}&error=No+endpoints+found+with+this+software+installed",
                 status_code=303
             )
         for e in detail["endpoints"]:
@@ -566,7 +599,7 @@ async def software_product_action(
                 pass
         if not ids:
             return RedirectResponse(
-                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=Pick+at+least+one+endpoint+via+checkboxes",
+                url=f"/software/product?publisher={pub_quoted}&product={prod_quoted}&error=Pick+at+least+one+endpoint+via+checkboxes",
                 status_code=303
             )
         owned = {a.id for a in db.query(Agent.id)
@@ -587,7 +620,7 @@ async def software_product_action(
             group_id = int(group_id_str)
         except ValueError:
             return RedirectResponse(
-                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=Invalid+asset+group+selected",
+                url=f"/software/product?publisher={pub_quoted}&product={prod_quoted}&error=Invalid+asset+group+selected",
                 status_code=303
             )
         # Query group members
@@ -599,7 +632,7 @@ async def software_product_action(
         ids = [a.agent_id for a in group_agents]
         if not ids:
             return RedirectResponse(
-                url=f"/software/product/{pub_quoted}/{prod_quoted}?error=Selected+asset+group+has+no+member+machines",
+                url=f"/software/product?publisher={pub_quoted}&product={prod_quoted}&error=Selected+asset+group+has+no+member+machines",
                 status_code=303
             )
         owned = {a.id for a in db.query(Agent.id)
@@ -625,7 +658,7 @@ async def software_product_action(
         raise HTTPException(status_code=400, detail="Invalid target mode")
 
     return RedirectResponse(
-        url=f"/software/product/{pub_quoted}/{prod_quoted}?flash=Successfully+queued+{label_action}+on+{queued}+endpoint(s)",
+        url=f"/software/product?publisher={pub_quoted}&product={prod_quoted}&flash=Successfully+queued+{label_action}+on+{queued}+endpoint(s)",
         status_code=303
     )
 
