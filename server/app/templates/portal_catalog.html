@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Service Catalog — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -119,13 +120,13 @@
   <div class="catalog-card">
     <span class="catalog-icon">
       {% if "laptop" in item.name.lower() or "hardware" in item.name.lower() %}
-        💻
+        {{ icon("monitor", 22) }}
       {% elif "vpn" in item.name.lower() or "access" in item.name.lower() or "login" in item.name.lower() %}
-        🔐
+        {{ icon("lock", 22) }}
       {% elif "software" in item.name.lower() or "install" in item.name.lower() %}
-        📦
+        {{ icon("package", 22) }}
       {% else %}
-        ✨
+        {{ icon("sparkles", 22) }}
       {% endif %}
     </span>
     <h3 class="catalog-title">{{ item.name }}</h3>
@@ -133,7 +134,7 @@
     <div class="catalog-meta">
       <span class="badge-category">{{ item.category.name if item.category else "Service Request" }}</span>
       {% if item.category and item.category.requires_approval %}
-      <span class="badge-approval">⚠️ Requires Approval</span>
+      <span class="badge-approval">{{ icon("alert", 12) }} Requires Approval</span>
       {% endif %}
     </div>
 

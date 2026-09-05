@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Deploy Software — OctoAssist{% endblock %}
 {% block content %}
 
@@ -42,16 +43,16 @@
 <section class="page-head">
   <div class="row-between">
     <div>
-      <h1>📥 Deploy software</h1>
+      <h1>{{ icon("download", 24) }} Deploy software</h1>
       <p class="meta">Push installers to Windows endpoints. Runs as SYSTEM — no user prompt.</p>
     </div>
   </div>
 </section>
 
 <div class="sd-nav">
-  <a href="/software"        class="button">📊 Inventory</a>
-  <a href="/software/deploy" class="button primary">📥 Deploy software</a>
-  <a href="/settings/software-catalog" class="button">⚙️ Manage catalog</a>
+  <a href="/software"        class="button">{{ icon("chart") }} Inventory</a>
+  <a href="/software/deploy" class="button primary">{{ icon("download") }} Deploy software</a>
+  <a href="/settings/software-catalog" class="button">{{ icon("sliders") }} Manage catalog</a>
 </div>
 
 {% if flash %}<div class="alert success">{{ flash }}</div>{% endif %}
@@ -70,7 +71,7 @@
 
       {% if catalog %}
       <div class="src-pick" style="margin-bottom:12px;">
-        <label style="display:block; margin-bottom:6px;">📦 From catalog <span class="meta" style="font-weight:normal;">— pre-curated, silent-install args ready</span></label>
+        <label style="display:block; margin-bottom:6px;">{{ icon("package", 14) }} From catalog <span class="meta" style="font-weight:normal;">— pre-curated, silent-install args ready</span></label>
         <select id="pkgPicker" style="width:100%;">
           <option value="">— pick from catalog —</option>
           {% for p in catalog %}
@@ -92,7 +93,7 @@
       </div>
       {% else %}
       <div style="background:var(--bg); border:1px dashed var(--line); padding:12px; border-radius:var(--r-sm); font-size:12.5px; color:var(--text-3); margin-bottom:12px;">
-        💡 No packages in your catalog yet. <a href="/settings/software-catalog">Add one →</a> for one-click deploys next time.
+        {{ icon("lightbulb", 13) }} No packages in your catalog yet. <a href="/settings/software-catalog">Add one →</a> for one-click deploys next time.
       </div>
       {% endif %}
 
@@ -121,16 +122,16 @@
       <h3 style="margin:0 0 10px;">2. Pick targets</h3>
 
       <div class="target-tabs">
-        <div class="target-tab active" data-mode="select">✓ Pick endpoints</div>
+        <div class="target-tab active" data-mode="select">{{ icon("check", 13) }} Pick endpoints</div>
         <div class="target-tab" data-mode="pattern">⌥ Hostname pattern</div>
-        <div class="target-tab" data-mode="all">🌐 All endpoints</div>
+        <div class="target-tab" data-mode="all">{{ icon("layers", 13) }} All endpoints</div>
       </div>
       <input type="hidden" name="target_mode" id="targetMode" value="select">
 
       {# Multi-select endpoint grid #}
       <div id="block-select">
         <div class="ep-controls">
-          <input type="search" id="epFilter" placeholder="🔍 Filter by hostname…">
+          <input type="search" id="epFilter" placeholder="Filter by hostname…">
           <div class="ep-actions">
             <a id="epSelectAll">Select all visible</a>
             <a id="epClear">Clear</a>
@@ -165,7 +166,7 @@
       {# All — confirmation block #}
       <div id="block-all" style="display:none;">
         <div style="padding:14px; background:#fef9c3; border:1px solid #fde68a; border-radius:var(--r-sm); font-size:13px;">
-          ⚠ This will queue the installer on <strong>every</strong> registered endpoint ({{ agents|length }} total).
+          {{ icon("alert", 13) }} This will queue the installer on <strong>every</strong> registered endpoint ({{ agents|length }} total).
         </div>
       </div>
 
@@ -183,7 +184,7 @@
       <div class="form-actions">
         <button type="submit" class="primary" id="submitBtn"
                 onclick="return confirmDeploy();" style="background:#16a34a; border-color:#16a34a;">
-          ✓ Queue deploy →
+          {{ icon("check", 13) }} Queue deploy →
         </button>
       </div>
     </div>
@@ -193,7 +194,7 @@
   {# ===== SIDE ===== #}
   <aside>
     <div class="card" style="max-width:none; margin-bottom:12px;">
-      <h3 style="margin:0 0 10px; font-size:13px;">💡 Tips</h3>
+      <h3 style="margin:0 0 10px; font-size:13px;">{{ icon("lightbulb", 14) }} Tips</h3>
       <ul style="font-size:12.5px; line-height:1.55; padding-left:18px; margin:0;">
         <li><strong>.msi files</strong> default args: <code>/quiet /norestart</code></li>
         <li><strong>.exe installers:</strong>
@@ -209,7 +210,7 @@
       </ul>
     </div>
     <div class="card" style="max-width:none; background:#eff6ff; border-color:#bfdbfe;">
-      <h3 style="margin:0 0 6px; font-size:13px; color:var(--accent);">📦 Build your catalog</h3>
+      <h3 style="margin:0 0 6px; font-size:13px; color:var(--accent);">{{ icon("package", 14) }} Build your catalog</h3>
       <p style="margin:0; font-size:12px; color:var(--accent); line-height:1.5;">
         One-time effort: <a href="/settings/software-catalog" style="font-weight:600;">curate your common installers</a>
         with their silent args. Future deploys become a 3-click flow.
@@ -247,8 +248,8 @@
         <td><code style="font-size:11.5px;">{{ a.params.get('args') or '—' }}</code></td>
         <td>
           {% set s = a.status.value %}
-          {% if s == 'succeeded' %}<span class="status status-resolved">✓ succeeded</span>
-          {% elif s == 'failed' %}<span class="status status-cancelled">✗ failed</span>
+          {% if s == 'succeeded' %}<span class="status status-resolved">{{ icon("check", 12) }} succeeded</span>
+          {% elif s == 'failed' %}<span class="status status-cancelled">{{ icon("x", 12) }} failed</span>
           {% elif s == 'in_progress' %}<span class="status status-in_progress">running</span>
           {% elif s == 'cancelled' %}<span class="status status-on_hold">cancelled</span>
           {% else %}<span class="status status-on_hold">⏱ queued</span>{% endif %}

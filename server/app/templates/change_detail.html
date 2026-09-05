@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ change.change_number }} — {{ change.title }}{% endblock %}
 {% block content %}
 
@@ -92,7 +93,7 @@
     {% if current_user.role.value == "admin" %}
     <form method="post" action="/changes/{{ change.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this change record permanently? This cannot be undone.');">
       <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-      <button type="submit" class="button danger-solid">🗑️ Delete Change</button>
+      <button type="submit" class="button danger-solid">{{ icon("trash", 14) }} Delete Change</button>
     </form>
     {% endif %}
   </div>
@@ -130,7 +131,7 @@
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
 
       <div class="ch-section">
-        <h3>📋 Change record</h3>
+        <h3>{{ icon("file") }} Change record</h3>
         <p class="meta-line">Editable until CAB makes a decision. After approval the record locks for audit.</p>
 
         <label style="display:block;margin-bottom:10px;">
@@ -155,13 +156,13 @@
       </div>
 
       <div class="ch-section">
-        <h3>📝 Description</h3>
+        <h3>{{ icon("pencil") }} Description</h3>
         <p class="meta-line">What is changing, where, and WHY.</p>
         <textarea name="description" rows="4">{{ change.description }}</textarea>
       </div>
 
       <div class="ch-section">
-        <h3>👥 Impact</h3>
+        <h3>{{ icon("users") }} Impact</h3>
         <p class="meta-line">Who or what is affected · expected disruption window.</p>
         <textarea name="impact" rows="3">{{ change.impact }}</textarea>
       </div>
@@ -173,7 +174,7 @@
       </div>
 
       <div class="ch-section">
-        <h3>🗓 Planned window</h3>
+        <h3>{{ icon("calendar") }} Planned window</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <label>
             <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Start</span>
@@ -187,7 +188,7 @@
       </div>
 
       <div class="ch-section">
-        <h3>🛠 Implementer</h3>
+        <h3>{{ icon("wrench") }} Implementer</h3>
         <p class="meta-line">Technician who will physically make the change.</p>
         <select name="implementer_id">
           <option value="">— Unassigned —</option>
@@ -205,10 +206,10 @@
 
     {% else %}
     {# Read-only after CAB decision #}
-    <div class="ch-section"><h3>📝 Description</h3>
+    <div class="ch-section"><h3>{{ icon("pencil") }} Description</h3>
       <div class="ro-body">{{ change.description or "—" }}</div>
     </div>
-    <div class="ch-section"><h3>👥 Impact</h3>
+    <div class="ch-section"><h3>{{ icon("users") }} Impact</h3>
       <div class="ro-body">{{ change.impact or "—" }}</div>
     </div>
     <div class="ch-section"><h3>↩️ Rollback plan</h3>
@@ -219,7 +220,7 @@
     {# CAB VOTING BOARD PANEL #}
     {% if cab_votes %}
     <div class="ch-section" style="border-left: 4px solid var(--accent, #2563eb); background: rgba(37,99,235,0.02);">
-      <h3>🗳️ Change Advisory Board Voting (Consensus)</h3>
+      <h3>{{ icon("thumbs-up") }} Change Advisory Board Voting (Consensus)</h3>
       <p class="meta-line">Majority consensus is required to approve or reject normal changes. Current status:</p>
       
       {# Vote progress bar #}
@@ -241,8 +242,8 @@
       </div>
       
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 13px; text-align: center; font-weight: bold; margin-bottom: 20px;">
-        <div style="color: #10b981;">✓ {{ approves }} Approvals</div>
-        <div style="color: #ef4444;">✕ {{ rejects }} Rejections</div>
+        <div style="color: #10b981;">{{ icon("check", 13) }} {{ approves }} Approvals</div>
+        <div style="color: #ef4444;">{{ icon("x", 13) }} {{ rejects }} Rejections</div>
         <div style="color: var(--text-3);">⏳ {{ pendings }} Pending</div>
       </div>
       
@@ -323,7 +324,7 @@
     {% endif %}
 
     <div class="ch-section">
-      <h3>📜 Audit log</h3>
+      <h3>{{ icon("history") }} Audit log</h3>
       <p class="meta-line">Append-only history of every decision and edit.</p>
       {% if change.events %}
       <ul class="audit-feed">
@@ -362,12 +363,12 @@
         <form method="post" action="/changes/{{ change.id }}/approve" class="wf-note" style="margin-bottom:10px;">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
           <textarea name="note" placeholder="Approval note (optional)"></textarea>
-          <button type="submit" class="wf-btn primary">✓ Approve</button>
+          <button type="submit" class="wf-btn primary">{{ icon("check", 13) }} Approve</button>
         </form>
         <form method="post" action="/changes/{{ change.id }}/reject" class="wf-note">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
           <textarea name="note" placeholder="Reason for rejection (required)" required></textarea>
-          <button type="submit" class="wf-btn danger">✕ Reject</button>
+          <button type="submit" class="wf-btn danger">{{ icon("x", 13) }} Reject</button>
         </form>
         {% else %}
         <p class="meta" style="font-size:12.5px; margin:0;">⏳ Awaiting CAB. You can't approve your own change — another admin/agent must.</p>
@@ -383,12 +384,12 @@
       <form method="post" action="/changes/{{ change.id }}/complete" class="wf-note" style="margin-bottom:10px;">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
         <textarea name="note" placeholder="Completion note"></textarea>
-        <button type="submit" class="wf-btn primary">✓ Mark completed</button>
+        <button type="submit" class="wf-btn primary">{{ icon("check", 13) }} Mark completed</button>
       </form>
       <form method="post" action="/changes/{{ change.id }}/fail" class="wf-note">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
         <textarea name="note" placeholder="Failure reason / rollback notes"></textarea>
-        <button type="submit" class="wf-btn danger">⚠ Mark failed</button>
+        <button type="submit" class="wf-btn danger">{{ icon("alert", 13) }} Mark failed</button>
       </form>
       {% endif %}
 

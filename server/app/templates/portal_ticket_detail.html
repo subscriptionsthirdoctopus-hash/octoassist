@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ ticket.ticket_number }} — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -43,7 +44,7 @@
     {% for step in status_steps(ticket) %}
       <div class="tl-step {{ step.state }}">
         <div class="tl-dot">
-          {% if step.state == "done" %}✓{% elif step.state == "current" %}●{% elif step.state == "cancelled" %}✕{% else %}{{ loop.index }}{% endif %}
+          {% if step.state == "done" %}{{ icon("check", 12) }}{% elif step.state == "current" %}●{% elif step.state == "cancelled" %}{{ icon("x", 12) }}{% else %}{{ loop.index }}{% endif %}
         </div>
         <div class="tl-label">{{ step.label }}</div>
       </div>
@@ -83,7 +84,7 @@
   <ul class="attach-list">
     {% for a in attachments %}
     <li>
-      <span class="file-icon">📎</span>
+      <span class="file-icon">{{ icon("paperclip", 14) }}</span>
       <a class="fname" href="{{ a.url }}" target="_blank" rel="noopener">{{ a.filename }}</a>
       <span class="fmeta">{{ (a.size_bytes / 1024) | round(1) }} KB · uploaded by {{ a.uploader }} · {{ a.created_at | ist }}</span>
     </li>
@@ -109,7 +110,7 @@
 
   {% if attach_error %}
   <div class="card" style="background:#fee2e2;border-left:4px solid #dc2626;margin-bottom:10px;">
-    <p style="margin:0;font-size:13px;color:var(--red);">⚠ {{ attach_error }}</p>
+    <p style="margin:0;font-size:13px;color:var(--red);">{{ icon("alert", 13) }} {{ attach_error }}</p>
   </div>
   {% endif %}
 

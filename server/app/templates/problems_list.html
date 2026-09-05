@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Problems — OctoAssist{% endblock %}
 {% block content %}
 
@@ -37,7 +38,7 @@
 
   .filters .search-wrap { position:relative; flex:1; min-width:240px; max-width:380px; }
   .filters .search-wrap input { padding-left:34px; }
-  .filters .search-wrap::before { content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none; }
+  .filters .search-wrap .search-ico { position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:.5; pointer-events:none; }
 </style>
 
 <section class="page-head">
@@ -77,6 +78,7 @@
 
 <form method="get" action="/problems" class="filters">
   <div class="search-wrap">
+    {{ icon("search", 15, "search-ico") }}
     <input type="search" name="q" value="{{ q or '' }}" placeholder="Search title, description, problem #" autocomplete="off">
   </div>
   <label>Status
@@ -118,7 +120,7 @@
       <td><span class="prio prio-{{ p.priority.value }}">{{ p.priority.value }}</span></td>
       <td>
         <span class="linked-count {% if p.linked_tickets|length == 0 %}zero{% endif %}">
-          🔗 {{ p.linked_tickets|length }} ticket{{ "" if p.linked_tickets|length == 1 else "s" }}
+          {{ icon("link", 12) }} {{ p.linked_tickets|length }} ticket{{ "" if p.linked_tickets|length == 1 else "s" }}
         </span>
       </td>
       <td>

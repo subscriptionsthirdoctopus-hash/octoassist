@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Users — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -105,7 +106,7 @@
     <button type="submit" name="action" value="activate"         class="button">Reactivate</button>
     <button type="submit" name="action" value="delete"           class="button"
             style="background:#dc2626;color:white;border-color:#dc2626;"
-            onclick="return confirm('Permanently DELETE the selected user(s)?\nUsers with ticket history will be skipped automatically (use Deactivate for those).\nThis cannot be undone.');">🗑 Delete</button>
+            onclick="return confirm('Permanently DELETE the selected user(s)?\nUsers with ticket history will be skipped automatically (use Deactivate for those).\nThis cannot be undone.');">Delete</button>
   </div>
 
   <table class="data">

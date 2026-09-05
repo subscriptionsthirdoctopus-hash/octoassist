@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Knowledge Base — OctoAssist{% endblock %}
 {% block content %}
 
@@ -20,7 +21,7 @@
 
   .filters .search-wrap { position:relative; flex:1; min-width:280px; max-width:420px; }
   .filters .search-wrap input { padding-left:34px; }
-  .filters .search-wrap::before { content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none; }
+  .filters .search-wrap .search-ico { position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:.5; pointer-events:none; }
 
   .views-count { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--bg); border:1px solid var(--line); border-radius:999px; font-size:11.5px; color:var(--text-3); font-weight:500; }
 </style>
@@ -40,6 +41,7 @@
 
 <form method="get" action="/kb" class="filters">
   <div class="search-wrap">
+    {{ icon("search", 15, "search-ico") }}
     <input type="search" name="q" value="{{ q }}" placeholder="Search title, summary, body" autocomplete="off">
   </div>
   <label>Category

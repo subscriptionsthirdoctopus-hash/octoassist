@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Single Sign-On — Settings{% endblock %}
 {% block content %}
 <section class="page-head">
   <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
-  <h1>🔐 Single Sign-On</h1>
+  <h1>{{ icon("lock", 24) }} Single Sign-On</h1>
   <p class="meta">
     Configure an external identity provider so users sign in with their corporate Microsoft account
     instead of an OctoAssist password. Auto-provisioning creates an OctoAssist user the first time

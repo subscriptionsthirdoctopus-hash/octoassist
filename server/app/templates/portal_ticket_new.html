@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}New {{ "Issue" if ticket_kind == "incident" else "Service Request" }} — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -86,7 +87,7 @@
 
   {% if kb_hints %}
   <div id="kbHintBox" style="display: none; background: #f0f9ff; border-left: 4px solid #0284c7; padding: 12px 14px; border-radius: 6px; margin-top: 4px;">
-    <p style="margin: 0 0 6px; font-size: 12.5px; font-weight: 700; color: #075985;">💡 Might solve your issue without a ticket</p>
+    <p style="margin: 0 0 6px; font-size: 12.5px; font-weight: 700; color: #075985;">{{ icon("lightbulb", 13) }} Might solve your issue without a ticket</p>
     <ul id="kbHintList" style="margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6;"></ul>
   </div>
   <script id="kbHintData" type="application/json">{{ kb_hints | tojson }}</script>
@@ -98,7 +99,7 @@
 
   <!-- Live Smart Knowledge Base Suggestions (Updates as you type) -->
   <div class="card" id="kbCard" style="display: none; margin-top: 16px; border: 1px solid var(--line,#e2e8f0); border-radius: var(--r-md, 8px); padding: 16px; background: rgba(37, 99, 235, 0.03);">
-    <h3 style="margin: 0 0 10px 0; font-size: 14.5px; font-weight: 700; color: var(--accent,#2563eb);">📚 Recommended Solutions</h3>
+    <h3 style="margin: 0 0 10px 0; font-size: 14.5px; font-weight: 700; color: var(--accent,#2563eb);">{{ icon("book") }} Recommended Solutions</h3>
     <div id="kbSearchLoader" style="color: var(--text-3,#64748b); font-size: 12.5px; padding: 4px 0;">
       Scanning Knowledge Base for matching solutions...
     </div>
@@ -229,7 +230,7 @@
               li.style.paddingBottom = "8px";
               
               var readUrl = "/portal/kb/" + encodeURIComponent(article.slug || article.url.split("/").pop());
-              li.innerHTML = '<a href="' + readUrl + '" target="_blank" style="color: var(--accent,#2563eb); font-weight: 600; font-size: 13.5px; text-decoration: none;">📚 ' + article.title + '</a>' +
+              li.innerHTML = '<a href="' + readUrl + '" target="_blank" style="color: var(--accent,#2563eb); font-weight: 600; font-size: 13.5px; text-decoration: none;">' + article.title + '</a>' +
                              '<span style="color: var(--slate,#64748b); font-size: 12px;">' + (article.subtitle || 'Read support manual') + '</span>';
               kbList.appendChild(li);
             });

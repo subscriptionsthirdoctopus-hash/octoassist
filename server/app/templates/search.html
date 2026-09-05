@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Search — OctoAssist{% endblock %}
 {% block content %}
 <style>
@@ -39,12 +40,12 @@
 {% else %}
 
 {% set group_meta = {
-  'tickets':  {'icon':'🎫', 'label':'Tickets'},
-  'problems': {'icon':'🧩', 'label':'Problems'},
-  'changes':  {'icon':'🔄', 'label':'Changes'},
-  'assets':   {'icon':'💻', 'label':'Assets'},
-  'users':    {'icon':'👤', 'label':'Users'},
-  'kb':       {'icon':'📚', 'label':'Knowledge Base'},
+  'tickets':  {'icon': icon("ticket", 18), 'label':'Tickets'},
+  'problems': {'icon': icon("puzzle", 18), 'label':'Problems'},
+  'changes':  {'icon': icon("refresh", 18), 'label':'Changes'},
+  'assets':   {'icon': icon("monitor", 18), 'label':'Assets'},
+  'users':    {'icon': icon("user", 18), 'label':'Users'},
+  'kb':       {'icon': icon("book", 18), 'label':'Knowledge Base'},
 } %}
 
 {% for group_key in ['tickets','problems','changes','assets','users','kb'] %}

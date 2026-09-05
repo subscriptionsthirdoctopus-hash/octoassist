@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Notifications — Settings{% endblock %}
 {% block content %}
 <section class="page-head">
   <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
-  <h1>📧 Notifications</h1>
+  <h1>{{ icon("mail", 24) }} Notifications</h1>
   <p class="meta">Mail provider, notification email, and outbound configuration.</p>
 </section>
 
@@ -52,7 +53,7 @@
     
     <!-- Ticket Creation Group -->
     <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">🎫 Ticket Creation</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("ticket") }} Ticket Creation</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a new support ticket is logged.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -72,7 +73,7 @@
 
     <!-- Status Changes Group -->
     <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">🔄 Status Changes</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("refresh") }} Status Changes</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a ticket transitions to a new status (e.g. In Progress, On Hold, Resolved).</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -88,7 +89,7 @@
 
     <!-- Comments Group -->
     <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">💬 New Comments &amp; Replies</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("message") }} New Comments &amp; Replies</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a public comment or reply is added to the ticket conversation.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -104,7 +105,7 @@
 
     <!-- Assignment Group -->
     <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">👤 Technician Assignment</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("user") }} Technician Assignment</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a ticket is assigned or re-assigned to a specific technician.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -120,7 +121,7 @@
 
     <!-- Priority Group -->
     <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">⚡ Priority Escalations</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("zap") }} Priority Escalations</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a ticket priority level is updated or elevated.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -136,7 +137,7 @@
 
     <!-- Change Management Group -->
     <div style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">👥 Change Advisory Board (CAB)</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("users") }} Change Advisory Board (CAB)</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when a new production Change Request is submitted.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -152,7 +153,7 @@
 
     <!-- Patch Windows Group -->
     <div style="padding-bottom: 8px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">💻 Patch Window Alerts</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("monitor") }} Patch Window Alerts</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Triggered when RMM patch execution waves start or complete.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">
@@ -168,7 +169,7 @@
 
     <!-- Auto-Assignment Group -->
     <div style="border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; padding-bottom: 8px;">
-      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">🎯 Auto-Assignment Settings</h4>
+      <h4 style="margin:0 0 8px; font-size:14px; font-weight:700; color:var(--text-1);">{{ icon("target") }} Auto-Assignment Settings</h4>
       <p class="meta" style="margin:0 0 12px; font-size:12px;">Toggle whether newly logged tickets are automatically assigned to technicians using your configured Location and Category routing rules.</p>
       <div style="display:flex; flex-direction:column; gap:8px; padding-left:16px;">
         <label class="checkbox" style="display:flex; align-items:center; gap:8px; font-size:13px;">

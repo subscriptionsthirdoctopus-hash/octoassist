@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}New {{ "Incident" if ticket_kind == "incident" else "Service Request" }} — OctoAssist{% endblock %}
 {% block content %}
 
@@ -289,7 +290,7 @@
     <div class="form-group">
       <label>File Attachments <span class="hint">Screenshots, diagnostic logs (Max 2 MB)</span></label>
       <div class="attach-zone" id="dropZone">
-        <span class="icon" style="font-size: 24px; display: block; margin-bottom: 4px;">📂</span>
+        <span class="icon" style="display: block; margin-bottom: 6px; color: var(--accent);">{{ icon("file", 24) }}</span>
         <span>Drag & Drop files here or <strong style="color: var(--accent);">Browse</strong></span>
         <input type="file" name="attachments" id="fileInput" multiple>
         <div class="attach-list" id="attachList"></div>
@@ -308,7 +309,7 @@
     
     <!-- Dynamic SLA & SLA Target Diagnostics -->
     <div class="intel-card" id="slaCard">
-      <h3>⚡ Ticket Diagnostics & SLA</h3>
+      <h3>{{ icon("zap") }} Ticket Diagnostics & SLA</h3>
       <div class="sla-info-list">
         <div class="sla-info-item">
           <span>Priority Rating</span>
@@ -331,7 +332,7 @@
 
     <!-- Live Smart Knowledge Base Suggestions (Updates as you type) -->
     <div class="intel-card" id="kbCard">
-      <h3>📚 Smart KB Suggestions</h3>
+      <h3>{{ icon("book") }} Smart KB Suggestions</h3>
       <div id="kbSearchLoader" style="color: var(--text-3); font-size: 12.5px; text-align: center; padding: 12px 0;">
         Start typing a title or description to query active KB resolutions...
       </div>
@@ -533,7 +534,7 @@
       
       var item = document.createElement("div");
       item.className = "attach-file-item";
-      item.innerHTML = '<span>📄 ' + f.name + ' (' + kb + ' KB)</span><span style="font-size:10px;color:var(--text-3)">Ready</span>';
+      item.innerHTML = '<span>' + f.name + ' (' + kb + ' KB)</span><span style="font-size:10px;color:var(--text-3)">Ready</span>';
       list.appendChild(item);
       
       if (f.size > MAX_BYTES) {
@@ -594,9 +595,9 @@
             // Extracts standard ID from search URL: e.g., /kb/12
             var kbId = article.url.split("/").pop();
             
-            li.innerHTML = '<a href="' + article.url + '" target="_blank" class="kb-sugg-link">📚 ' + article.title + '</a>' +
+            li.innerHTML = '<a href="' + article.url + '" target="_blank" class="kb-sugg-link">' + article.title + '</a>' +
                            '<span style="color:var(--text-3); font-size:11px; margin-bottom: 4px;">' + (article.subtitle || 'Read support manual') + '</span>' +
-                           '<button type="button" class="apply-template-btn" data-kb-id="' + kbId + '">✨ Apply KB Template</button>';
+                           '<button type="button" class="apply-template-btn" data-kb-id="' + kbId + '">Apply KB Template</button>';
             
             kbList.appendChild(li);
           });

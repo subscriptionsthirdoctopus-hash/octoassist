@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ problem.problem_number }} — {{ problem.title }}{% endblock %}
 {% block content %}
 
@@ -81,7 +82,7 @@
     {% if current_user.role.value == "admin" %}
     <form method="post" action="/problems/{{ problem.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this problem permanently? This cannot be undone.');">
       <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-      <button type="submit" class="button danger-solid">🗑️ Delete Problem</button>
+      <button type="submit" class="button danger-solid">{{ icon("trash", 14) }} Delete Problem</button>
     </form>
     {% endif %}
   </div>
@@ -95,7 +96,7 @@
     <form method="post" action="/problems/{{ problem.id }}/edit" id="problemForm">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
       <div class="inv-section">
-        <h3>📝 Title &amp; description</h3>
+        <h3>{{ icon("pencil") }} Title &amp; description</h3>
         <p class="meta-line">The headline statement of the underlying issue and what's been observed.</p>
         <label style="display:block;margin-bottom:10px;">
           <span style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Title</span>
@@ -108,13 +109,13 @@
       </div>
 
       <div class="inv-section">
-        <h3>🩹 Workaround <span class="badge">temporary</span></h3>
+        <h3>{{ icon("wrench") }} Workaround <span class="badge">temporary</span></h3>
         <p class="meta-line">What stops users hurting while you investigate. Update incident replies to reference this.</p>
         <textarea name="workaround" rows="4" placeholder="e.g. Roll affected users back to SAP GUI 7.50 — confirmed compatible with PRD until the 8.00 upgrade plan ships next week.">{{ problem.workaround }}</textarea>
       </div>
 
       <div class="inv-section">
-        <h3>🎯 Root cause <span class="badge">kedb entry</span></h3>
+        <h3>{{ icon("target") }} Root cause <span class="badge">kedb entry</span></h3>
         <p class="meta-line">Once identified, this becomes the canonical Known-Error entry — pasted into related ticket replies.</p>
         <textarea name="root_cause" rows="5" placeholder="e.g. SAP GUI 7.70 ships with OpenSSL 1.0.2 which negotiates only TLS 1.1 and below. S/4HANA PRD was upgraded to enforce TLS 1.2 on 2026-05-12, breaking handshake for all users still on GUI 7.70.">{{ problem.root_cause }}</textarea>
       </div>
@@ -131,7 +132,7 @@
 
     {# Linked tickets section #}
     <div class="inv-section">
-      <h3>🔗 Linked tickets <span class="badge">{{ problem.linked_tickets|length }}</span></h3>
+      <h3>{{ icon("link") }} Linked tickets <span class="badge">{{ problem.linked_tickets|length }}</span></h3>
       <p class="meta-line">Incidents and service requests whose root cause this problem captures.</p>
       {% if problem.linked_tickets %}
       <div class="linked-strip">
@@ -206,7 +207,7 @@
       </select>
       <button type="button" style="width:100%; margin-top:6px; padding:7px; border-radius:6px; border:1px solid var(--accent); background:{% if problem.assignee_id == current_user.id %}var(--accent); color:white{% else %}white; color:var(--accent){% endif %}; font-weight:600; cursor:pointer; font-size:12.5px;"
               onclick="document.getElementById('assigneeInput').value='{{ current_user.id }}'; document.getElementById('problemForm').submit();">
-        {% if problem.assignee_id == current_user.id %}✓ Assigned to me{% else %}Take it →{% endif %}
+        {% if problem.assignee_id == current_user.id %}{{ icon("check", 13) }} Assigned to me{% else %}Take it →{% endif %}
       </button>
     </div>
 

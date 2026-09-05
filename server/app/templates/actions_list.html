@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Remote Actions — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -51,8 +52,8 @@
       </td>
       <td>
         {% set s = a.status.value %}
-        {% if s == 'succeeded' %}<span class="status status-resolved">✓ succeeded</span>
-        {% elif s == 'failed' %}<span class="status status-cancelled">✗ failed</span>
+        {% if s == 'succeeded' %}<span class="status status-resolved">{{ icon("check", 12) }} succeeded</span>
+        {% elif s == 'failed' %}<span class="status status-cancelled">{{ icon("x", 12) }} failed</span>
         {% elif s == 'in_progress' %}<span class="status status-in_progress">running</span>
         {% elif s == 'cancelled' %}<span class="status status-on_hold">cancelled</span>
         {% else %}<span class="status status-on_hold">⏱ queued</span>{% endif %}

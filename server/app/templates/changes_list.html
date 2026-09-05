@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Changes — OctoAssist{% endblock %}
 {% block content %}
 
@@ -47,7 +48,7 @@
 
   .filters .search-wrap { position:relative; flex:1; min-width:240px; max-width:380px; }
   .filters .search-wrap input { padding-left:34px; }
-  .filters .search-wrap::before { content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5; pointer-events:none; }
+  .filters .search-wrap .search-ico { position:absolute; left:11px; top:50%; transform:translateY(-50%); opacity:.5; pointer-events:none; }
 
   /* CAB approval banner */
   .cab-banner {
@@ -80,7 +81,7 @@
 {% if awaiting %}
 <section class="cab-banner">
   <h2>
-    ⚖️ Awaiting your CAB approval
+    {{ icon("thumbs-up", 13) }} Awaiting your CAB approval
     <span class="count-badge">{{ awaiting|length }}</span>
   </h2>
   <p class="meta" style="margin:0 0 10px; font-size:12.5px;">You can approve or reject any change you didn't raise yourself.</p>
@@ -125,6 +126,7 @@
 
 <form method="get" action="/changes" class="filters">
   <div class="search-wrap">
+    {{ icon("search", 15, "search-ico") }}
     <input type="search" name="q" value="{{ q or '' }}" placeholder="Search title, description, change #" autocomplete="off">
   </div>
   <label>Status
