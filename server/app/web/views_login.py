@@ -1,4 +1,5 @@
 """Login / logout — replaces HTTP Basic for the browser flow."""
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +12,9 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import IdentityProvider, User, UserRole
 from ..security import verify_password
+from ..services import login_throttle
+
+log = logging.getLogger("octoassist.auth")
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -61,24 +65,43 @@ def login_submit(
     next: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == email.strip().lower()).first()
-    # Older bootstrap rows used the literal admin_username (e.g., "admin") as the
-    # email; allow that case-sensitive too.
-    if user is None:
-        user = db.query(User).filter(User.email == email.strip()).first()
+    ip = login_throttle.client_ip(request)
+    email_key = email.strip().lower()
 
-    if user is None or not user.is_active or not verify_password(password, user.password_hash):
+    def _rejected(message: str, status: int):
         enabled_idps = (db.query(IdentityProvider)
                           .filter(IdentityProvider.is_enabled == True)  # noqa: E712
                           .order_by(IdentityProvider.display_name).all())
         return templates.TemplateResponse(
             request=request,
             name="login.html",
-            context={"next": next or "", "error": "Invalid email or password.",
+            context={"next": next or "", "error": message,
                      "tenant": None, "enabled_idps": enabled_idps},
-            status_code=401,
+            status_code=status,
         )
 
+    # Checked BEFORE the password so a locked-out caller costs no bcrypt work
+    # and learns nothing about whether the account exists.
+    wait = login_throttle.retry_after(ip, email_key)
+    if wait:
+        log.warning("login throttled ip=%s email=%s retry_after=%ss", ip, email_key, wait)
+        minutes = max(1, (wait + 59) // 60)
+        return _rejected(
+            f"Too many sign-in attempts. Try again in {minutes} minute{'s' if minutes > 1 else ''}, "
+            "or use Sign in with Microsoft Entra ID.", 429)
+
+    user = db.query(User).filter(User.email == email_key).first()
+    # Older bootstrap rows used the literal admin_username (e.g., "admin") as the
+    # email; allow that case-sensitive too.
+    if user is None:
+        user = db.query(User).filter(User.email == email.strip()).first()
+
+    if user is None or not user.is_active or not verify_password(password, user.password_hash):
+        login_throttle.record_failure(ip, email_key)
+        log.warning("login failed ip=%s email=%s", ip, email_key)
+        return _rejected("Invalid email or password.", 401)
+
+    login_throttle.clear(ip, email_key)
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
 
