@@ -43,3 +43,6 @@ server/test_*.py
 # Office open-document lock files + root-level Word drafts
 ~$*
 /*.docx
+
+# Personal Claude Code permissions (never share — paths are local)
+.claude/settings.local.json
