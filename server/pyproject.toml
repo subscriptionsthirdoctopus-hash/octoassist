@@ -24,5 +24,16 @@ dependencies = [
     "cryptography>=42",
 ]
 
+[project.optional-dependencies]
+# `pip install -e ./server[dev]` — tests and the lock-file tooling.
+dev = [
+    "pytest>=8",
+    "pip-tools>=7.4",
+]
+
 [tool.setuptools]
 packages = ["app", "app.api", "app.web"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

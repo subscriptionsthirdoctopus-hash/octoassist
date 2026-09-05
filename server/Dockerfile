@@ -12,13 +12,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv/octoassist
 
 # psycopg[binary] bundles libpq, so no apt deps are needed.
-COPY server/pyproject.toml ./
+# Dependencies come from the hash-pinned lock (server/requirements.lock), so two
+# builds a month apart install byte-identical wheels. Regenerate with
+# `pip-compile --generate-hashes --strip-extras -o requirements.lock pyproject.toml`
+# (see deploy/droplet/README.md). The app itself is installed without deps.
+COPY server/pyproject.toml server/requirements.lock ./
+RUN pip install --upgrade pip wheel && pip install --require-hashes -r requirements.lock
 COPY server/app ./app
+RUN pip install --no-deps .
 
 # Cross-platform Python agent — served at /agent/files/* by views_agent_download.
 COPY agent-py /srv/agent_py
-
-RUN pip install --upgrade pip wheel && pip install .
 
 # Drop privileges
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin octoassist \
