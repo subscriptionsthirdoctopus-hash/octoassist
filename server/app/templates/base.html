@@ -39,6 +39,10 @@
 
   {% block extra_head %}{% endblock %}
 
+  {# Sidebar collapsed/expanded preference, applied before first paint so the
+     rail does not jump on load. #}
+  <script>try{if(localStorage.getItem('octoassist-sb')==='1')document.documentElement.classList.add('sb-collapsed')}catch(e){}</script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
@@ -49,54 +53,24 @@
   <script src="/static/sortable-tables.js?v=1.0.0" defer></script>
   <script src="/static/sticky-headers.js?v=1.0.0" defer></script>
 </head>
-<body class="{% block body_class %}{% endblock %}">
-  <header class="topbar">
-    <a href="/" class="brand brand-link" aria-label="OctoAssist home">
-      <span class="brand-product">OctoAssist</span>
-      <span class="brand-mark">ITSM</span>
-    </a>
-
-
-
-    <nav>
-      {% if current_user %}
-        {% if current_user.role.value in ('admin', 'agent') %}
-          <a href="/reports">Dashboard</a>
-          <a href="/tickets">Tickets</a>
-          <a href="/problems">Problems</a>
-          <a href="/changes">Changes</a>
-          <a href="/kb">Knowledge Base</a>
-          <a href="/assets">Assets</a>
-          <a href="/software">Software</a>
-          <a href="/subscriptions">Subscriptions</a>
-          <a href="/patches">Patches</a>
-          {% if current_user.role.value == 'admin' %}
-            <a href="/settings">Settings</a>
-          {% endif %}
-        {% else %}
-          <a href="/portal">My Tickets</a>
-          <a href="/portal/kb">Knowledge Base</a>
-          <a href="/portal/new">New Request</a>
-        {% endif %}
-
-        {# Notification bell — counts injected by NotificationContextMiddleware #}
-        {% set _notif = request.state.notifications if request and request.state.notifications else None %}
+{# Notification bell — counts injected by NotificationContextMiddleware #}
+{% macro bell(n) %}
         <div class="bell-wrap" id="bellWrap">
           <button type="button" class="bell-btn" id="bellBtn"
                   aria-label="Notifications" title="Notifications">
             <span class="bell-icon">{{ icon("bell") }}</span>
-            {% if _notif and _notif.total %}
-            <span class="bell-badge" id="bellBadge">{{ _notif.total if _notif.total < 100 else "99+" }}</span>
+            {% if n and n.total %}
+            <span class="bell-badge" id="bellBadge">{{ n.total if n.total < 100 else "99+" }}</span>
             {% endif %}
           </button>
           <div class="bell-dropdown" id="bellDropdown" hidden>
             <div class="bell-head">
               <strong>Notifications</strong>
-              <span class="meta">{{ (_notif.total if _notif else 0) }} item{{ "" if (_notif and _notif.total == 1) else "s" }}</span>
+              <span class="meta">{{ (n.total if n else 0) }} item{{ "" if (n and n.total == 1) else "s" }}</span>
             </div>
-            {% if _notif and _notif["items"] %}
+            {% if n and n["items"] %}
             <ul class="bell-list">
-              {% for it in _notif["items"] %}
+              {% for it in n["items"] %}
               <li>
                 <a href="{{ it.url }}" class="bell-item severity-{{ it.severity }}">
                   <span class="bell-item-label">{{ it.label }}</span>
@@ -110,22 +84,111 @@
             {% endif %}
           </div>
         </div>
-
-        <span class="who"><span class="who-name">{{ current_user.full_name or current_user.email }}</span> <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>
+{% endmacro %}
+{% set _staff = current_user and current_user.role.value in ('admin', 'agent') %}
+{% set _path = request.url.path if request else "" %}
+{% set _notif = request.state.notifications if request and request.state.notifications else None %}
+{% set _name = (current_user.full_name or current_user.email) if current_user else "" %}
+{% set _parts = _name.split() %}
+{% set _initials = (_parts[0][0] ~ (_parts[1][0] if _parts|length > 1 else ""))|upper if _parts else "?" %}
+<body class="{% if _staff %}has-sidebar {% endif %}{% block body_class %}{% endblock %}">
+{% if _staff %}
+  {# Sidebar navigation for staff. The last tuple element lists the URL
+     prefixes that belong to an item — /asset/12 is an Assets page even though
+     the list lives at /assets. #}
+  {% set NAV = [
+    ("Service desk", [
+      ("/reports",       "chart",   "Dashboard",      ["/reports"]),
+      ("/tickets",       "ticket",  "Tickets",        ["/tickets"]),
+      ("/problems",      "puzzle",  "Problems",       ["/problems"]),
+      ("/changes",       "refresh", "Changes",        ["/changes"]),
+      ("/kb",            "book",    "Knowledge Base", ["/kb"]),
+    ]),
+    ("Endpoints", [
+      ("/assets",        "monitor", "Assets",         ["/assets", "/asset/"]),
+      ("/software",      "package", "Software",       ["/software"]),
+      ("/subscriptions", "key",     "Subscriptions",  ["/subscriptions"]),
+      ("/patches",       "shield",  "Patches",        ["/patches"]),
+    ]),
+  ] %}
+  {% if current_user.role.value == 'admin' %}
+    {% set NAV = NAV + [("Admin", [
+      ("/settings", "sliders",  "Settings",       ["/settings"]),
+      ("/users",    "users",    "Users",          ["/users"]),
+      ("/actions",  "activity", "Remote actions", ["/actions"]),
+    ])] %}
+  {% endif %}
+  {% set ns = namespace(title="", group="") %}
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <a href="/reports" class="sb-brand" aria-label="OctoAssist home">
+      <span class="sb-logo">O</span>
+      <span class="sb-wordmark"><strong>OctoAssist</strong><small>ITSM</small></span>
+    </a>
+    <nav class="sb-nav">
+      {% for group, items in NAV %}
+      <div class="sb-group">
+        <div class="sb-group-label">{{ group }}</div>
+        {% for href, ico, label, prefixes in items %}
+          {% set it = namespace(active=false) %}
+          {% for p in prefixes %}
+            {% if _path == p or _path.startswith(p if p.endswith('/') else p ~ '/') %}{% set it.active = true %}{% endif %}
+          {% endfor %}
+          {% if it.active %}{% set ns.title = label %}{% set ns.group = group %}{% endif %}
+          <a href="{{ href }}" class="sb-item{% if it.active %} active{% endif %}" title="{{ label }}"{% if it.active %} aria-current="page"{% endif %}>{{ icon(ico, 18) }}<span>{{ label }}</span></a>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </nav>
+    <div class="sb-user">
+      <span class="sb-avatar" aria-hidden="true">{{ _initials }}</span>
+      <div class="sb-user-meta">
+        <div class="sb-user-name" title="{{ current_user.email }}">{{ _name }}</div>
+        <div class="sb-user-role">{{ current_user.role.value }}</div>
+      </div>
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+        <button type="submit" class="sb-logout" title="Log out" aria-label="Log out">{{ icon("log-out", 16) }}</button>
+      </form>
+    </div>
+  </aside>
+  <div class="sb-backdrop" id="sbBackdrop"></div>
+{% endif %}
+<div class="shell-main">
+  <header class="topbar">
+  {% if _staff %}
+    <div class="tb-left">
+      <button type="button" class="tb-btn" id="sbToggle" aria-label="Toggle navigation" title="Toggle navigation">{{ icon("panel-left") }}</button>
+      {% if ns.group %}<span class="tb-crumb">{{ ns.group }} {{ icon("chevron-right") }}</span>{% endif %}
+      <span class="tb-title">{{ ns.title or "OctoAssist" }}</span>
+    </div>
+    <div class="tb-right">
+      {{ bell(_notif) }}
+      <span class="tb-user"><span class="sb-avatar" aria-hidden="true">{{ _initials }}</span><span>{{ _name }}</span></span>
+    </div>
+  {% else %}
+    <a href="/" class="brand brand-link" aria-label="OctoAssist home">
+      <span class="brand-product">OctoAssist</span>
+      <span class="brand-mark">ITSM</span>
+    </a>
+    <nav>
+      {% if current_user %}
+        <a href="/portal">My Tickets</a>
+        <a href="/portal/kb">Knowledge Base</a>
+        <a href="/portal/new">New Request</a>
+        {{ bell(_notif) }}
+        <span class="who"><span class="who-name">{{ _name }}</span> <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>
         <form method="post" action="/logout" class="inline-form">
-  <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
           <button type="submit" class="link-button">Logout</button>
         </form>
       {% else %}
         <a href="/login">Sign in</a>
       {% endif %}
     </nav>
+  {% endif %}
   </header>
 
   <script>
-
-
-
     /* ----- Notification bell dropdown ----- */
     (function () {
       var btn = document.getElementById('bellBtn');
@@ -143,16 +206,33 @@
         if (e.key === 'Escape') dropdown.hidden = true;
       });
     })();
+
+    /* ----- Sidebar: collapse on desktop (remembered), slide-in below 1100px ----- */
+    (function () {
+      var toggle = document.getElementById('sbToggle');
+      if (!toggle) return;
+      var html = document.documentElement;
+      var narrow = window.matchMedia('(max-width: 1100px)');
+      toggle.addEventListener('click', function () {
+        if (narrow.matches) { html.classList.toggle('sb-open'); return; }
+        var collapsed = html.classList.toggle('sb-collapsed');
+        try { localStorage.setItem('octoassist-sb', collapsed ? '1' : '0'); } catch (e) {}
+      });
+      var backdrop = document.getElementById('sbBackdrop');
+      if (backdrop) backdrop.addEventListener('click', function () { html.classList.remove('sb-open'); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') html.classList.remove('sb-open'); });
+    })();
   </script>
 
   <main>
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <span>&copy; 2026 OctoAssist ITSM &middot; Modern Cloud &middot; Trusted Security &middot; Managed Outcomes &middot; Built by <a href="https://thirdoctopus.com" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">Third Octopus</a></span>
+    <span>&copy; 2026 OctoAssist ITSM &middot; Built by <a href="https://thirdoctopus.com" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">Third Octopus</a></span>
     {% if current_user %}
-    <span class="meta" style="font-size:11px;">v0.2 &middot; tenant: {{ tenant.name if tenant else "—" }}</span>
+    <span class="meta" style="font-size:11px;">tenant: {{ tenant.name if tenant else "—" }}</span>
     {% endif %}
   </footer>
+</div>
 </body>
 </html>
