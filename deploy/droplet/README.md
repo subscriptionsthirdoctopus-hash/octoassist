@@ -15,6 +15,7 @@ re-capture after editing there (`scp`/`tar` — see paths below).
 | `nginx/conf.d/security-headers.inc` | `/opt/hrms-erp/nginx/conf.d/` | included inside every HTTPS server block (nginx drops http-level `add_header` once a vhost sets its own) |
 | `backup-octoassist.sh` | `/opt/octoassist/bin/`, root cron `15 21 * * *` UTC | nightly `pg_dump` to `/opt/octoassist/backups`, 14-day rotation, log in `backup.log` |
 | `52-unattended-upgrades-local` | `/etc/apt/apt.conf.d/` | unattended-upgrades auto-reboot at 21:30 UTC (03:00 IST) when a kernel/security update needs it |
+| `smoke-test.sh` | run on demand after a deploy | copies the live DB to `octoassist_smoke`, runs `server/tests` in the deployed image against it, drops the copy |
 | `harden-ssh.sh` | run once, 5 Sep 2026 | keys-only sshd, fail2ban, ufw (22 limited, 80, 443, 8005 from docker) |
 | `provision-entra-demo.sh` | run once, 5 Sep 2026 | Entra app registration for the OctoAssist demo SSO |
 
