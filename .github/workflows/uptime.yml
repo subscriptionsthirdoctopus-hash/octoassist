@@ -1,0 +1,114 @@
+name: Uptime
+
+# External availability check, run from GitHub's infrastructure every ten
+# minutes. It probes OctoAssist's /health plus the other public sites on the
+# droplet, retries once after 30 s so a single dropped packet is not an
+# outage, and keeps ONE open issue labelled `uptime` while anything is down —
+# opened on the first failure, updated on repeats, closed with a note when
+# everything answers again. A failed run also triggers GitHub's own workflow
+# failure e-mail.
+#
+# Caveats worth knowing: GitHub schedules are best-effort (a 10-minute cron
+# often fires at 12–15), and GitHub pauses scheduled workflows after 60 days
+# without a push to the repository — re-enable it under Actions if that ever
+# happens.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: "Report a fake outage to exercise the issue open/close path"
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe every site
+        id: probe
+        shell: bash
+        run: |
+          # host|path|expected-status(es)
+          TARGETS='
+          octoassist.thirdoctopus.com|/health|200
+          octoassist.thirdoctopus.com|/login|200
+          thirdoctopus.com|/|200
+          erp1.thirdoctopus.com|/|303
+          octoflow.thirdoctopus.com|/|303
+          octovault.thirdoctopus.com|/|401
+          octocred.thirdoctopus.com|/|200
+          license.thirdoctopus.com|/|307
+          fund.thirdoctopus.com|/|200
+          hrms.thirdoctopus.com|/|200
+          '
+          check() {
+            local host="$1" path="$2" want="$3" code
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$host$path" 2>/dev/null || echo 000)
+            [[ "$code" == "$want" ]] && return 0
+            sleep 30
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$host$path" 2>/dev/null || echo 000)
+            [[ "$code" == "$want" ]] && return 0
+            echo "$host$path -> $code (expected $want)"
+            return 1
+          }
+          failures=""
+          while IFS='|' read -r host path want; do
+            [[ -z "$host" ]] && continue
+            out=$(check "$host" "$path" "$want") || failures+="- ${out}"$'\n'
+          done <<< "$TARGETS"
+          # /health must also say ok, not just answer.
+          body=$(curl -sS --max-time 15 https://octoassist.thirdoctopus.com/health 2>/dev/null || true)
+          [[ "$body" == *'"ok"'* ]] || failures+="- octoassist /health body was: ${body:-<empty>}"$'\n'
+          if [[ "${{ inputs.simulate_failure }}" == "true" ]]; then
+            failures+="- SIMULATED failure (manual test of the alert path, not a real outage)"$'\n'
+          fi
+          {
+            echo "failures<<EOF"
+            echo -n "$failures"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [[ -n "$failures" ]]; then
+            echo "DOWN:"; echo "$failures"; exit 1
+          fi
+          echo "all targets healthy"
+
+      - name: Open or update the outage issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILURES: ${{ steps.probe.outputs.failures }}
+        run: |
+          gh label create uptime --color B60205 --description "Automated availability alerts" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label uptime --state open --json number --jq '.[0].number')
+          stamp=$(date -u +'%Y-%m-%d %H:%M UTC')
+          body="**Probe at ${stamp}** from GitHub Actions ([run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})):"$'\n\n'"${FAILURES}"
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label uptime \
+              --title "Site down: $(echo "$FAILURES" | head -1 | sed -E 's/^- //; s/ ->.*//')" \
+              --body "$body"$'\n\n'"This issue is managed by the Uptime workflow: it gets a comment on each failing probe and is closed automatically when every target answers again."
+          fi
+
+      - name: Close the outage issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label uptime --state open --json number --jq '.[0].number')
+          if [[ -n "$existing" ]]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+              --comment "Recovered: every target answered at $(date -u +'%Y-%m-%d %H:%M UTC') ([run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}))."
+          fi
