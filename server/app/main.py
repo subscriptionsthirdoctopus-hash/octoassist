@@ -116,7 +116,29 @@ app.add_middleware(
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+class CachedStaticFiles(StaticFiles):
+    """Static files with an explicit cache policy.
+
+    Without one, browsers fall back to heuristic caching off Last-Modified and
+    revalidate the 110 KB stylesheet on every page. References that carry a
+    ?v= cache-buster (styles.css, the table scripts) can be cached for a year
+    and marked immutable — a change ships under a new ?v=. Anything requested
+    without a version (the favicon) gets a day and then revalidates via ETag.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            versioned = b"v=" in scope.get("query_string", b"")
+            response.headers["Cache-Control"] = (
+                "public, max-age=31536000, immutable" if versioned else "public, max-age=86400"
+            )
+        return response
+
+
+app.mount("/static", CachedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _root_templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 install_on(_root_templates)
