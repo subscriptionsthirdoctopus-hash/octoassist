@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Tickets — OctoAssist{% endblock %}
 {% block content %}
 
@@ -40,9 +41,9 @@
   /* Search bar inside filter row */
   .filters .search-wrap { position:relative; flex:1; min-width:240px; max-width:380px; }
   .filters .search-wrap input { padding-left:34px; }
-  .filters .search-wrap::before {
-    content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%);
-    font-size:13px; opacity:.5; pointer-events:none;
+  .filters .search-wrap .search-ico {
+    position:absolute; left:11px; top:50%; transform:translateY(-50%);
+    opacity:.5; pointer-events:none;
   }
 </style>
 
@@ -53,8 +54,8 @@
       <p class="meta">{{ rows|length }} shown{% if q or filter_status or filter_kind or filter_mine or filter_location %} · filtered from {{ kpi.total }} total{% else %} · {{ kpi.total }} total in this tenant{% endif %}</p>
     </div>
     <div class="actions">
-      <a class="button" href="/tickets/new?kind=service_request">+ Service request</a>
-      <a class="button primary" href="/tickets/new?kind=incident">+ Incident</a>
+      <a class="button" href="/tickets/new?kind=service_request">{{ icon("plus", 14) }} Service request</a>
+      <a class="button primary" href="/tickets/new?kind=incident">{{ icon("plus", 14) }} Incident</a>
     </div>
   </div>
 </section>
@@ -89,6 +90,7 @@
 
 <form method="get" action="/tickets" class="filters">
   <div class="search-wrap">
+    {{ icon("search", 15, "search-ico") }}
     <input type="search" name="q" value="{{ q or '' }}" placeholder="Search title, description, ticket #" autocomplete="off">
   </div>
   <label>Status
@@ -151,7 +153,7 @@
           <span class="t-sub">
             <span class="kind-pill kind-{{ t.kind.value }}">{{ t.kind.value.replace("_"," ") }}</span>
             {{ t.category.name if t.category else "—" }}
-            {% if t.location %}· 📍 {{ t.location }}{% endif %}
+            {% if t.location %}· {{ icon("pin", 12) }} {{ t.location }}{% endif %}
           </span>
         </div>
       </td>

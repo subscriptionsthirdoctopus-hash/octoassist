@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ agent.hostname }} — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -21,15 +22,15 @@
 <section class="card" style="margin-bottom:18px;border-left:4px solid var(--accent,#2563eb);">
   <div class="row-between" style="margin-bottom:10px;">
     <div>
-      <h2 style="margin:0;font-size:18px;">⚡ Quick Actions</h2>
+      <h2 style="margin:0;font-size:18px;">{{ icon("zap", 17) }} Quick Actions</h2>
       <p class="meta" style="margin:2px 0 0;">
         Push a command. Agent picks it up within 30 seconds and runs as SYSTEM — no user prompt.
         <a href="/asset/{{ agent.id }}/actions">Action history ›</a>
       </p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a href="/asset/{{ agent.id }}/processes" class="button">🔎 Process list</a>
-      <a href="/asset/{{ agent.id }}/services" class="button">⚙️ Services list</a>
+      <a href="/asset/{{ agent.id }}/processes" class="button">{{ icon("search") }} Process list</a>
+      <a href="/asset/{{ agent.id }}/services" class="button">{{ icon("sliders") }} Services list</a>
     </div>
   </div>
 
@@ -37,29 +38,29 @@
     {# Run PowerShell leads the grid — it is the action the TEMA team reaches
        for most often, and hunting for it at the bottom cost them time. The
        modal it opens still carries the full break-glass confirmation. #}
-    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">⚠️ Run PowerShell</button>
+    <button type="button" class="button" style="width:100%;background:#dc2626;color:white;" onclick="openAct('ps')">{{ icon("terminal") }} Run PowerShell</button>
     {# Single-click actions — POST with hidden 'kind' #}
     <form method="post" action="/asset/{{ agent.id }}/action">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
       <input type="hidden" name="kind" value="force_refresh">
-      <button type="submit" class="button primary" style="width:100%;">↻ Refresh now</button>
+      <button type="submit" class="button primary" style="width:100%;">{{ icon("refresh") }} Refresh now</button>
     </form>
     <form method="post" action="/asset/{{ agent.id }}/action"
           onsubmit="return confirm('Reboot {{ agent.hostname|e }} in 60 seconds?\n\nA Windows balloon notification will warn the user; cancel with shutdown /a.');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
       <input type="hidden" name="kind" value="reboot">
       <input type="hidden" name="delay_seconds" value="60">
-      <button type="submit" class="button" style="width:100%;">🔁 Reboot</button>
+      <button type="submit" class="button" style="width:100%;">{{ icon("power") }} Reboot</button>
     </form>
     <form method="post" action="/asset/{{ agent.id }}/action"
           onsubmit="return confirm('Lock {{ agent.hostname|e }} now? The signed-in user will see the lock screen.');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
       <input type="hidden" name="kind" value="lock_workstation">
-      <button type="submit" class="button" style="width:100%;">🔒 Lock workstation</button>
+      <button type="submit" class="button" style="width:100%;">{{ icon("lock") }} Lock workstation</button>
     </form>
-    <button type="button" class="button" style="width:100%;" onclick="openAct('toast')">🔔 Send notification</button>
-    <button type="button" class="button" style="width:100%;" onclick="openAct('wallpaper')">🖼️ Set wallpaper</button>
-    <button type="button" class="button" style="width:100%;" onclick="openAct('password')">🔑 Reset password</button>
+    <button type="button" class="button" style="width:100%;" onclick="openAct('toast')">{{ icon("bell") }} Send notification</button>
+    <button type="button" class="button" style="width:100%;" onclick="openAct('wallpaper')">{{ icon("image") }} Set wallpaper</button>
+    <button type="button" class="button" style="width:100%;" onclick="openAct('password')">{{ icon("key") }} Reset password</button>
   </div>
 </section>
 
@@ -84,7 +85,7 @@
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
       <input type="hidden" name="kind" value="set_wallpaper">
       <div style="border:1px dashed var(--line);border-radius:6px;padding:12px;background:var(--surface-2);">
-        <strong style="font-size:13px;display:block;margin-bottom:6px;">📤 Wallpaper source (pick one)</strong>
+        <strong style="font-size:13px;display:block;margin-bottom:6px;">{{ icon("upload", 14) }} Wallpaper source (pick one)</strong>
         <label style="display:block;margin-bottom:8px;">Upload image <span class="meta" style="font-weight:normal;">(.jpg / .png / .bmp, up to 1 GB)</span>
           <input type="file" name="wallpaper_file" accept="image/jpeg,image/png,image/bmp,.jpg,.jpeg,.png,.bmp"
                  style="display:block;margin-top:4px;font-size:13px;">
@@ -116,7 +117,7 @@
       <label>PowerShell script (runs as SYSTEM, 10-min cap)
         <textarea name="script" rows="10" required style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-family:ui-monospace,monospace;font-size:12.5px;" placeholder="# Example: list local users&#10;Get-LocalUser | Select-Object Name, Enabled, LastLogon | ConvertTo-Json"></textarea>
       </label>
-      <p class="meta" style="font-size:12px;margin:6px 0 0;color:#dc2626;">⚠ Last-resort. Full audit log captures who, when, the script, and the result.</p>
+      <p class="meta" style="font-size:12px;margin:6px 0 0;color:#dc2626;">{{ icon("alert", 12) }} Last-resort. Full audit log captures who, when, the script, and the result.</p>
       <div class="form-actions" style="margin-top:12px;"><button type="submit" class="primary" style="background:#dc2626;border-color:#dc2626;">Run script</button></div>
     </form>
   </div>
@@ -125,10 +126,10 @@
 <script>
 function openAct(kind) {
   var titles = {
-    toast:     '🔔 Send notification to {{ agent.hostname|e }}',
-    wallpaper: '🖼️ Set wallpaper on {{ agent.hostname|e }}',
-    password:  '🔑 Reset local password on {{ agent.hostname|e }}',
-    ps:        '⚠️ Run PowerShell on {{ agent.hostname|e }}',
+    toast:     'Send notification to {{ agent.hostname|e }}',
+    wallpaper: 'Set wallpaper on {{ agent.hostname|e }}',
+    password:  'Reset local password on {{ agent.hostname|e }}',
+    ps:        'Run PowerShell on {{ agent.hostname|e }}',
   };
   document.getElementById('act-title').innerText = titles[kind] || kind;
   ['toast','wallpaper','password','ps'].forEach(function(k){
@@ -235,7 +236,7 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <div style="display:flex;align-items:stretch;">
         <div style="position: relative; display: flex; align-items: center;">
-          <span style="position: absolute; left: 12px; font-size: 13.5px; opacity: 0.6; pointer-events: none;">🔍</span>
+          <span style="position: absolute; left: 11px; display: inline-flex; opacity: 0.55; pointer-events: none;">{{ icon("search", 15) }}</span>
           <input type="text" id="softwareSearchInput" placeholder="Search software name, version, publisher, date..." style="padding: 8px 14px 8px 34px; border-radius: var(--r-sm, 4px) 0 0 var(--r-sm, 4px); border: 1px solid var(--line, #e2e8f0); border-right: none; font-size: 13px; width: 270px; background: rgba(255, 255, 255, 0.02); min-height: 0; height: 35px; box-sizing: border-box; outline: none;">
         </div>
         <button type="button" id="softwareSearchButton" class="button primary" style="border-radius: 0 var(--r-sm, 4px) var(--r-sm, 4px) 0; height: 35px; padding: 0 16px; font-weight: 600; box-sizing: border-box; font-size: 13px; white-space: nowrap; border-left: none; margin: 0; display: flex; align-items: center; justify-content: center;">
@@ -243,7 +244,7 @@ document.getElementById('act-modal').addEventListener('click', function(e){ if (
         </button>
       </div>
       <a href="/asset/{{ agent.id }}/software/export.csv" class="button" style="text-decoration:none;background:#16a34a;color:white;border-color:#16a34a;font-weight:600;display:flex;align-items:center;gap:4px;height:35px;box-sizing:border-box;">
-        📥 Export Software CSV
+        {{ icon("download") }} Export Software CSV
       </a>
     </div>
   </div>
@@ -329,7 +330,7 @@ function copyWinKey(agentId, btn) {
   noResultsCell.style.padding = "24px";
   noResultsCell.style.color = "var(--slate, #64748b)";
   noResultsCell.style.fontSize = "14px";
-  noResultsCell.innerHTML = "🔍 No matching software found";
+  noResultsCell.innerHTML = "No matching software found";
   noResultsRow.appendChild(noResultsCell);
   tbody.appendChild(noResultsRow);
 

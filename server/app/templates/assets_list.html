@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Asset Register — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -20,12 +21,12 @@
     <div class="actions" style="display:flex;gap:8px;align-items:center;">
       <a class="button primary" style="text-decoration:none;"
          href="/assets/export.csv{% if export_query %}?{{ export_query }}{% endif %}"
-         title="Downloads exactly the rows shown below, with the current filters applied">⭳ Export this view (CSV)</a>
+         title="Downloads exactly the rows shown below, with the current filters applied">{{ icon("download") }} Export this view (CSV)</a>
       {% if entra_idp %}
       <form method="post" action="/assets/sync-entra" class="inline-form"
             onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…';">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-        <button type="submit" class="button">↻ Sync Windows devices from Entra</button>
+        <button type="submit" class="button">{{ icon("refresh") }} Sync Windows devices from Entra</button>
       </form>
       {% endif %}
     </div>
@@ -55,15 +56,15 @@
 
 <div class="conn-strip">
   <a class="conn-tile online" href="/assets?online=online">
-    <span class="kpi-label">🟢 Online</span>
+    <span class="kpi-label"><span class="online-dot online"></span> Online</span>
     <span class="kpi-val">{{ online_count }}</span>
   </a>
   <a class="conn-tile lagging" href="/assets?online=lagging">
-    <span class="kpi-label">🟡 Lagging ({{ lagging_threshold_hours }}h+)</span>
+    <span class="kpi-label"><span class="online-dot lagging"></span> Lagging ({{ lagging_threshold_hours }}h+)</span>
     <span class="kpi-val">{{ lagging_count }}</span>
   </a>
   <a class="conn-tile offline {% if offline_count > 0 %}alert{% endif %}" href="/assets?online=offline">
-    <span class="kpi-label">🔴 Offline ({{ offline_threshold_hours }}h+)</span>
+    <span class="kpi-label"><span class="online-dot offline"></span> Offline ({{ offline_threshold_hours }}h+)</span>
     <span class="kpi-val">{{ offline_count }}</span>
   </a>
   <a class="conn-tile" href="/assets" style="border-left:3px solid var(--text-3);">
@@ -113,23 +114,20 @@
     </select>
   </label>
   {% endif %}
-  <label>Compliance
+  <label>Compliance{% if not compliance_data_available %} <span class="meta" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">— needs an Entra sync</span>{% endif %}
     <select name="compliant" style="padding:6px;">
       <option value="">All</option>
       <option value="yes" {% if filter_compliant == "yes" %}selected{% endif %}>compliant</option>
       <option value="no"  {% if filter_compliant == "no"  %}selected{% endif %}>non-compliant</option>
       <option value="unknown" {% if filter_compliant == "unknown" %}selected{% endif %}>not reported</option>
     </select>
-    {% if not compliance_data_available %}
-    <span class="meta" style="display:block;font-size:11px;">No compliance data — needs an Entra sync</span>
-    {% endif %}
   </label>
   <button type="submit" class="button">Apply</button>
   {% if q or filter_department or filter_location or filter_compliant or filter_online %}<a href="/assets" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
 </form>
 
 <details style="margin-bottom:16px;">
-  <summary style="cursor:pointer;font-weight:600;font-size:14px;">+ Manually add a Windows endpoint</summary>
+  <summary style="cursor:pointer;font-weight:600;font-size:14px;">{{ icon("plus", 14) }} Manually add a Windows endpoint</summary>
   <div class="card form" style="max-width:none;margin-top:8px;">
     <p class="meta" style="margin-top:0;">Use when a laptop isn't in Entra yet (BYOD trial, just-bought, etc.) but you want to track it. Goes into the Discovered list with a `manual-…` id; doesn't run the agent.</p>
     <form method="post" action="/assets/manual-add" class="row-form" style="gap:10px;flex-wrap:wrap;">
@@ -173,7 +171,7 @@
     <strong>Bulk action on selected:</strong>
     <button type="submit" class="button"
             style="background:#dc2626;color:white;border-color:#dc2626;"
-            onclick="return confirm('Permanently DELETE the selected OctoAssist endpoint record(s)?\nIf the agent is still installed on the laptop, it will RE-register on next check-in (~30 sec). To remove for good, uninstall OctoAssistAgent on the laptop first.');">🗑 Delete selected</button>
+            onclick="return confirm('Permanently DELETE the selected OctoAssist endpoint record(s)?\nIf the agent is still installed on the laptop, it will RE-register on next check-in (~30 sec). To remove for good, uninstall OctoAssistAgent on the laptop first.');">{{ icon("trash", 14) }} Delete selected</button>
   </div>
   <table class="data">
     <thead>
@@ -213,13 +211,13 @@
         <td>
           {# From the endpoint's Entra record — the agent reports no compliance
              signal of its own, so a machine Entra has never seen reads "—". #}
-          {% if r.is_compliant is true %}<span style="color:#16a34a;">✓ yes</span>
-          {% elif r.is_compliant is false %}<span style="color:#dc2626;">✗ no</span>
+          {% if r.is_compliant is true %}<span style="color:#16a34a;">{{ icon("check", 13) }} yes</span>
+          {% elif r.is_compliant is false %}<span style="color:#dc2626;">{{ icon("x", 13) }} no</span>
           {% else %}<span style="color:var(--text-3);" title="Not reported by Entra">—</span>{% endif %}
         </td>
         <td>
           {% if r.last_seen_at %}{{ r.last_seen_at | ist }}{% else %}<span style="color:var(--red);">never</span>{% endif %}
-          {% if r.online_state == 'offline' %}<br><span style="font-size:11px;color:var(--red);font-weight:600;">⚠ Offline</span>{% endif %}
+          {% if r.online_state == 'offline' %}<br><span style="font-size:11px;color:var(--red);font-weight:600;">{{ icon("alert", 12) }} Offline</span>{% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -239,7 +237,7 @@
     <strong>Bulk action on selected:</strong>
     <button type="submit" class="button"
             style="background:#dc2626;color:white;border-color:#dc2626;"
-            onclick="return confirm('DELETE the selected discovered device record(s)?\nIf the device still exists in Entra, it WILL reappear on the next sync. Use this to hide retired or out-of-scope devices from the coverage list.');">🗑 Delete selected</button>
+            onclick="return confirm('DELETE the selected discovered device record(s)?\nIf the device still exists in Entra, it WILL reappear on the next sync. Use this to hide retired or out-of-scope devices from the coverage list.');">{{ icon("trash", 14) }} Delete selected</button>
   </div>
   <table class="data">
     <thead>
@@ -266,8 +264,8 @@
         <td>{{ d.os }} {{ d.os_version }}</td>
         <td>{{ d.manufacturer }} {{ d.model }}</td>
         <td>
-          {% if d.is_compliant is true %}<span style="color:#16a34a;">✓ yes</span>
-          {% elif d.is_compliant is false %}<span style="color:#dc2626;">✗ no</span>
+          {% if d.is_compliant is true %}<span style="color:#16a34a;">{{ icon("check", 13) }} yes</span>
+          {% elif d.is_compliant is false %}<span style="color:#dc2626;">{{ icon("x", 13) }} no</span>
           {% else %}—{% endif %}
         </td>
         <td>{% if d.last_signin_at %}{{ d.last_signin_at | ist }}{% else %}—{% endif %}</td>

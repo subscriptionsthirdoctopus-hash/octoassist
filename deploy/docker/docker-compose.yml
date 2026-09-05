@@ -49,6 +49,9 @@ services:
       OCTOASSIST_BIND_PORT: "8080"
       OCTOASSIST_TENANT_NAME: ${TENANT_NAME:-Third Octopus}
       OCTOASSIST_ENCRYPTION_KEY: ${OCTOASSIST_ENCRYPTION_KEY}
+      # Without this the app mints a random session key at every start, so
+      # each deploy or restart signs every user out.
+      OCTOASSIST_SESSION_SECRET_KEY: ${OCTOASSIST_SESSION_SECRET_KEY}
     ports:
       # Public HTTP on TCP/8088. WARNING: HTTP Basic over plaintext —
       # admin password transits in clear text. Acceptable for early demo;

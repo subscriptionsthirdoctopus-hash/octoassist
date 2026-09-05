@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Patches — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -8,7 +9,7 @@
       <p class="meta">Endpoint patch posture across the fleet</p>
     </div>
     <div class="actions">
-      <a class="button primary" href="/patches/bulk-deploy">↪ Bulk deploy ›</a>
+      <a class="button primary" href="/patches/bulk-deploy">{{ icon("send") }} Bulk deploy ›</a>
       <a class="button" href="/patches/aging">Aging report ›</a>
       <a class="button" href="/patches/windows">Deployment windows ›</a>
       <a class="button" href="/patches/export.csv">Export CSV</a>
@@ -146,7 +147,7 @@
   <div class="pf-search-wrap">
     {# Primary search box — big, clear, dark-mode visible #}
     <form method="get" action="/patches" class="pf-search">
-      <span class="glyph">🔍</span>
+      <span class="glyph">{{ icon("search") }}</span>
       <input type="search" name="q" value="{{ q or '' }}" autocomplete="off"
              placeholder="Search by hostname, assigned user, email, office, OS…">
       <button type="submit" class="primary submit">Search</button>
@@ -162,11 +163,11 @@
       <a class="pf-chip {% if not filter_posture %}active{% endif %}"
          href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_online %}online={{ filter_online }}&{% endif %}{% if filter_office %}office={{ filter_office|urlencode }}{% endif %}">All</a>
       <a class="pf-chip {% if filter_posture == 'fully_updated' %}active{% endif %}"
-         href="/patches?posture=fully_updated{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">✓ Fully updated</a>
+         href="/patches?posture=fully_updated{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">{{ icon("check", 12) }} Fully updated</a>
       <a class="pf-chip {% if filter_posture == 'pending' %}active{% endif %}"
          href="/patches?posture=pending{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">⏳ Has pending</a>
       <a class="pf-chip {% if filter_posture == 'scan_failed' %}active{% endif %}"
-         href="/patches?posture=scan_failed{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">⚠ Scan failed</a>
+         href="/patches?posture=scan_failed{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_office %}&office={{ filter_office|urlencode }}{% endif %}">{{ icon("alert", 12) }} Scan failed</a>
     </div>
 
     {# Connectivity chips #}
@@ -190,7 +191,7 @@
          href="/patches?{% if q %}q={{ q|urlencode }}&{% endif %}{% if filter_online %}online={{ filter_online }}&{% endif %}{% if filter_posture %}posture={{ filter_posture }}{% endif %}">All offices</a>
       {% for o in offices %}
       <a class="pf-chip {% if filter_office == o %}active{% endif %}"
-         href="/patches?office={{ o|urlencode }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}">📍 {{ o }}</a>
+         href="/patches?office={{ o|urlencode }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if filter_online %}&online={{ filter_online }}{% endif %}{% if filter_posture %}&posture={{ filter_posture }}{% endif %}">{{ icon("pin", 12) }} {{ o }}</a>
       {% endfor %}
     </div>
     {% endif %}
@@ -200,7 +201,7 @@
         <strong>{{ win_dash|length }}</strong> of {{ win_dash_total }} endpoint{{ "" if win_dash_total == 1 else "s" }} shown
       </span>
       {% if q or filter_online or filter_office or filter_posture %}
-      <a class="clear" href="/patches">Clear all filters ✕</a>
+      <a class="clear" href="/patches">Clear all filters {{ icon("x", 12) }}</a>
       {% endif %}
     </div>
   </div>
@@ -268,14 +269,14 @@
         </td>
         <td>
           {% if r.fully_updated %}
-            <span class="status status-resolved">✓ Fully Updated</span>
+            <span class="status status-resolved">{{ icon("check", 12) }} Fully Updated</span>
           {% elif r.needs_refresh %}
             <form method="post" action="/asset/{{ r.agent_id }}/action" class="inline-form" style="display:inline;"
                   onsubmit="return confirm('Trigger immediate check-in on {{ r.hostname|e }}?\n\nAgent re-scans within seconds. Runs silently as SYSTEM.');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
               <input type="hidden" name="kind" value="force_refresh">
               <button type="submit" class="status status-on_hold"
-                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">⟳ Refresh agent</button>
+                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">{{ icon("refresh", 12) }} Refresh agent</button>
             </form>
           {% elif r.scan_failed %}
             <form method="post" action="/asset/{{ r.agent_id }}/action" class="inline-form" style="display:inline;"
@@ -283,7 +284,7 @@
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
               <input type="hidden" name="kind" value="force_refresh">
               <button type="submit" class="status status-cancelled"
-                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">⚠ Scan failed — retry</button>
+                      style="border:none;cursor:pointer;font-family:inherit;font-size:inherit;">{{ icon("alert", 12) }} Scan failed — retry</button>
             </form>
           {% elif r.critical > 0 %}
             <span class="status status-cancelled">{{ r.pending_count }} pending</span>
@@ -296,7 +297,7 @@
               <form method="post" action="/asset/{{ r.agent_id }}/fix-pswindowsupdate" style="margin:0;"
                     onsubmit="return confirm('Queue PSWindowsUpdate self-repair on {{ r.hostname|e }}?\n\nRuns as SYSTEM. Re-scans on next slow cycle (5–10 min).');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-                <button type="submit" class="link-button" style="font-size:11px; color:var(--accent); padding:0;">🔧 Install module</button>
+                <button type="submit" class="link-button" style="font-size:11px; color:var(--accent); padding:0;">{{ icon("wrench", 12) }} Install module</button>
               </form>
             </div>
           {% endif %}
@@ -313,7 +314,7 @@
   {% endif %}
 </section>
 
-{# Refresh modal removed — '⟳ Refresh agent' and '⚠ Scan failed — retry'
+{# Refresh modal removed — 'Refresh agent' and 'Scan failed — retry'
    buttons now POST a force_refresh remote action directly. Admins never
    see PowerShell commands. #}
 

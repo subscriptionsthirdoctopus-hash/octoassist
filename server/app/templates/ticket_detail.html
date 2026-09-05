@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ ticket.ticket_number }} — {{ ticket.title }}{% endblock %}
 {% block content %}
 
@@ -131,7 +132,7 @@
         · <a href="/tickets?status=&kind=" style="color:inherit; font-weight: 600; text-decoration: none;">{{ ticket.category.name if ticket.category else "—" }}</a>
         · opened {{ ticket.created_at | ist }}
         by <strong>{{ ticket.reporter.display_name if ticket.reporter else "—" }}</strong>
-        {% if ticket.location %} · 📍 {{ ticket.location }}{% endif %}
+        {% if ticket.location %} · {{ icon("pin", 12) }} {{ ticket.location }}{% endif %}
       </p>
     </div>
     <div style="display: flex; gap: 10px; align-items: center;">
@@ -142,7 +143,7 @@
       <form method="post" action="/tickets/{{ ticket.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this ticket permanently? This cannot be undone.');">
         <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
         <button type="submit" class="button danger-solid" style="padding: 8px 14px; font-size: 13px; height: auto;">
-          🗑️ Delete Ticket
+          {{ icon("trash", 14) }} Delete Ticket
         </button>
       </form>
       {% endif %}
@@ -178,7 +179,7 @@
 
     {% if ticket.custom_fields %}
     <div class="desc-card" style="margin-top: 14px; border-left: 4px solid var(--accent, #2563eb); background: rgba(37,99,235,0.02);">
-      <div class="desc-meta" style="font-weight: 700; color: var(--accent, #2563eb);">📋 Service Request Specifications</div>
+      <div class="desc-meta" style="font-weight: 700; color: var(--accent, #2563eb);">{{ icon("file", 14) }} Service Request Specifications</div>
       <dl style="display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 8px 0 0 0; font-size: 13px;">
         {% for k, v in ticket.custom_fields.items() %}
         <dt style="font-weight: 600; color: var(--slate, #64748b);">{{ k.replace('_', ' ') | capitalize }}:</dt>
@@ -189,11 +190,11 @@
     {% endif %}
 
     {% if attachments %}
-    <h3 class="section">📎 Attachments <span style="color:var(--slate,#64748b);font-weight:400;">({{ attachments|length }})</span></h3>
+    <h3 class="section">{{ icon("paperclip") }} Attachments <span style="color:var(--slate,#64748b);font-weight:400;">({{ attachments|length }})</span></h3>
     <ul class="att-list">
       {% for a in attachments %}
       <li>
-        <span>📎</span>
+        <span>{{ icon("paperclip", 14) }}</span>
         <a class="fname" href="{{ a.url }}" target="_blank" rel="noopener">{{ a.filename }}</a>
         <span class="fmeta">{{ (a.size_bytes / 1024) | round(1) }} KB · {{ a.uploader }} · {{ a.created_at | ist }}</span>
       </li>
@@ -201,7 +202,7 @@
     </ul>
     {% endif %}
 
-    <h3 class="section">💬 Conversation</h3>
+    <h3 class="section">{{ icon("message") }} Conversation</h3>
     <div class="convo">
       {% for c in ticket.comments %}
       <div class="msg {% if c.is_internal %}internal{% elif c.author_id == ticket.reporter_id %}reporter{% endif %}">
@@ -221,7 +222,7 @@
 
     {% if attach_error %}
     <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:9px 12px;border-radius:6px;margin-top:10px;">
-      <p style="margin:0;font-size:12.5px;color:var(--red);">⚠ {{ attach_error }}</p>
+      <p style="margin:0;font-size:12.5px;color:var(--red);">{{ icon("alert", 13) }} {{ attach_error }}</p>
     </div>
     {% endif %}
 
@@ -235,7 +236,7 @@
       <input type="hidden" name="is_internal" id="isInternalInput" value="">
       {% if reply_templates %}
       <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 12px; color: var(--slate, #64748b);">💡 Predefined reply:</span>
+        <span style="font-size: 12px; color: var(--slate, #64748b);">{{ icon("lightbulb", 13) }} Predefined reply:</span>
         <select id="predefinedReplySelect" style="padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; background: var(--surface); color: var(--text-1); cursor: pointer;">
           <option value="">-- Select predefined reply --</option>
           {% for rt in reply_templates %}
@@ -255,7 +256,7 @@
       <div id="replyAttachErr" style="color:#dc2626;font-size:11.5px;margin-top:6px;display:none;"></div>
     </form>
 
-    <h3 class="section">📜 Audit log</h3>
+    <h3 class="section">{{ icon("history") }} Audit log</h3>
     {% if ticket.events %}
     <ul class="audit-feed">
       {% for e in ticket.events | reverse %}
@@ -363,7 +364,7 @@
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
         <input type="hidden" name="assignee_id" value="{{ current_user.id }}">
         <button type="submit" class="take-btn {% if ticket.assignee_id == current_user.id %}mine{% endif %}">
-          {% if ticket.assignee_id == current_user.id %}✓ Assigned to me{% else %}Take it →{% endif %}
+          {% if ticket.assignee_id == current_user.id %}{{ icon("check", 13) }} Assigned to me{% else %}Take it →{% endif %}
         </button>
       </form>
     </div>
@@ -386,7 +387,7 @@
     {# LINKED WORKSTATION #}
     {% if ticket.asset %}
     <div class="panel" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.02);">
-      <h4>🖥️ Linked Workstation</h4>
+      <h4>{{ icon("monitor", 15) }} Linked Workstation</h4>
       <dl>
         <dt>Hostname</dt>
         <dd><strong>{{ ticket.asset.hostname }}</strong></dd>
@@ -421,7 +422,7 @@
         {% endif %}
       </dl>
       <a href="/asset/{{ ticket.asset.id }}" style="display: block; margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--accent, #2563eb); text-decoration: none;">
-        ⚡ Access RMM Remote Actions →
+        {{ icon("zap", 14) }} Access RMM Remote Actions →
       </a>
     </div>
     {% endif %}
@@ -434,7 +435,7 @@
       <div class="sla-row">
         <span class="lbl">Response</span>
         <span class="val {% if ticket.first_response_at %}ok{% elif resp[1] %}breach{% endif %}">
-          {% if ticket.first_response_at %}✓ {{ ticket.first_response_at | ist }}{% else %}{{ resp[0] }}{% endif %}
+          {% if ticket.first_response_at %}{{ icon("check", 12) }} {{ ticket.first_response_at | ist }}{% else %}{{ resp[0] }}{% endif %}
         </span>
       </div>
       <div class="sla-row">
@@ -444,7 +445,7 @@
       <div class="sla-row">
         <span class="lbl">Remaining</span>
         <span class="val {% if ticket.resolved_at %}ok{% elif resol[1] %}breach{% endif %}">
-          {% if ticket.resolved_at %}✓ resolved{% else %}{{ resol[0] }}{% endif %}
+          {% if ticket.resolved_at %}{{ icon("check", 12) }} resolved{% else %}{{ resol[0] }}{% endif %}
         </span>
       </div>
     </div>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Software Subscriptions — OctoAssist{% endblock %}
 {% macro subscription_form(s, action, submit_label) %}
 <form method="post" action="{{ action }}" enctype="multipart/form-data" style="padding:10px 2px;">
@@ -58,7 +59,7 @@
       </p>
     </div>
     <div class="actions">
-      <a class="button" href="/subscriptions/windows-keys">🔑 Windows keys on endpoints</a>
+      <a class="button" href="/subscriptions/windows-keys">{{ icon("key") }} Windows keys on endpoints</a>
       <a class="button primary" href="/subscriptions/export.csv">Export CSV</a>
     </div>
   </div>
@@ -98,14 +99,14 @@
 
 {% if current_user.role == 'admin' %}
 <details class="card" style="max-width:none;margin-bottom:14px;">
-  <summary style="cursor:pointer;font-weight:600;">➕ Add a subscription</summary>
+  <summary style="cursor:pointer;font-weight:600;">{{ icon("plus", 14) }} Add a subscription</summary>
   {{ subscription_form(None, "/subscriptions/new", "Add subscription") }}
 </details>
 
 <form method="post" action="/subscriptions/import-windows" style="margin-bottom:18px;"
       onsubmit="return confirm('Create a subscription row for every endpoint reporting a Windows OEM key?\n\nSafe to re-run — existing rows are left alone.');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-  <button type="submit" class="button">🔑 Import Windows keys from endpoints</button>
+  <button type="submit" class="button">{{ icon("key") }} Import Windows keys from endpoints</button>
   <span class="meta" style="margin-left:8px;">Reads the OEM firmware key each agent already reports. Retail/volume machines report none and still need entering by hand.</span>
 </form>
 {% endif %}
@@ -132,7 +133,7 @@
           <strong>{{ s.software_name }}</strong>
           {% if current_user.role == 'admin' %}
           <button type="button" class="link-button" title="Edit this subscription"
-                  style="margin-left:6px;font-size:12px;" onclick="toggleEdit({{ s.id }})">✎ Edit</button>
+                  style="margin-left:6px;font-size:12px;" onclick="toggleEdit({{ s.id }})">{{ icon("pencil", 12) }} Edit</button>
           {% endif %}
           {% if s.agent %}<br><span class="meta" style="font-size:11.5px;">{{ s.agent.hostname }}</span>{% endif %}
         </td>
@@ -158,7 +159,7 @@
         </td>
         <td>
           {% if r.download_url %}
-            <a href="{{ r.download_url }}">📎 {{ s.attachment.original_filename[:28] }}</a>
+            <a href="{{ r.download_url }}">{{ icon("paperclip", 12) }} {{ s.attachment.original_filename[:28] }}</a>
           {% else %}—{% endif %}
         </td>
       </tr>

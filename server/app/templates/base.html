@@ -1,5 +1,5 @@
-<!doctype html>
-<html lang="en">
+{% from "_icons.html" import icon %}<!doctype html>
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -39,17 +39,6 @@
 
   {% block extra_head %}{% endblock %}
 
-  <!-- Theme applied BEFORE first paint to avoid flash. Reads localStorage,
-       sets data-theme="light" on <html> if user previously picked it. Dark
-       is the default — no attribute set means dark. -->
-  <script>
-    (function () {
-      try {
-        var t = localStorage.getItem('octoassist-theme');
-        if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
-      } catch (e) {}
-    })();
-  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
@@ -95,7 +84,7 @@
         <div class="bell-wrap" id="bellWrap">
           <button type="button" class="bell-btn" id="bellBtn"
                   aria-label="Notifications" title="Notifications">
-            <span class="bell-icon">🔔</span>
+            <span class="bell-icon">{{ icon("bell") }}</span>
             {% if _notif and _notif.total %}
             <span class="bell-badge" id="bellBadge">{{ _notif.total if _notif.total < 100 else "99+" }}</span>
             {% endif %}
@@ -117,48 +106,23 @@
               {% endfor %}
             </ul>
             {% else %}
-            <p class="bell-empty">✓ Inbox zero — nothing needs your attention right now.</p>
+            <p class="bell-empty">{{ icon("check-circle") }} Inbox zero — nothing needs your attention right now.</p>
             {% endif %}
           </div>
         </div>
 
-        <span class="who">{{ current_user.full_name or current_user.email }} <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>
-        <button type="button" class="theme-toggle" id="themeToggle"
-                aria-label="Switch theme" title="Switch between dark + light theme">
-          <span class="theme-icon-light">☀️</span>
-          <span class="theme-icon-dark">🌙</span>
-        </button>
+        <span class="who"><span class="who-name">{{ current_user.full_name or current_user.email }}</span> <span class="role-pill role-{{ current_user.role.value }}">{{ current_user.role.value }}</span></span>
         <form method="post" action="/logout" class="inline-form">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
           <button type="submit" class="link-button">Logout</button>
         </form>
       {% else %}
-        <button type="button" class="theme-toggle" id="themeToggle"
-                aria-label="Switch theme" title="Switch between dark + light theme">
-          <span class="theme-icon-light">☀️</span>
-          <span class="theme-icon-dark">🌙</span>
-        </button>
         <a href="/login">Sign in</a>
       {% endif %}
     </nav>
   </header>
 
   <script>
-    /* ----- Theme toggle ----- */
-    (function () {
-      var btn = document.getElementById('themeToggle');
-      if (!btn) return;
-      btn.addEventListener('click', function () {
-        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        if (isLight) {
-          document.documentElement.removeAttribute('data-theme');
-          try { localStorage.setItem('octoassist-theme', 'dark'); } catch (e) {}
-        } else {
-          document.documentElement.setAttribute('data-theme', 'light');
-          try { localStorage.setItem('octoassist-theme', 'light'); } catch (e) {}
-        }
-      });
-    })();
 
 
 

@@ -2800,3 +2800,33 @@ button.danger-solid:hover, .button.danger-solid:hover {
   color: white !important;
   transform: translateY(-1px) !important;
 }
+
+/* ======================================================================
+   Inline SVG icons (templates/_icons.html) + layout fixes — Sep 2026.
+   Appended after the !important override block on purpose: at equal
+   specificity the later rule wins, so these need no !important of their own.
+   ====================================================================== */
+.ico { display: inline-block; vertical-align: -0.18em; flex-shrink: 0; }
+.button .ico, button .ico, .link-button .ico, a.button .ico { margin-right: 5px; vertical-align: -0.2em; }
+h1 .ico, h2 .ico, h3 .ico, h4 .ico { color: var(--accent); margin-right: 6px; vertical-align: -0.12em; }
+.bell-icon { display: inline-flex; align-items: center; }
+.bell-btn .ico { vertical-align: middle; }
+.kpi-label .online-dot { vertical-align: 0; margin-right: 4px; }
+
+/* Filter bars: the 160px min-width meant for selects/inputs was also
+   stretching checkboxes, which is why "Mine" sat 80px from its box. */
+.filters input[type="checkbox"] { min-width: 0; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.filters .checkbox { padding-bottom: 10px; }
+
+/* Topbar has ten links + bell + user + logout; fit common laptop widths
+   without wrapping. Nav padding tightens first, then the user's name goes
+   (the role pill stays so the account is still identifiable). */
+@media (max-width: 1440px) {
+  .topbar nav a { padding: 7px 8px; font-size: 13px; }
+  .topbar nav .who { padding: 5px 8px; margin-left: 4px; }
+}
+@media (max-width: 1300px) {
+  .topbar nav a { padding: 7px 6px; font-size: 12.5px; }
+  .topbar nav .who .who-name { display: none; }
+  .brand-mark { display: none; }
+}

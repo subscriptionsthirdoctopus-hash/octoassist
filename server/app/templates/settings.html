@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Settings — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head" style="margin-bottom: 24px;">
@@ -8,7 +9,7 @@
       <p class="meta" style="margin: 0;">Configure your enterprise ITSM workspace parameters and directory integrations</p>
     </div>
     <div style="position: relative; display: flex; align-items: center;">
-      <span style="position: absolute; left: 12px; font-size: 13.5px; opacity: 0.6; pointer-events: none;">🔍</span>
+      <span style="position: absolute; left: 11px; display: inline-flex; opacity: 0.55; pointer-events: none;">{{ icon("search", 15) }}</span>
       <input type="text" id="settingsSearchInput" placeholder="Search settings (e.g. SLA, Users, SSO)..." style="padding: 8px 14px 8px 34px; border-radius: var(--r-sm); border: 1px solid var(--line); font-size: 13px; width: 320px; background: rgba(255, 255, 255, 0.02); min-height: 0;" autofocus>
     </div>
   </div>
@@ -40,7 +41,7 @@
     box-shadow: 0 8px 20px rgba(0,0,0,0.08);
     border-left-color: var(--navy, #0f172a);
   }
-  .settings-tile .icon { font-size: 26px; line-height: 1; margin-bottom: 8px; display: block; }
+  .settings-tile .icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 12px; }
   .settings-tile .tile-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
   .settings-tile .tile-sub { font-size: 12.5px; color: var(--slate, #64748b); margin: 0; line-height: 1.45; }
   .settings-tile .tile-meta { font-size: 11px; color: var(--slate, #64748b); margin-top: 10px; }
@@ -49,70 +50,70 @@
 <div class="settings-grid">
 
   <a href="/users" class="settings-tile">
-    <span class="icon">👤</span>
+    <span class="icon">{{ icon("user", 20) }}</span>
     <p class="tile-title">Users</p>
     <p class="tile-sub">Local OctoAssist accounts — admin / technician / requester roles. Add, deactivate, reset.</p>
     <p class="tile-meta">{{ users_count }} active user{{ "" if users_count == 1 else "s" }}</p>
   </a>
 
   <a href="/settings/identity" class="settings-tile">
-    <span class="icon">🔐</span>
+    <span class="icon">{{ icon("lock", 20) }}</span>
     <p class="tile-title">Single Sign-On</p>
     <p class="tile-sub">Microsoft Entra ID, OIDC providers, auto-provision rules, allowed email domains.</p>
     <p class="tile-meta">{{ idps_count }} provider{{ "" if idps_count == 1 else "s" }} configured</p>
   </a>
 
   <a href="/settings/sla" class="settings-tile">
-    <span class="icon">⏱</span>
+    <span class="icon">{{ icon("clock", 20) }}</span>
     <p class="tile-title">SLA Matrix</p>
     <p class="tile-sub">Per-category response &amp; resolution targets. Drives breach detection across the dashboard.</p>
     <p class="tile-meta">{{ categories_count }} categor{{ "y" if categories_count == 1 else "ies" }}</p>
   </a>
 
   <a href="/settings/notifications" class="settings-tile">
-    <span class="icon">📧</span>
+    <span class="icon">{{ icon("mail", 20) }}</span>
     <p class="tile-title">Notifications</p>
     <p class="tile-sub">Mail provider (SMTP or Microsoft Graph), notification email, send test.</p>
     <p class="tile-meta">Provider: {{ tenant.mail_provider or "smtp" }}</p>
   </a>
 
   <a href="/settings/tenant" class="settings-tile">
-    <span class="icon">🏢</span>
+    <span class="icon">{{ icon("building", 20) }}</span>
     <p class="tile-title">Tenant</p>
     <p class="tile-sub">Tenant name, enrolment key, agent install one-liner.</p>
     <p class="tile-meta">Created {{ tenant.created_at | istdate }}</p>
   </a>
 
   <a href="/settings/reply-templates" class="settings-tile">
-    <span class="icon">💬</span>
+    <span class="icon">{{ icon("message", 20) }}</span>
     <p class="tile-title">Predefined Replies</p>
     <p class="tile-sub">Predefined replies/canned solutions technicians can insert instantly when answering tickets.</p>
     <p class="tile-meta">{{ reply_templates_count }} template{{ "" if reply_templates_count == 1 else "s" }} configured</p>
   </a>
 
   <a href="/settings/holidays" class="settings-tile">
-    <span class="icon">📅</span>
+    <span class="icon">{{ icon("calendar", 20) }}</span>
     <p class="tile-title">Holidays &amp; SLA Cal</p>
     <p class="tile-sub">Customise business holidays and weekends to adjust SLA due calculation targets.</p>
     <p class="tile-meta">{{ holidays_count }} holiday{{ "" if holidays_count == 1 else "s" }} configured</p>
   </a>
 
   <a href="/settings/categories-routing" class="settings-tile">
-    <span class="icon">🎯</span>
+    <span class="icon">{{ icon("target", 20) }}</span>
     <p class="tile-title">Category routing</p>
     <p class="tile-sub">Per-category default ticket assignee — Network → one tech, Endpoints → another. Falls back when no location rule matches.</p>
     <p class="tile-meta">{{ category_rules_count }} rule{{ "" if category_rules_count == 1 else "s" }}</p>
   </a>
 
   <a href="/settings/locations" class="settings-tile">
-    <span class="icon">📍</span>
+    <span class="icon">{{ icon("pin", 20) }}</span>
     <p class="tile-title">Locations &amp; Routing</p>
     <p class="tile-sub">Per-office default ticket assignee — e.g. Mumbai tickets auto-assign to a Mumbai technician on creation.</p>
     <p class="tile-meta">{{ location_rules_count }} routing rule{{ "" if location_rules_count == 1 else "s" }}</p>
   </a>
 
   <a href="/settings/cab" class="settings-tile">
-    <span class="icon">👥</span>
+    <span class="icon">{{ icon("users", 20) }}</span>
     <p class="tile-title">CAB Members</p>
     <p class="tile-sub">Change Advisory Board — pick users from your Entra ID directory. CAB members get emailed on every change and every new incident.</p>
     <p class="tile-meta">{{ cab_count }} member{{ "" if cab_count == 1 else "s" }} on the board</p>
@@ -120,28 +121,28 @@
 
 
   <a href="/reports/library" class="settings-tile">
-    <span class="icon">📊</span>
+    <span class="icon">{{ icon("chart", 20) }}</span>
     <p class="tile-title">Reports</p>
     <p class="tile-sub">All downloadable ITSM reports — tickets, SLA breaches, backlog aging, workload, problems, changes, CAB decisions, assets, patches, access, KB, audit trail. Every report exports as CSV. ISO 27001:2022 controls cited where they apply.</p>
     <p class="tile-meta">25+ reports, all CSV-exportable</p>
   </a>
 
   <a href="/settings/software-catalog" class="settings-tile">
-    <span class="icon">📦</span>
+    <span class="icon">{{ icon("package", 20) }}</span>
     <p class="tile-title">Software catalog</p>
     <p class="tile-sub">Curate the installers your team pushes — Chrome, Acrobat, VPN client, LOB apps — with silent-install args and uninstall commands. Picked from a dropdown on the Deploy software page.</p>
     <p class="tile-meta">{{ catalog_count }} package{{ "" if catalog_count == 1 else "s" }} in catalog</p>
   </a>
 
   <a href="/settings/groups" class="settings-tile">
-    <span class="icon">🖥️</span>
+    <span class="icon">{{ icon("monitor", 20) }}</span>
     <p class="tile-title">Asset Groups</p>
     <p class="tile-sub">Curate custom groups of workstations/servers to target software uninstalls/updates and patch deployments in bulk.</p>
     <p class="tile-meta">{{ asset_groups_count }} group{{ "" if asset_groups_count == 1 else "s" }} configured</p>
   </a>
 
   <a href="/actions" class="settings-tile">
-    <span class="icon">⚡</span>
+    <span class="icon">{{ icon("zap", 20) }}</span>
     <p class="tile-title">Remote Actions</p>
     <p class="tile-sub">Audit log of every remote action queued or executed on endpoints — reboots, lock, custom PowerShell, wallpaper, password resets.</p>
     <p class="tile-meta">View history &amp; filter</p>
