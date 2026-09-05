@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Tenant — Settings{% endblock %}
 {% block content %}
 <section class="page-head">
   <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
-  <h1>🏢 Tenant</h1>
+  <h1>{{ icon("building", 24) }} Tenant</h1>
   <p class="meta">Organisation name, enrolment key, agent install one-liner.</p>
 </section>
 
@@ -45,7 +46,7 @@
 <!-- Google Search Console & Search Engine Optimization (SEO) Settings -->
 <div class="card" style="margin-top:16px; border-left:4px solid var(--accent, #2563eb);">
   <h3 style="margin:0 0 10px; display:flex; align-items:center; gap:8px;">
-    <span style="font-size:20px;">🔍</span> Search Engine Discovery &amp; Google Indexing
+    {{ icon("search", 20) }} Search Engine Discovery &amp; Google Indexing
   </h3>
   <p class="meta" style="margin:0 0 16px;">
     Configure metadata, descriptions, and site verification codes to ensure OctoAssist is discoverable, optimized, and beautifully indexed on Google Search pages.
@@ -79,7 +80,7 @@
 <!-- TEMA India Licensing Overview -->
 <div class="card" style="margin-top:16px;border-left:4px solid var(--green,#10b981);">
   <h3 style="margin:0 0 14px;display:flex;align-items:center;gap:8px;">
-    <span style="font-size:20px;">📜</span> TEMA India License &amp; Support Agreement
+    {{ icon("file", 20) }} TEMA India License &amp; Support Agreement
   </h3>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
     <div style="background:var(--surface-2);padding:12px 16px;border:1px solid var(--line);border-radius:6px;">

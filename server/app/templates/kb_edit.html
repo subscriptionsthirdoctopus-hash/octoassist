@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{% if article %}Edit{% else %}New article{% endif %} — KB{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -55,7 +56,7 @@
 {% if article and current_user.role.value == "admin" %}
 <form method="post" action="/kb/{{ article.id }}/delete" class="inline-form" style="margin-top:24px; display: block;" onsubmit="return confirm('Delete this article? This cannot be undone.');">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
-  <button type="submit" class="button danger-solid">🗑️ Delete Article</button>
+  <button type="submit" class="button danger-solid">{{ icon("trash", 14) }} Delete Article</button>
 </form>
 {% endif %}
 {% endblock %}

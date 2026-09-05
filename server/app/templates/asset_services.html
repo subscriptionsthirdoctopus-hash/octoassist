@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Services — {{ agent.hostname }}{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -89,7 +90,7 @@
             <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
             <input type="hidden" name="name" value="{{ s.Name }}">
             <input type="hidden" name="action" value="stop">
-            <button type="submit" class="button" style="padding:2px 8px; font-size:11px; background:#fef2f2; border-color:#fecaca; color:#b91c1c;">✕ Stop</button>
+            <button type="submit" class="button" style="padding:2px 8px; font-size:11px; background:#fef2f2; border-color:#fecaca; color:#b91c1c;">{{ icon("x", 11) }} Stop</button>
           </form>
           {% endif %}
           

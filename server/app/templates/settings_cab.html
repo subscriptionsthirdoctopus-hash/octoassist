@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}CAB Members — Settings{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
-    <h1>👥 CAB Management</h1>
+    <h1>{{ icon("users", 24) }} CAB Management</h1>
     <p class="meta"><a href="/settings">← All settings</a> · Configure change advisory boards and custom risk committees.</p>
   </div>
 </section>

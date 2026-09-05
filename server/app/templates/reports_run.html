@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ title }} — Reports{% endblock %}
 {% block content %}
 
@@ -53,7 +54,7 @@
   </label>
   {% endif %}
   <button type="submit" class="primary">Apply filters</button>
-  <a href="{{ csv_url }}" class="button" style="background:var(--green); border-color:var(--green); color:white;">⬇ Download CSV</a>
+  <a href="{{ csv_url }}" class="button" style="background:var(--green); border-color:var(--green); color:white;">{{ icon("download", 13) }} Download CSV</a>
 </form>
 
 <p class="preview-meta">Preview: showing {{ rows|length }} row{{ "" if rows|length == 1 else "s" }}{% if rows|length >= 500 %} (truncated — download CSV for full set){% endif %}.</p>
@@ -108,7 +109,7 @@
       <td><span class="prio prio-{{ p.priority.value }}">{{ p.priority.value }}</span></td>
       <td style="font-size:12.5px;">{{ p.status.value.replace("_"," ") }}</td>
       <td style="font-size:12.5px;">{{ p.linked_tickets|length }}</td>
-      <td>{% if p.root_cause %}<span style="color:var(--green);">✓ documented</span>{% else %}<span style="color:var(--text-4);">— not yet</span>{% endif %}</td>
+      <td>{% if p.root_cause %}<span style="color:var(--green);">{{ icon("check", 12) }} documented</span>{% else %}<span style="color:var(--text-4);">— not yet</span>{% endif %}</td>
       <td style="font-size:12.5px;color:var(--text-3);">{{ p.created_at | ist }}</td>
     </tr>
     {% endfor %}

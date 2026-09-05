@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Asset Groups — Settings — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -58,7 +59,7 @@
       <td><span class="role-pill" style="background:var(--navy); color:white; font-size:11px; padding:2px 8px;">{{ group_counts[g.id] }} agent{{ "" if group_counts[g.id] == 1 else "s" }}</span></td>
       <td>
         <div style="display:flex; gap:12px; align-items:center;">
-          <a href="/settings/groups/{{ g.id }}/members" class="button" style="padding:4px 8px; font-size:12px;">⚙️ Manage Members</a>
+          <a href="/settings/groups/{{ g.id }}/members" class="button" style="padding:4px 8px; font-size:12px;">{{ icon("users", 12) }} Manage Members</a>
           <form method="post" action="/settings/groups/{{ g.id }}/delete" class="inline-form" onsubmit="return confirm('Delete group \'{{ g.name|e }}\'? All endpoint associations will be removed, but assets themselves will not be modified.');">
             <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
             <button type="submit" class="link-button" style="color:#dc2626; font-size:12px;">delete</button>

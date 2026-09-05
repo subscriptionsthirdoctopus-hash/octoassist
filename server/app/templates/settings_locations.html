@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Locations & Routing — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -15,7 +16,7 @@
 </section>
 {% if orphan_rules or stale_assignee_rules or unrouted_locations %}
 <section class="card" style="max-width:none;margin-bottom:16px;border-left:4px solid var(--amber);">
-  <h3 style="margin-top:0;">⚠ Routing gaps</h3>
+  <h3 style="margin-top:0;">{{ icon("alert", 14) }} Routing gaps</h3>
   {% if orphan_rules %}
   <p style="margin:0 0 6px;font-size:13px;line-height:1.55;">
     These rules match <strong>no user or asset location</strong>, so they never fire — usually a spelling mismatch:

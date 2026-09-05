@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Reports — OctoAssist{% endblock %}
 {% block content %}
 
@@ -24,7 +25,7 @@
 
 <section class="rlib-head">
   <p style="margin:0 0 6px;"><a href="/reports" style="color:var(--accent); font-size:12.5px;">← Operational dashboard</a></p>
-  <h1>📊 Reports</h1>
+  <h1>{{ icon("chart", 24) }} Reports</h1>
   <p class="sub">
     Every ITSM report — operational, governance, audit. Filter on date or status, preview the top 500 rows,
     download the full result as a UTF-8 CSV. ISO 27001:2022 Annex A control references are shown where they
@@ -49,7 +50,7 @@
     <p class="summary">{{ r.summary | safe }}</p>
     <div class="actions">
       <a class="button primary" href="{{ r.preview }}">Preview →</a>
-      <a class="button csv" href="{{ r.csv }}">⬇ Download CSV</a>
+      <a class="button csv" href="{{ r.csv }}">{{ icon("download", 13) }} Download CSV</a>
     </div>
   </div>
   {% endfor %}
@@ -57,7 +58,7 @@
 {% endfor %}
 
 <section class="card" style="margin-top:28px; max-width:none; background:var(--bg); border-color:var(--line);">
-  <h3 style="margin:0 0 8px; font-size:13px;">📌 Tips</h3>
+  <h3 style="margin:0 0 8px; font-size:13px;">{{ icon("lightbulb", 13) }} Tips</h3>
   <ul style="margin:0; padding-left:20px; font-size:12.5px; line-height:1.65; color:var(--text-3);">
     <li><strong>Preview first, then export.</strong> Each preview applies the same filters as the CSV, so you can verify the row count before downloading.</li>
     <li><strong>Filenames are control-tagged and dated</strong> (e.g. <code>iso27001-A.8.32-changes-20260519.csv</code>) — drop straight into your audit folder.</li>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Choose packages — {{ window.name }}{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -60,7 +61,7 @@
     <table class="data" style="max-width:none;">
       <thead>
         <tr>
-          <th style="width:36px;">✓</th>
+          <th style="width:36px;">{{ icon("check", 12) }}</th>
           <th>Vendor / OEM</th>
           <th>Package</th>
           <th>Severity</th>

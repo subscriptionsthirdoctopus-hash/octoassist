@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Processes — {{ agent.hostname }}{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -61,7 +62,7 @@
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
           <input type="hidden" name="pid" value="{{ p.Id }}">
           <input type="hidden" name="name" value="{{ p.Name }}">
-          <button type="submit" class="link-button" style="color:#dc2626;">✕ Kill</button>
+          <button type="submit" class="link-button" style="color:#dc2626;">{{ icon("x", 12) }} Kill</button>
         </form>
       </td>
     </tr>

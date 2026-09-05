@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Software catalog — Settings{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
-    <h1>📦 Software catalog</h1>
+    <h1>{{ icon("package", 24) }} Software catalog</h1>
     <p class="meta"><a href="/settings">← All settings</a> · {{ rows|length }} package{{ "" if rows|length == 1 else "s" }} curated</p>
   </div>
 </section>
@@ -26,7 +27,7 @@
 </section>
 
 <details class="card" style="max-width:none; margin-bottom:16px;" {% if rows|length == 0 %}open{% endif %}>
-  <summary style="cursor:pointer; font-weight:600; font-size:14px;">➕ Add new package</summary>
+  <summary style="cursor:pointer; font-weight:600; font-size:14px;">{{ icon("plus", 14) }} Add new package</summary>
   <form method="post" action="/settings/software-catalog/new" style="display:grid; gap:12px; margin-top:14px;">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
     <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px;">

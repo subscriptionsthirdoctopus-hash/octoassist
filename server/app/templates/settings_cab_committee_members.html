@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ committee.name }} — Members — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
-    <h1>👥 Manage Committee Members</h1>
+    <h1>{{ icon("users", 24) }} Manage Committee Members</h1>
     <p class="meta"><a href="/settings/cab/committees">← Back to Committees</a> · {{ committee.members|length }} current member{{ "" if committee.members|length == 1 else "s" }} in <strong>{{ committee.name }}</strong></p>
   </div>
 </section>

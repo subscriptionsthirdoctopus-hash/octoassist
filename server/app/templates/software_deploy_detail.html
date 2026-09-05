@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Deploy #{{ action.id }} — {{ action.params.get('label', '—') }}{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -15,8 +16,8 @@
   <div class="card">
     <h3 style="margin:0 0 6px;font-size:13px;color:var(--slate);text-transform:uppercase;letter-spacing:1px;">Status</h3>
     {% set s = action.status.value %}
-    {% if s == 'succeeded' %}<p style="font-size:22px;margin:0;color:#16a34a;font-weight:700;">✓ Succeeded</p>
-    {% elif s == 'failed' %}<p style="font-size:22px;margin:0;color:#dc2626;font-weight:700;">✗ Failed</p>
+    {% if s == 'succeeded' %}<p style="font-size:22px;margin:0;color:#16a34a;font-weight:700;">{{ icon("check", 20) }} Succeeded</p>
+    {% elif s == 'failed' %}<p style="font-size:22px;margin:0;color:#dc2626;font-weight:700;">{{ icon("x", 20) }} Failed</p>
     {% elif s == 'in_progress' %}<p style="font-size:22px;margin:0;color:#d97706;font-weight:700;">⏳ Running</p>
     {% elif s == 'cancelled' %}<p style="font-size:22px;margin:0;color:var(--text-3);font-weight:700;">⊘ Cancelled</p>
     {% else %}<p style="font-size:22px;margin:0;color:var(--text-3);font-weight:700;">⏱ Queued</p>{% endif %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ detail.product }} — Software (SAM){% endblock %}
 {% block content %}
 <section class="page-head">
@@ -24,7 +25,7 @@
       </p>
     </div>
     <div class="actions">
-      <a class="button primary" href="/software/product/{{ detail.publisher|urlencode }}/{{ detail.product|urlencode }}/export.csv" style="background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: white; display: inline-flex; align-items: center; gap: 6px;">⬇ Export Installs CSV</a>
+      <a class="button primary" href="/software/product/{{ detail.publisher|urlencode }}/{{ detail.product|urlencode }}/export.csv" style="background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: white; display: inline-flex; align-items: center; gap: 6px;">{{ icon("download") }} Export Installs CSV</a>
     </div>
   </div>
 </section>
@@ -61,7 +62,7 @@
   <input type="hidden" name="product" value="{{ detail.product }}">
 
   <section class="card" style="margin-bottom:18px; border-left:4px solid var(--accent,#2563eb); background:var(--surface);">
-    <h2 style="margin:0 0 10px 0; font-size:18px; display:flex; align-items:center; gap:8px;">⚡ Administrator Actions: Remote Software Control</h2>
+    <h2 style="margin:0 0 10px 0; font-size:18px; display:flex; align-items:center; gap:8px;">{{ icon("zap", 16) }} Administrator Actions: Remote Software Control</h2>
     <p class="meta" style="margin:0 0 14px 0;">
       Queue a background remote action for matching endpoints. If the package exists in the Software Catalog, its installer will run. For uninstalls, the system will automatically search the endpoint's registry and run the uninstaller silently.
     </p>

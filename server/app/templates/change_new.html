@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}New Change — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -36,7 +37,7 @@
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
 
   <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:10px 14px;border-radius:6px;margin-bottom:6px;">
-    <label style="font-weight:600;color:var(--accent);display:block;margin-bottom:6px;">⚡ Quick-start scenario <span class="meta" style="font-weight:400;">— pick the closest match, then tweak the details below.</span></label>
+    <label style="font-weight:600;color:var(--accent);display:block;margin-bottom:6px;">{{ icon("zap", 14) }} Quick-start scenario <span class="meta" style="font-weight:400;">— pick the closest match, then tweak the details below.</span></label>
     <select id="scenarioPicker" style="width:100%;padding:8px 10px;border:1px solid #93c5fd;border-radius:6px;background:var(--surface);font-size:13px;">
       <option value="">— start from scratch —</option>
       <option value="patch">Server patching window</option>

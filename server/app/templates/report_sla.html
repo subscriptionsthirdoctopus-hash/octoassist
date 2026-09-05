@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}SLA Report — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -79,7 +80,7 @@
     </tbody>
   </table>
   {% else %}
-  <div class="empty"><p>No tickets currently in breach. 🎯</p></div>
+  <div class="empty"><p>{{ icon("check-circle", 16) }} No tickets currently in breach.</p></div>
   {% endif %}
 </section>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ window.name }} — Patch window{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -57,7 +58,7 @@
 
 {% if window.status.value == 'in_progress' and (progress.counts.failed + progress.counts.skipped) > 0 %}
 <section class="card" style="margin-bottom:16px;background:#fee2e2;border-left:4px solid #dc2626;">
-  <h3 style="margin:0 0 6px;font-size:14px;">⚠ {{ progress.counts.failed }} failed / {{ progress.counts.skipped }} skipped target(s)</h3>
+  <h3 style="margin:0 0 6px;font-size:14px;">{{ icon("alert", 14) }} {{ progress.counts.failed }} failed / {{ progress.counts.skipped }} skipped target(s)</h3>
   <p style="margin:0 0 10px;font-size:13px;line-height:1.5;">
     Click <strong>Retry failed targets</strong>. Targets flip back to
     <code>planned</code>; agents re-attempt them on the next <strong>30-second
@@ -161,7 +162,7 @@
   {% endif %}
 
   <div class="card" style="border-left:4px solid #dc2626;">
-    <h3 style="color:#dc2626;">🗑️ Delete</h3>
+    <h3 style="color:#dc2626;">{{ icon("trash", 14) }} Delete</h3>
     <p class="meta" style="margin:0 0 8px;font-size:12.5px;">
       Removes this window + all targets + attempt history. Use when this was a mistake,
       or to clean up old / cancelled deployments. Cannot delete while any target is
@@ -232,7 +233,7 @@
             <input type="hidden" name="kind" value="force_refresh">
             <button type="submit" class="button primary" style="padding:4px 10px;font-size:12px;"
                     onclick="return confirm('Trigger immediate check-in on {{ t.agent.hostname|e }}?\n\nThe agent pulls this deployment from the queue and installs within seconds. Runs silently as SYSTEM — no user prompt on the endpoint.');">
-              ⚡ Trigger check-in on {{ t.agent.hostname }}
+              {{ icon("zap", 12) }} Trigger check-in on {{ t.agent.hostname }}
             </button>
           </form>
           {% endif %}

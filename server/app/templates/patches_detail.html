@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Patches — {{ agent.hostname }}{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -112,7 +113,7 @@
 </form>
 {% else %}
 <div class="empty">
-  <h2>This endpoint is fully patched 🎯</h2>
+  <h2>{{ icon("check-circle", 20) }} This endpoint is fully patched</h2>
   <p>No missing patches reported on the last check-in.</p>
 </div>
 {% endif %}

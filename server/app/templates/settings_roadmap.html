@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Roadmap — Settings{% endblock %}
 {% block content %}
 <section class="page-head">
   <p class="meta" style="margin:0;"><a href="/settings">← Settings</a></p>
-  <h1>🗺️ Roadmap &amp; Status</h1>
+  <h1>{{ icon("map", 24) }} Roadmap &amp; Status</h1>
   <p class="meta">Every feature, where it stands. Updated as builds ship.</p>
 </section>
 
@@ -36,7 +37,7 @@
       <p class="road-title">Settings reorganised into clickable tiles + Users moved in</p>
       <p class="road-sub">Top nav cleaned up. Settings is a 6-tile grid (Users / SSO / SLA / Notifications / Tenant / Roadmap). Each tile opens its own dedicated page.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">no risk</div>
   </div>
@@ -47,7 +48,7 @@
       <p class="road-title">Remote-action framework</p>
       <p class="road-sub">Generic command channel: <code>remote_actions</code> table + 3 API endpoints + agent dispatcher with 6 handler slots. Adding a new action = enum value + handler, no new PowerShell on endpoints.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">foundational</div>
   </div>
@@ -58,7 +59,7 @@
       <p class="road-title">Run .exe / .msi action + Software → Deploy tab</p>
       <p class="road-sub">Push installers via URL. <a href="/software/deploy">/software/deploy</a> form → agent runs as SYSTEM with silent args → captures exit/stdout/stderr → reports back. End-user sees nothing on the laptop.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -67,9 +68,9 @@
     <div class="road-num">4</div>
     <div>
       <p class="road-title">List + kill running processes (per-asset tab)</p>
-      <p class="road-sub">Per-endpoint <a href="/assets">Process list</a> page. Click ↻ Refresh → agent returns top 60 processes by RAM within 30 sec. Per-row ✕ Kill button runs <code>Stop-Process -Id -Force</code>.</p>
+      <p class="road-sub">Per-endpoint <a href="/assets">Process list</a> page. Click Refresh → agent returns top 60 processes by RAM within 30 sec. Per-row Kill button runs <code>Stop-Process -Id -Force</code>.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -80,7 +81,7 @@
       <p class="road-title">Reboot now · Lock workstation · Send notification</p>
       <p class="road-sub">One-click buttons in the <strong>Quick Actions</strong> panel on every asset page. Reboot with 60-sec grace (user sees Windows balloon). Lock = <code>rundll32 user32.dll,LockWorkStation</code>. Notification = msg.exe to every active session.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -91,7 +92,7 @@
       <p class="road-title">Set wallpaper</p>
       <p class="road-sub">Paste an image URL, agent downloads to <code>%ProgramData%\OctoAssist\wallpaper.jpg</code>, sets it per-user via registry + <code>SystemParametersInfo</code>. Triggered from the Quick Actions panel.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -102,7 +103,7 @@
       <p class="road-title">Reset local user password</p>
       <p class="road-sub">Quick Actions modal asks for username + new password. Agent runs <code>net user &lt;u&gt; &lt;pw&gt;</code> as SYSTEM. Password is scrubbed from the audit log; only the admin who ran it is recorded.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">credentials</div>
   </div>
@@ -113,7 +114,7 @@
       <p class="road-title">Custom PowerShell (break-glass)</p>
       <p class="road-sub">Red "Run PowerShell" button on asset page. 10-min subprocess cap; full stdout + stderr captured to the audit log. Use sparingly — last resort for things not in the curated catalog.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">high power</div>
   </div>
@@ -124,7 +125,7 @@
       <p class="road-title">Entra-only Windows asset discovery</p>
       <p class="road-sub">App-permissions to Graph (Device.Read.All). Windows endpoints flow in from your Entra tenant — no dummy data, no manual CSV. Includes the manual-add escape hatch for non-domain laptops.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">tenant-bound</div>
   </div>
@@ -135,7 +136,7 @@
       <p class="road-title">Location-aware ticket routing</p>
       <p class="road-sub">Derive a ticket's office location from the reporter's primary asset (Entra deviceLocation or manual mapping). <a href="/settings/locations">/settings/locations</a> rules auto-assign Mumbai tickets to a Mumbai technician on creation.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -146,7 +147,7 @@
       <p class="road-title">Users + Assets — search, filter, bulk delete, manual add</p>
       <p class="road-sub">Both lists got the same toolkit: typeahead search, role/status filters, bulk select with checkbox + delete bar, manual add for non-Entra endpoints. Sticky top nav added across all pages.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">no risk</div>
   </div>
@@ -157,7 +158,7 @@
       <p class="road-title">Bulk patch deploy</p>
       <p class="road-sub">Hand-pick endpoints × hand-pick packages from a single page. Bypass hostname_pattern when you need ad-hoc rollout. Builds on the existing PatchWindow / PatchWindowTarget pipeline so observation + audit still apply.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -168,7 +169,7 @@
       <p class="road-title">Per-category ticket auto-assignment</p>
       <p class="road-sub">Fallback chain when no location rule matches: <a href="/settings/categories-routing">/settings/categories-routing</a> sends Network tickets to one tech, Endpoint tickets to another, regardless of reporter location.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -179,7 +180,7 @@
       <p class="road-title">End-user portal polish</p>
       <p class="road-sub">/portal got search + status filter, open-ticket count, category icons, multipart attachments on new-ticket + comment, visual status timeline (open → in_progress → resolved → closed). Reuses the UploadedFile storage volume.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">medium</div>
     <div class="road-meta">low risk</div>
   </div>
@@ -190,7 +191,7 @@
       <p class="road-title">Knowledge Base in the portal</p>
       <p class="road-sub">Self-service before ticket: <a href="/portal/kb">/portal/kb</a> link in the dashboard header, KB suggestions when /portal has zero open tickets, per-category hints on the new-ticket form that swap as the user picks a category. Deflects volume from the 300-staff base.</p>
     </div>
-    <div style="text-align:center;"><span class="pill-done">✓ Live</span></div>
+    <div style="text-align:center;"><span class="pill-done">{{ icon("check", 11) }} Live</span></div>
     <div class="road-meta">small</div>
     <div class="road-meta">low risk</div>
   </div>
