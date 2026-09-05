@@ -1,0 +1,8 @@
+// Local override (5 Sep 2026). Kernel/security updates otherwise sit waiting
+// for a manual reboot for months. 21:30 UTC = 03:00 IST, after the 21:15
+// OctoAssist backup; every container has a restart policy and sshd is
+// socket-activated, verified by the manual reboot the same day.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "21:30";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
