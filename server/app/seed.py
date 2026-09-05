@@ -45,10 +45,11 @@ def run(db: Session) -> None:
         db.refresh(tenant)
         log.info("Bootstrapped tenant '%s' enrolment_key=%s", tenant.name, tenant.enrolment_key)
     elif tenant.name == "Third Octopus" and tenant.name != settings.tenant_name:
+        old_name = tenant.name
         tenant.name = settings.tenant_name
         db.commit()
         db.refresh(tenant)
-        log.info("Auto-renamed legacy tenant 'Third Octopus' to '%s'", tenant.name)
+        log.info("Renamed legacy tenant %r to %r", old_name, tenant.name)
 
     # Bootstrap admin user from env
     admin = db.query(User).filter(User.email == settings.admin_email).first()
