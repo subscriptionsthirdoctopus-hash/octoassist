@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timezone, date
 
 from sqlalchemy import (
-    String, Integer, DateTime, ForeignKey, Index, Text, Boolean, Enum, Date,
+    String, Integer, DateTime, ForeignKey, Index, Text, Boolean, Enum, Date, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,7 +34,10 @@ class Tenant(Base):
     # outlook.com, hotmail.com, live.com, msn.com, or *.onmicrosoft.com)
     # used as the destination for OctoAssist notifications.
     notification_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    notification_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict, server_default="'{}'::jsonb")
+    # text(), not a plain string: SQLAlchemy quotes a string server_default as a
+    # literal, which produced DEFAULT '''{}''::jsonb' and broke create_all on
+    # every fresh database (caught by the CI smoke test, 5 Sep 2026).
+    notification_settings: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict, server_default=text("'{}'::jsonb"))
     # Phase 7+8: outbound mail for OctoAssist → admin notifications.
     # smtp_password and graph_client_secret are encrypted at rest via app/crypto.py.
     mail_provider: Mapped[str] = mapped_column(String(16), nullable=False, default="smtp")
