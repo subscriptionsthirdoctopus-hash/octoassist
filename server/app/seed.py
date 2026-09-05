@@ -44,7 +44,7 @@ def run(db: Session) -> None:
         db.commit()
         db.refresh(tenant)
         log.info("Bootstrapped tenant '%s' enrolment_key=%s", tenant.name, tenant.enrolment_key)
-    elif tenant.name == "Third Octopus":
+    elif tenant.name == "Third Octopus" and tenant.name != settings.tenant_name:
         tenant.name = settings.tenant_name
         db.commit()
         db.refresh(tenant)
