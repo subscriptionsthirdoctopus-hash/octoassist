@@ -3134,3 +3134,21 @@ html.sb-collapsed .sb-group { border-top-color: rgba(255, 255, 255, 0.08); }
 .sb-user-role { color: #64748b; }
 .sb-user .sb-logout { color: #94a3b8 !important; }
 .sb-user .sb-logout:hover { background: rgba(239, 68, 68, 0.18) !important; color: #fca5a5 !important; }
+
+/* KPI strips: fixed column counts so the last tile never wraps alone.
+   Outranks the templates' inline `.kpi-strip` / `.conn-strip` auto-fit rules. */
+body.has-sidebar .kpi-strip { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+body.has-sidebar .conn-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1180px) {
+  body.has-sidebar .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body.has-sidebar .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.has-sidebar .conn-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* The legacy ≤720px rule stacks .topbar into a column; the shell topbar must
+   stay a single row (toggle · crumb · bell) on phones. */
+@media (max-width: 720px) {
+  body.has-sidebar .topbar { flex-direction: row; align-items: center; gap: 8px; }
+  body.has-sidebar .tb-crumb { display: none; }
+}
