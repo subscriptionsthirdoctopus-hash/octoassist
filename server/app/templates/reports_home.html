@@ -160,19 +160,19 @@
     <p class="kpi-sub">{{ kpi.tickets_at_risk }} past resolution SLA</p>
   </div>
   <div class="kpi-card" data-kpi="tickets_resolved_7d">
-    <p class="kpi-label">Resolved (last {{ active_days }}d)</p>
+    <p class="kpi-label">Closed (last {{ active_days }}d)</p>
     <p class="kpi-value">{{ kpi.tickets_resolved_7d }}</p>
-    <p class="kpi-sub">across all priorities</p>
+    <p class="kpi-sub">closed tickets only</p>
   </div>
   <div class="kpi-card">
     <p class="kpi-label">MTTR (last {{ active_days }}d)</p>
     <p class="kpi-value">{{ kpi.mttr_human }}</p>
-    <p class="kpi-sub">mean time to resolution</p>
+    <p class="kpi-sub">mean time to resolution, closed tickets</p>
   </div>
   <div class="kpi-card">
     <p class="kpi-label">SLA — resolution</p>
     <p class="kpi-value">{{ sla.resolution_pct }}<span class="kpi-unit">%</span></p>
-    <p class="kpi-sub">{{ sla.resolution_within }} of {{ sla.total_resolved }} within SLA</p>
+    <p class="kpi-sub">{{ sla.resolution_within }} of {{ sla.total_resolved }} closed within SLA</p>
   </div>
   <div class="kpi-card" data-kpi="changes_in_flight">
     <p class="kpi-label">Changes in flight</p>
@@ -293,7 +293,7 @@
 
   var KPI_INFO = {
     "tickets_open": { title: "Active Open Tickets", icon: "🎫", subtitle: "All open, in-progress, and on-hold tickets currently in queue" },
-    "tickets_resolved_7d": { title: "Resolved Tickets (Last 7 Days)", icon: "✅", subtitle: "Recently resolved tickets showing closure resolver" },
+    "tickets_resolved_7d": { title: "Closed Tickets", icon: "✅", subtitle: "Closed tickets over the selected period, showing who closed them" },
     "changes_in_flight": { title: "Changes In Flight", icon: "🔄", subtitle: "Planned Change Requests under active review or implementation" },
     "problems_open": { title: "Open Problem Investigations", icon: "🧩", subtitle: "Root cause analyses and lessons learned logs" },
     "patch_compliance": { title: "Outstanding Critical Patches", icon: "💻", subtitle: "Vulnerability outstanding missing patches awaiting RMM deployment" },
@@ -346,7 +346,7 @@
       section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 80);
 
-    fetch("/reports/api/drilldown?kpi=" + kpi, { credentials: "same-origin" })
+    fetch("/reports/api/drilldown?kpi=" + kpi + "&days={{ active_days }}", { credentials: "same-origin" })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(res) {
         if (!res || !res.data) {

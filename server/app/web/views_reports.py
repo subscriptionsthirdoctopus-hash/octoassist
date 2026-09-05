@@ -109,6 +109,7 @@ def reports_home(
 @router.get("/reports/api/drilldown")
 def reports_drilldown_api(
     kpi: str,
+    days: int = 30,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -142,12 +143,22 @@ def reports_drilldown_api(
         }
         
     elif kpi == "tickets_resolved_7d":
+        # TEMA item 1. This branch used to filter status == resolved over a
+        # HARDCODED 7 days while the card beside it counted a different
+        # population over the period the user had actually selected -- so the
+        # list and the number above it disagreed twice over. Both now read
+        # closed tickets over the same window.
         from datetime import timedelta
-        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-        rows = db.query(Ticket).filter(Ticket.tenant_id == tenant_id, Ticket.status == TicketStatus.resolved, Ticket.resolved_at >= seven_days_ago).order_by(Ticket.resolved_at.desc()).limit(100).all()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        rows = (db.query(Ticket)
+                  .filter(Ticket.tenant_id == tenant_id,
+                          Ticket.status == TicketStatus.closed,
+                          Ticket.closed_at.isnot(None),
+                          Ticket.closed_at >= cutoff)
+                  .order_by(Ticket.closed_at.desc()).limit(100).all())
         return {
             "type": "tickets_resolved",
-            "columns": ["Number", "Title", "Category", "Priority", "Resolved At", "Resolver"],
+            "columns": ["Number", "Title", "Category", "Priority", "Closed At", "Resolver"],
             "data": [
                 {
                     "id": t.id,
@@ -155,12 +166,16 @@ def reports_drilldown_api(
                     "title": t.title,
                     "category": t.category.name if t.category else "Others",
                     "priority": t.priority.value.upper(),
-                    "resolved_at": t.resolved_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if t.resolved_at else "—",
+                    "resolved_at": t.closed_at.astimezone(IST).strftime("%Y-%m-%d %H:%M") if t.closed_at else "—",
                     "resolver": t.assignee.full_name or t.assignee.email if t.assignee else "Auto-Resolved",
                     "detail": {
                         "Description": t.description or "No description provided.",
-                        "Resolution Notes": "Ticket resolved within SLA parameters.",
-                        "Total Open Time": f"{((t.resolved_at - t.created_at).total_seconds() / 3600):.1f} Hours" if t.resolved_at else "N/A"
+                        # Same clock the MTTR card uses: resolved_at when the
+                        # ticket passed through resolved, else closed_at.
+                        "Total Open Time": (
+                            f"{(((t.resolved_at or t.closed_at) - t.created_at).total_seconds() / 3600):.1f} Hours"
+                            if (t.resolved_at or t.closed_at) else "N/A"
+                        )
                     }
                 } for t in rows
             ]

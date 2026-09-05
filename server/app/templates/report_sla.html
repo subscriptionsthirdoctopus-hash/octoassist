@@ -19,7 +19,7 @@
   <div class="kpi-card">
     <p class="kpi-label">Resolution SLA</p>
     <p class="kpi-value">{{ overall.resolution_pct }}<span class="kpi-unit">%</span></p>
-    <p class="kpi-sub">{{ overall.resolution_within }} of {{ overall.total_resolved }} resolved within SLA</p>
+    <p class="kpi-sub">{{ overall.resolution_within }} of {{ overall.total_resolved }} closed within SLA</p>
   </div>
   <div class="kpi-card">
     <p class="kpi-label">First-response SLA</p>
@@ -43,7 +43,7 @@
 <section>
   <h2>SLA compliance — by priority</h2>
   <table class="data" style="max-width:760px;">
-    <thead><tr><th>Priority</th><th>Total resolved</th><th>Within SLA</th><th>Breached</th><th>Compliance %</th></tr></thead>
+    <thead><tr><th>Priority</th><th>Total closed</th><th>Within SLA</th><th>Breached</th><th>Compliance %</th></tr></thead>
     <tbody>
       {% for p in by_priority %}
       <tr>
@@ -54,7 +54,7 @@
         <td><strong>{{ p.pct }}%</strong></td>
       </tr>
       {% else %}
-      <tr><td colspan="5" class="meta" style="padding:24px;text-align:center;">No tickets resolved in this window.</td></tr>
+      <tr><td colspan="5" class="meta" style="padding:24px;text-align:center;">No tickets closed in this window.</td></tr>
       {% endfor %}
     </tbody>
   </table>

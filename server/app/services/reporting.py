@@ -31,6 +31,37 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# TEMA India, item 1 of the 26 Aug 2026 change list: the "Resolved & Closed"
+# section, MTTR and SLA-resolution must all be based exclusively on CLOSED
+# tickets. Previously the card counted anything carrying a `resolved_at` in the
+# window regardless of its current status, so a ticket that was resolved and
+# then reopened -- or cancelled -- still counted, and the drilldown listed a
+# different population again.
+#
+# Everything below therefore shares one population and one clock:
+#   population : status == closed, windowed on closed_at
+#   clock      : _resolution_ts() -- when the work actually finished
+#
+# A ticket can be closed without ever passing through `resolved` (transition
+# _status only stamps resolved_at on the resolved transition), which leaves
+# resolved_at NULL. Falling back to closed_at keeps MTTR and SLA defined for
+# every ticket in the population; without it those tickets would be counted by
+# the card but silently dropped from the two averages beside it, which is the
+# very inconsistency this change exists to remove.
+
+def _closed_population(q, *, tenant_id: int, cutoff: datetime):
+    """Restrict a query to tickets CLOSED within the window."""
+    return q.filter(Ticket.tenant_id == tenant_id,
+                    Ticket.status == TicketStatus.closed,
+                    Ticket.closed_at.isnot(None),
+                    Ticket.closed_at >= cutoff)
+
+
+def _resolution_ts():
+    """When the ticket was finished, for duration and SLA maths."""
+    return func.coalesce(Ticket.resolved_at, Ticket.closed_at)
+
+
 # ----------  KPI summary ----------
 
 def kpi_summary(db: Session, tenant_id: int, *, days: int = 30, priority: str | None = None, category_id: int | None = None) -> dict:
@@ -60,23 +91,19 @@ def kpi_summary(db: Session, tenant_id: int, *, days: int = 30, priority: str | 
         q_risk = q_risk.filter(Ticket.category_id == category_id)
     tickets_at_risk = q_risk.scalar() or 0
 
-    q_res = db.query(func.count(Ticket.id)).filter(
-        Ticket.tenant_id == tenant_id,
-        Ticket.resolved_at.isnot(None),
-        Ticket.resolved_at >= cutoff_date
-    )
+    q_res = _closed_population(db.query(func.count(Ticket.id)),
+                               tenant_id=tenant_id, cutoff=cutoff_date)
     if priority:
         q_res = q_res.filter(Ticket.priority == TicketPriority(priority))
     if category_id:
         q_res = q_res.filter(Ticket.category_id == category_id)
     tickets_resolved_7d = q_res.scalar() or 0
 
-    # Mean time to resolution (minutes) for tickets resolved in dynamic period
-    q_mttr = db.query(func.avg(func.extract("epoch", Ticket.resolved_at - Ticket.created_at))).filter(
-        Ticket.tenant_id == tenant_id,
-        Ticket.resolved_at.isnot(None),
-        Ticket.resolved_at >= cutoff_date
-    )
+    # Mean time to resolution (minutes), over the SAME closed population as the
+    # card above so the two numbers always reconcile.
+    q_mttr = _closed_population(
+        db.query(func.avg(func.extract("epoch", _resolution_ts() - Ticket.created_at))),
+        tenant_id=tenant_id, cutoff=cutoff_date)
     if priority:
         q_mttr = q_mttr.filter(Ticket.priority == TicketPriority(priority))
     if category_id:
@@ -240,11 +267,27 @@ def top_reporters(db: Session, tenant_id: int, *, days: int = 30, top: int = 10)
 # ----------  SLA ----------
 
 def sla_compliance(db: Session, tenant_id: int, *, days: int = 30, priority: str | None = None, category_id: int | None = None) -> dict:
-    """% of tickets resolved within their resolution SLA in the last N days."""
+    """% of CLOSED tickets that met their resolution SLA in the last N days.
+
+    First-response figures keep their previous basis -- see below.
+    """
     cutoff = _now() - timedelta(days=days)
-    q = (db.query(
-                func.count(Ticket.id).label("total"),
-                func.sum(case((Ticket.resolved_at <= Ticket.due_resolution_at, 1), else_=0)).label("within"),
+
+    # Resolution SLA -- closed tickets only (TEMA item 1), matching the
+    # "Resolved & Closed" card and MTTR exactly.
+    q_res = _closed_population(
+        db.query(
+            func.count(Ticket.id).label("total"),
+            func.sum(case((_resolution_ts() <= Ticket.due_resolution_at, 1), else_=0)).label("within"),
+        ),
+        tenant_id=tenant_id, cutoff=cutoff
+    ).filter(Ticket.due_resolution_at.isnot(None))
+
+    # First-response SLA is deliberately NOT moved onto the closed population.
+    # TEMA asked only for the resolution figure to change; first response is a
+    # property of how quickly a ticket was picked up, and restricting it to
+    # closed tickets would silently alter a card they did not ask about.
+    q_resp = (db.query(
                 func.sum(case((Ticket.first_response_at <= Ticket.due_response_at, 1), else_=0)).label("response_within"),
                 func.count(case((Ticket.first_response_at.isnot(None), 1))).label("response_total"),
             )
@@ -252,15 +295,20 @@ def sla_compliance(db: Session, tenant_id: int, *, days: int = 30, priority: str
                     Ticket.resolved_at.isnot(None),
                     Ticket.resolved_at >= cutoff,
                     Ticket.due_resolution_at.isnot(None)))
+
     if priority:
-        q = q.filter(Ticket.priority == TicketPriority(priority))
+        q_res  = q_res.filter(Ticket.priority == TicketPriority(priority))
+        q_resp = q_resp.filter(Ticket.priority == TicketPriority(priority))
     if category_id:
-        q = q.filter(Ticket.category_id == category_id)
-    row = q.one()
+        q_res  = q_res.filter(Ticket.category_id == category_id)
+        q_resp = q_resp.filter(Ticket.category_id == category_id)
+
+    row  = q_res.one()
+    rrow = q_resp.one()
     total = int(row.total or 0)
     within = int(row.within or 0)
-    resp_total = int(row.response_total or 0)
-    resp_within = int(row.response_within or 0)
+    resp_total = int(rrow.response_total or 0)
+    resp_within = int(rrow.response_within or 0)
     return {
         "total_resolved": total,
         "within": within,
@@ -285,17 +333,18 @@ def sla_breaches(db: Session, tenant_id: int, *, limit: int = 50) -> list[Ticket
 
 
 def sla_compliance_by_priority(db: Session, tenant_id: int, *, days: int = 30) -> list[dict]:
-    """Per-priority SLA compliance."""
+    """Per-priority resolution-SLA compliance, closed tickets only."""
     cutoff = _now() - timedelta(days=days)
-    rows = (db.query(
-                Ticket.priority,
-                func.count(Ticket.id).label("total"),
-                func.sum(case((Ticket.resolved_at <= Ticket.due_resolution_at, 1), else_=0)).label("within"),
-            )
-            .filter(Ticket.tenant_id == tenant_id,
-                    Ticket.resolved_at.isnot(None),
-                    Ticket.resolved_at >= cutoff,
-                    Ticket.due_resolution_at.isnot(None))
+    # Same closed-only basis as sla_compliance(), so the per-priority rows add
+    # up to the headline resolution figure instead of drifting from it.
+    rows = (_closed_population(
+                db.query(
+                    Ticket.priority,
+                    func.count(Ticket.id).label("total"),
+                    func.sum(case((_resolution_ts() <= Ticket.due_resolution_at, 1), else_=0)).label("within"),
+                ),
+                tenant_id=tenant_id, cutoff=cutoff)
+            .filter(Ticket.due_resolution_at.isnot(None))
             .group_by(Ticket.priority)
             .all())
     out = []
