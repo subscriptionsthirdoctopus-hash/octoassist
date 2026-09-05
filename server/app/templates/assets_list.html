@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_pager.html" import pager %}
 {% block title %}Asset Register — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -8,7 +9,7 @@
       <h1>Asset Register</h1>
       <p class="meta">
         {{ agent_count }} OctoAssist endpoint{{ "" if agent_count == 1 else "s" }} reporting
-        {% if discovered_rows %} • {{ discovered_rows|length }} discovered Windows device{{ "" if discovered_rows|length == 1 else "s" }} without agent{% endif %}
+        {% if discovered_rows %} • {{ pg_disc.total }} discovered Windows device{{ "" if pg_disc.total == 1 else "s" }} without agent{% endif %}
         {% if tenant %} • {{ tenant.name }}{% endif %}
       </p>
       {% if unlocated_total and filter_location != no_location_value %}
@@ -86,7 +87,7 @@
 <div class="alert info" style="margin-bottom:12px;">
   Compliance: <strong>{% if filter_compliant == "yes" %}compliant{% elif filter_compliant == "no" %}non-compliant{% else %}not reported{% endif %}</strong> —
   showing {{ agent_count }} of {{ managed_total }} managed endpoint{{ "" if managed_total == 1 else "s" }}
-  and {{ discovered_rows|length }} of {{ discovered_total }} discovered device{{ "" if discovered_total == 1 else "s" }}.
+  and {{ pg_disc.total }} of {{ discovered_total }} discovered device{{ "" if discovered_total == 1 else "s" }}.
   <a href="/assets" style="font-weight:600;">Clear filter</a>
 </div>
 {% endif %}
@@ -163,7 +164,7 @@
   </div>
 </details>
 
-<h2 style="margin-top:8px;">OctoAssist-managed endpoints ({{ rows|length }})</h2>
+<h2 style="margin-top:8px;">OctoAssist-managed endpoints ({{ pg_rows.total }})</h2>
 {% if rows %}
 <form method="post" action="/assets/bulk-delete-managed" id="managed-bulk-form">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
@@ -223,13 +224,14 @@
       {% endfor %}
     </tbody>
   </table>
+  {{ pager(pg_rows, request, noun="endpoints") }}
 </form>
 {% else %}
 <div class="empty"><h2>No managed endpoints match these filters</h2><p>Clear filters or visit <a href="/enrolment">Enrolment</a> for install instructions.</p></div>
 {% endif %}
 
 {% if discovered_rows %}
-<h2 style="margin-top:32px;">Discovered Windows devices — no OctoAssist agent yet ({{ discovered_rows|length }})</h2>
+<h2 style="margin-top:32px;">Discovered Windows devices — no OctoAssist agent yet ({{ pg_disc.total }})</h2>
 <p class="meta" style="margin-top:0;">Pulled from your Entra tenant via Microsoft Graph (plus any manually-added rows). These haven't installed OctoAssist yet — your coverage gap.</p>
 <form method="post" action="/assets/bulk-delete-discovered" id="discovered-bulk-form">
   <input type="hidden" name="csrf" value="{{ csrf_token(request) }}">
@@ -273,6 +275,7 @@
       {% endfor %}
     </tbody>
   </table>
+  {{ pager(pg_disc, request, param="dpage", noun="devices") }}
 </form>
 {% endif %}
 {% endblock %}

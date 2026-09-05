@@ -148,4 +148,8 @@ def install_on(templates: Jinja2Templates) -> Jinja2Templates:
     # Register CSRF token generator global helper
     from .csrf import get_or_create_token
     env.globals["csrf_token"] = get_or_create_token
+
+    # Pager links that keep the current filters (templates/_pager.html)
+    from .services.paging import page_url
+    env.globals["page_url"] = page_url
     return templates

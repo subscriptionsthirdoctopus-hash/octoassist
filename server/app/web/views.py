@@ -18,7 +18,7 @@ from ..models import (
 from ..services import entra_devices
 from ..services.hostnames import normalise as normalise_hostname
 from ..services import compliance
-from ..services import csv_export, natural_sort
+from ..services import csv_export, natural_sort, paging
 from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -306,10 +306,20 @@ def assets_index(
     location: str = "",
     compliant: str = "",
     online: str = "",
+    page: int = 1,
+    dpage: int = 1,
+    per_page: int = paging.DEFAULT_PER_PAGE,
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
     data = _collect_assets(db, user, q, department, location, compliant, online)
+
+    # Two independent tables, two page params. The counts in the header keep
+    # using the full sets; only what is rendered is sliced.
+    pg_rows = paging.paginate(data["rows"], page, per_page)
+    pg_disc = paging.paginate(data["discovered_rows"], dpage, per_page)
+    data = {**data, "rows": pg_rows.items, "discovered_rows": pg_disc.items,
+            "pg_rows": pg_rows, "pg_disc": pg_disc}
 
     entra_idp = (db.query(IdentityProvider)
                    .filter(IdentityProvider.tenant_id == user.tenant_id,
@@ -320,7 +330,7 @@ def assets_index(
     return templates.TemplateResponse(
         request=request, name="assets_list.html",
         context=_ctx(user, db,
-                     agent_count=len(data["rows"]),
+                     agent_count=pg_rows.total,
                      entra_idp=entra_idp,
                      no_location_value=NO_LOCATION,
                      filter_department=department, filter_location=location,

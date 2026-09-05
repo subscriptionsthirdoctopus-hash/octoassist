@@ -1,0 +1,33 @@
+{# Pager for a services.paging.Page.
+
+   Usage:  {% from "_pager.html" import pager %}
+           {{ pager(pg, request) }}                       -- ?page=
+           {{ pager(pg_disc, request, param="dpage") }}   -- a second table on the same page
+
+   Renders nothing when everything fits on one page, so templates can include
+   it unconditionally. Links keep the current filters (page_url is a template
+   global). #}
+{% from "_icons.html" import icon %}
+{% macro pager(p, request, param="page", noun="rows") -%}
+{% if p.total > 0 %}
+<nav class="pager" aria-label="Pagination">
+  <span class="pager-count">Showing <b>{{ p.start }}–{{ p.end }}</b> of <b>{{ p.total }}</b> {{ noun }}</span>
+  {% if p.pages > 1 %}
+  <span class="pager-links">
+    {% if p.has_prev %}<a class="pager-btn" href="{{ page_url(request, param, p.page - 1) }}" rel="prev" aria-label="Previous page">{{ icon("chevron-left", 14) }}</a>{% else %}<span class="pager-btn disabled">{{ icon("chevron-left", 14) }}</span>{% endif %}
+    {% for n in p.window() %}
+      {% if n is none %}<span class="pager-gap">…</span>
+      {% elif n == p.page %}<span class="pager-btn current" aria-current="page">{{ n }}</span>
+      {% else %}<a class="pager-btn" href="{{ page_url(request, param, n) }}">{{ n }}</a>{% endif %}
+    {% endfor %}
+    {% if p.has_next %}<a class="pager-btn" href="{{ page_url(request, param, p.page + 1) }}" rel="next" aria-label="Next page">{{ icon("chevron-right", 14) }}</a>{% else %}<span class="pager-btn disabled">{{ icon("chevron-right", 14) }}</span>{% endif %}
+  </span>
+  {% endif %}
+  <span class="pager-size">
+    {% for n in (50, 100, 250) %}{% if n < p.total or n == 50 %}{% if p.per_page == n %}<b>{{ n }}</b>{% else %}<a href="{{ page_url(request, param, 1, per_page=n) }}">{{ n }}</a>{% endif %}{% endif %}{% endfor %}
+    {% if p.total > 50 %}{% if p.per_page >= p.total %}<b>All</b>{% else %}<a href="{{ page_url(request, param, 1, per_page=p.total) }}">All</a>{% endif %}{% endif %}
+    <span class="pager-size-label">per page</span>
+  </span>
+</nav>
+{% endif %}
+{%- endmacro %}

@@ -13,7 +13,7 @@ from ..auth import require_admin
 from ..database import get_db
 from ..models import IdentityProvider, IdentityProviderKind, Tenant, User, UserRole
 from ..security import hash_password
-from ..services import entra_directory
+from ..services import entra_directory, paging
 from ..services.sso import parse_entra_config
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -36,6 +36,8 @@ def list_users(
     status: str = "",
     department: str = "",
     location: str = "",
+    page: int = 1,
+    per_page: int = paging.DEFAULT_PER_PAGE,
     db: Session = Depends(get_db),
 ):
     from sqlalchemy import distinct, func, or_
@@ -58,7 +60,8 @@ def list_users(
     elif status == "disabled": query = query.filter(User.is_active == False)  # noqa: E712
     if department: query = query.filter(func.lower(func.coalesce(User.department, "")) == department.lower())
     if location:   query = query.filter(func.lower(func.coalesce(User.location,   "")) == location.lower())
-    rows = query.order_by(User.role, User.email).all()
+    pg = paging.paginate(query.order_by(User.role, User.email).all(), page, per_page)
+    rows = pg.items
     departments = sorted({d for (d,) in base_q.with_entities(distinct(User.department)).all() if d})
     locations   = sorted({l for (l,) in base_q.with_entities(distinct(User.location)).all() if l})
     tenant = db.query(Tenant).first()
@@ -71,7 +74,7 @@ def list_users(
         request=request,
         name="user_list.html",
         context={
-            "current_user": user, "tenant": tenant, "rows": rows,
+            "current_user": user, "tenant": tenant, "rows": rows, "pg": pg,
             "roles": [r.value for r in UserRole],
             "created_email": created_email,
             "created_password": created_password,

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from ..auth import require_staff, require_admin
 from ..database import get_db
 from ..models import Agent, RemoteAction, RemoteActionKind, SoftwarePackage, Tenant, User
-from ..services import charts, remote_actions as ra_svc, sam
+from ..services import charts, paging, remote_actions as ra_svc, sam
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -48,6 +48,8 @@ def software_home(
     license_filter: str = Query("", alias="license"),
     publisher: str = Query(""),
     q: str = Query(""),
+    page: int = Query(1),
+    per_page: int = Query(paging.DEFAULT_PER_PAGE),
     user: User = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
@@ -76,10 +78,14 @@ def software_home(
     categories = sorted({r["category"] for r in all_rows})
     publishers = sorted({r["publisher"] for r in all_rows}, key=str.lower)
 
+    # Charts and counts above use the full filtered set; only the table pages.
+    pg = paging.paginate(rows, page, per_page)
+
     return templates.TemplateResponse(
         request=request, name="software_list.html",
         context=_ctx(user, db,
-                     rows=rows,
+                     rows=pg.items,
+                     pg=pg,
                      all_count=len(all_rows),
                      kpi=kpi,
                      categories=categories,

@@ -3152,3 +3152,22 @@ body.has-sidebar .conn-strip { grid-template-columns: repeat(4, minmax(0, 1fr));
   body.has-sidebar .topbar { flex-direction: row; align-items: center; gap: 8px; }
   body.has-sidebar .tb-crumb { display: none; }
 }
+
+/* ---- Pager (templates/_pager.html) ---- */
+.pager { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 4px 0; font-size: 13px; color: var(--text-3); }
+.pager b { color: var(--text-1); font-weight: 600; }
+.pager-links { display: inline-flex; align-items: center; gap: 4px; }
+.pager-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; padding: 0 8px;
+  border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1e293b; font-weight: 600; text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.pager-btn:hover { background: #f8fafc; border-color: #94a3b8; text-decoration: none; }
+.pager-btn.current { background: #2563eb; border-color: #2563eb; color: #fff; cursor: default; }
+.pager-btn.disabled { opacity: 0.4; cursor: default; }
+.pager-btn .ico { margin: 0; }
+.pager-gap { padding: 0 2px; color: var(--text-4); }
+.pager-size { margin-left: auto; display: inline-flex; gap: 10px; align-items: center; }
+.pager-size a { color: var(--accent); text-decoration: none; }
+.pager-size a:hover { text-decoration: underline; }
+.pager-size-label { color: var(--text-4); }

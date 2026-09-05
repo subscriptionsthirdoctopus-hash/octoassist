@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_pager.html" import pager %}
 {% block title %}Software (SAM) — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -96,7 +97,7 @@
   <div class="row-between" style="margin-bottom:8px;">
     <h2 style="margin:0;">Products</h2>
     <p class="meta" style="margin:0;">
-      Showing {{ rows|length }} of {{ all_count }} product{{ "" if all_count == 1 else "s" }}.
+      {{ pg.total }} of {{ all_count }} product{{ "" if all_count == 1 else "s" }} match{% if pg.pages > 1 %} · page {{ pg.page }} of {{ pg.pages }}{% endif %}.
     </p>
   </div>
 
@@ -155,6 +156,7 @@
       {% endfor %}
     </tbody>
   </table>
+  {{ pager(pg, request, noun="products") }}
   {% else %}
   <div class="empty">
     <h3 style="margin:0 0 8px;">No software matches these filters</h3>

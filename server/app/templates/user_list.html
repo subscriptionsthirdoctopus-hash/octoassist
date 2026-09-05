@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_pager.html" import pager %}
 {% block title %}Users — OctoAssist{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -52,7 +53,7 @@
   </label>{% endif %}
   <button type="submit" class="button">Apply</button>
   {% if q or filter_role or filter_status or filter_department or filter_location %}<a href="/users" class="button" style="text-decoration:none;">Clear all</a>{% endif %}
-  <span class="meta" style="margin-left:auto;font-size:12px;">{{ rows|length }} match{{ "" if rows|length == 1 else "es" }}</span>
+  <span class="meta" style="margin-left:auto;font-size:12px;">{{ pg.total }} match{{ "" if pg.total == 1 else "es" }}</span>
 </form>
 
 {% if flash %}
@@ -155,5 +156,6 @@
       {% endfor %}
     </tbody>
   </table>
+  {{ pager(pg, request, noun="users") }}
 </form>
 {% endblock %}
