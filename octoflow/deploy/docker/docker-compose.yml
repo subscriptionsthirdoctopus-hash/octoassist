@@ -43,7 +43,7 @@ services:
       OCTOFLOW_BASE_URL: ${BASE_URL:-http://localhost:8090}
       OCTOFLOW_ENCRYPTION_KEY: ${OCTOFLOW_ENCRYPTION_KEY}
     ports:
-      - "8090:8080"
+      - "127.0.0.1:8090:8080"
     networks:
       - octoflow-network
       - hrms-network
