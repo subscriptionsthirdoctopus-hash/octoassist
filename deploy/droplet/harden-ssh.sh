@@ -66,6 +66,11 @@ ufw default allow outgoing >/dev/null
 ufw limit 22/tcp comment 'ssh (rate-limited)' >/dev/null
 ufw allow 80/tcp  comment 'http'  >/dev/null
 ufw allow 443/tcp comment 'https' >/dev/null
+# OctoCred is a host service (systemd, :8005) that hrms-nginx reaches through
+# the bridge gateway 172.18.0.1. That container->host hop crosses ufw's INPUT
+# chain, so "deny incoming" silently broke octocred.thirdoctopus.com on the
+# first run (5 Sep 2026). Only this one upstream targets the host.
+ufw allow from 172.18.0.0/16 to any port 8005 proto tcp comment 'octocred: nginx -> host' >/dev/null
 ufw --force enable >/dev/null
 ufw status numbered | sed 's/^/   /'
 
