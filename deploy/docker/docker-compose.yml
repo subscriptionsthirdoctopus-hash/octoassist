@@ -53,11 +53,11 @@ services:
       # each deploy or restart signs every user out.
       OCTOASSIST_SESSION_SECRET_KEY: ${OCTOASSIST_SESSION_SECRET_KEY}
     ports:
-      # Public HTTP on TCP/8088. WARNING: HTTP Basic over plaintext —
-      # admin password transits in clear text. Acceptable for early demo;
-      # switch to loopback ("127.0.0.1:8088:8080") and add HTTPS via the
-      # HRMS nginx (subdomain) before any real production use.
-      - "8088:8080"
+      # Loopback only. The public path is https://octoassist.thirdoctopus.com
+      # via hrms-nginx, which reaches this container by name over the shared
+      # network — nothing outside the host needs 8088. The host-side binding
+      # stays for local health checks and deploy verification.
+      - "127.0.0.1:8088:8080"
     networks:
       - octoassist-network
       # Also attach to HRMS's network so the hrms-nginx container can
