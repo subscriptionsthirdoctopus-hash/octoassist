@@ -3110,3 +3110,27 @@ body.has-sidebar .alert { border-radius: 10px; }
 body.has-sidebar .search-wrap input,
 body.has-sidebar .pf-search input,
 body.has-sidebar input[style*="34px"] { padding-left: 36px !important; }
+
+/* ---- Sidebar: dark navy variant (Arun, 5 Sep 2026) ---- */
+.sidebar { background: #0f172a; border-right: 1px solid #1e293b; }
+.sb-nav { scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+.sb-brand { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.sb-wordmark strong { color: #fff; }
+.sb-wordmark small { color: #64748b; }
+.sb-logo { box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45); }
+.sb-group-label { color: #64748b; }
+.sb-item { color: #cbd5e1; }
+.sb-item .ico { color: #94a3b8; }
+.sb-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.sb-item:hover .ico { color: #fff; }
+.sb-item.active { background: rgba(59, 130, 246, 0.2); color: #fff; }
+.sb-item.active .ico { color: #60a5fa; }
+.sb-item.active::before { background: #3b82f6; }
+.sb-item .sb-count { background: rgba(239, 68, 68, 0.22); color: #fca5a5; }
+html.sb-collapsed .sb-group { border-top-color: rgba(255, 255, 255, 0.08); }
+.sb-user { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.sidebar .sb-avatar { background: #1e3a8a; color: #bfdbfe; }
+.sb-user-name { color: #f1f5f9; }
+.sb-user-role { color: #64748b; }
+.sb-user .sb-logout { color: #94a3b8 !important; }
+.sb-user .sb-logout:hover { background: rgba(239, 68, 68, 0.18) !important; color: #fca5a5 !important; }
