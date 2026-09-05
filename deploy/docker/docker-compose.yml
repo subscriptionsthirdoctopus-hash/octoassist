@@ -52,6 +52,8 @@ services:
       # Without this the app mints a random session key at every start, so
       # each deploy or restart signs every user out.
       OCTOASSIST_SESSION_SECRET_KEY: ${OCTOASSIST_SESSION_SECRET_KEY}
+      # HTTPS has fronted this since June 2026; the app default is false.
+      OCTOASSIST_COOKIE_SECURE: "true"
     ports:
       # Loopback only. The public path is https://octoassist.thirdoctopus.com
       # via hrms-nginx, which reaches this container by name over the shared
