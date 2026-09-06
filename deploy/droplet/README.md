@@ -14,6 +14,8 @@ re-capture after editing there (`scp`/`tar` — see paths below).
 | `letsencrypt/renewal-hooks-disabled/` | `/etc/letsencrypt/renewal-hooks-disabled/` | the old standalone-mode stop/start-nginx hooks — kept for history, must stay disabled |
 | `nginx/conf.d/security-headers.inc` | `/opt/hrms-erp/nginx/conf.d/` | included inside every HTTPS server block (nginx drops http-level `add_header` once a vhost sets its own) |
 | `backup-octoassist.sh` | `/opt/octoassist/bin/`, root cron `15 21 * * *` UTC | nightly `pg_dump` to `/opt/octoassist/backups`, 14-day rotation, log in `backup.log` |
+| `setup-spaces.sh` | run once, interactively (`ssh -t`) | connects rclone to a DigitalOcean Spaces bucket; secret typed on the box, stored root-only in `/root/.config/rclone/rclone.conf` |
+| `backup-offsite.sh` | `/opt/octoassist/bin/`, root cron `25 21 * * *` UTC | copies the nightly dumps to `spaces:<bucket>/octoassist/` (immutable), keeps 30 days there, log in `offsite.log` |
 | `52-unattended-upgrades-local` | `/etc/apt/apt.conf.d/` | unattended-upgrades auto-reboot at 21:30 UTC (03:00 IST) when a kernel/security update needs it |
 | `smoke-test.sh` | run on demand after a deploy | copies the live DB to `octoassist_smoke`, runs `server/tests` in the deployed image against it, drops the copy |
 | `.github/workflows/uptime.yml` (repo) | GitHub Actions, every 10 min | external probe of `/health` and every public site; opens/closes an issue labelled `uptime` |
