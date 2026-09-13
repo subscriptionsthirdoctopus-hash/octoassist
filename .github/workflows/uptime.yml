@@ -47,7 +47,7 @@ jobs:
           thirdoctopus.com|/|200
           erp1.thirdoctopus.com|/|303
           octoflow.thirdoctopus.com|/|303
-          octovault.thirdoctopus.com|/|401
+          octovault.thirdoctopus.com|/api/v1/health|200
           octocred.thirdoctopus.com|/|200
           license.thirdoctopus.com|/|307
           fund.thirdoctopus.com|/|200
