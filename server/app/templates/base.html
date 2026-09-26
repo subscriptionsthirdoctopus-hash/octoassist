@@ -25,6 +25,10 @@
     <meta name="keywords" content="ITSM, RMM, IT service management, AI ITSM, Third Octopus, OctoAssist, ITIL, asset tracking, remote management">
   {% endif %}
   <meta name="author" content="Third Octopus">
+  {% if request %}
+  {# Canonical = this instance's own origin + path, so each deployment is indexed under its own host. #}
+  <link rel="canonical" href="{{ request.url.scheme }}://{{ request.headers.get('x-forwarded-host') or request.headers.get('host') }}{{ request.url.path }}">
+  {% endif %}
 
   <!-- OpenGraph Meta Tags for Google Discover and Social Sharing Cards -->
   <meta property="og:title" content="{% block og_title %}OctoAssist — AI-Powered ITSM, calmly.{% endblock %}">

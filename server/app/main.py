@@ -258,9 +258,21 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+SITEMAP_LASTMOD = "2026-09-26"  # bump when the public landing page changes
+
+
+def _site_origin(request: Request) -> str:
+    """Scheme+host the visitor used, so every instance (temaindia.com,
+    thirdoctopus.com, ...) advertises its own URLs instead of a hard-coded one."""
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}"
+
+
 @app.get("/robots.txt", response_class=Response)
-def robots() -> Response:
-    content = """User-agent: *
+def robots(request: Request) -> Response:
+    origin = _site_origin(request)
+    content = f"""User-agent: *
 Allow: /
 Disallow: /login
 Disallow: /auth/
@@ -274,26 +286,47 @@ Disallow: /settings/
 Disallow: /reports/
 Disallow: /portal/
 
-Sitemap: https://octoassist.thirdoctopus.com/sitemap.xml
+# Search engines and AI answer engines are explicitly welcome on the public pages.
+User-agent: Googlebot
+Allow: /
+User-agent: Bingbot
+Allow: /
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: anthropic-ai
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: CCBot
+Allow: /
+
+Sitemap: {origin}/sitemap.xml
 """
     return Response(content=content, media_type="text/plain")
 
 
 @app.get("/sitemap.xml", response_class=Response)
-def sitemap() -> Response:
-    content = """<?xml version="1.0" encoding="UTF-8"?>
+def sitemap(request: Request) -> Response:
+    origin = _site_origin(request)
+    # Only the public landing page is listed: /login is disallowed in robots.txt,
+    # so advertising it in the sitemap just produces Search Console warnings.
+    content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://octoassist.thirdoctopus.com/</loc>
-    <lastmod>2026-05-27</lastmod>
-    <changefreq>daily</changefreq>
+    <loc>{origin}/</loc>
+    <lastmod>{SITEMAP_LASTMOD}</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://octoassist.thirdoctopus.com/login</loc>
-    <lastmod>2026-05-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 </urlset>
 """
