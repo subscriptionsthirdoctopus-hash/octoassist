@@ -250,6 +250,62 @@ def ticket_status_changed(db: Session, ticket: Ticket, old_status: str) -> None:
               f"[OctoAssist] {ticket.ticket_number} — Status Updated to {ticket.status.value.replace('_',' ').title()}",
               body)
 
+    # Support (thirdoctopus.com): once a ticket is CLOSED, email the support
+    # leads (Moin, Ranjit, Arun — see settings.ticket_closed_notify_emails).
+    # Skip anyone this call already emailed above so nobody gets two copies.
+    if ticket.status.value == "closed":
+        ticket_closed(db, ticket, old_status)
+
+
+def ticket_closed(db: Session, ticket: Ticket, old_status: str) -> None:
+    """Email the configured support leads that a ticket has been closed.
+
+    Called from ticket_status_changed; safe to call on its own as well.
+    Recipients come from OCTOASSIST_TICKET_CLOSED_NOTIFY_EMAILS (CSV).
+    """
+    tenant = ticket.tenant
+    if tenant is None or not _mail_configured(tenant):
+        return
+    from ..config import settings
+    recipients = settings.ticket_closed_recipients()
+    if not recipients:
+        return
+
+    already = {
+        (ticket.reporter.email or "").lower() if ticket.reporter else "",
+        (ticket.assignee.email or "").lower() if ticket.assignee else "",
+        (tenant.notification_email or "").lower(),
+    }
+    already.discard("")
+
+    base_url = settings.base_url.rstrip("/")
+    details = _render_ticket_details(ticket)
+    closed_by = ""
+    if ticket.closed_at:
+        from datetime import timedelta, timezone
+        IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+        dt = ticket.closed_at
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        closed_by = f"Closed On:       {dt.astimezone(IST).strftime('%d-%b-%Y %I:%M %p IST')}\n"
+
+    subject = f"[OctoAssist] {ticket.ticket_number} — Ticket Closed"
+    body = (
+        "Hello Team,\n\n"
+        f"Ticket {ticket.ticket_number} has been CLOSED "
+        f"(previous status: {old_status.replace('_', ' ').upper()}).\n\n"
+        f"{closed_by}"
+        f"{details}\n"
+        "To view the full ticket history, click below:\n"
+        f"{base_url}/tickets/{ticket.id}\n\n"
+        "Best regards,\n"
+        "OctoAssist Support\n"
+    )
+    for to in recipients:
+        if to in already:
+            continue
+        _fire(tenant, to, subject, body)
+
 
 
 def ticket_comment(db: Session, ticket: Ticket, comment: TicketComment) -> None:
