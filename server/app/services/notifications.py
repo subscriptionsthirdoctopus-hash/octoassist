@@ -801,18 +801,51 @@ def send_software_expiry_digest(db: Session, horizon_days: int | None = None) ->
     licences renewing in the same week produced ten separate mails, none of
     which showed the whole picture.
 
-    Sent as an HTML table with a fixed-width plaintext alternative, so it reads
+    Written as a proper business email — greeting, one-line purpose, a numbered
+    table, a clear "what to do next" with a link, and a sign-off — because it
+    goes to the customer's IT and purchasing leads, not just to the console
+    operator. Sent as HTML with a fixed-width plaintext alternative, so it reads
     as a table whether or not the client renders HTML.
 
     Returns the number of tenants mailed, so the scheduler can log it.
     """
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
     from . import subscriptions as subs_svc
+    from ..config import settings
 
     horizon = subs_svc.DEFAULT_HORIZON_DAYS if horizon_days is None else horizon_days
     IST = _tz(_td(hours=5, minutes=30), name="IST")
     today = subs_svc._today()
+    now_ist = _dt.now(IST)
+    base_url = settings.base_url.rstrip("/")
+    manage_url = f"{base_url}/subscriptions"
     sent = 0
+
+    def _esc(v) -> str:
+        return (str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+    def _fmt_date(d) -> str:
+        return d.strftime("%d %b %Y")
+
+    def _status(days: int) -> str:
+        if days < 0:
+            return "Expired"
+        if days == 0:
+            return "Expires today"
+        if days <= 7:
+            return "Expiring this week"
+        return "Expiring soon"
+
+    def _timeframe(days: int) -> str:
+        if days < 0:
+            n = abs(days)
+            return f"{n} day{'s' if n != 1 else ''} overdue"
+        if days == 0:
+            return "Today"
+        return f"In {days} day{'s' if days != 1 else ''}"
+
+    def _plural(n: int, word: str) -> str:
+        return f"{n} {word}{'' if n == 1 else 's'}"
 
     for tenant in db.query(Tenant).all():
         if not _mail_configured(tenant):
@@ -827,77 +860,140 @@ def send_software_expiry_digest(db: Session, horizon_days: int | None = None) ->
         expired = [r for r in rows if (r.expires_on - today).days < 0]
         upcoming = [r for r in rows if (r.expires_on - today).days >= 0]
 
-        def _when(sub) -> str:
-            days = (sub.expires_on - today).days
-            if days < 0:
-                return f"expired {abs(days)}d ago"
-            if days == 0:
-                return "expires today"
-            return f"in {days}d"
+        # ---- the summary sentence, phrased for a reader, not a log ----
+        if expired and upcoming:
+            summary = (f"{_plural(len(expired), 'subscription')} "
+                       f"{'has' if len(expired) == 1 else 'have'} already expired and "
+                       f"{len(upcoming)} more "
+                       f"{'is' if len(upcoming) == 1 else 'are'} due to expire within the next "
+                       f"{horizon} days.")
+        elif expired:
+            summary = (f"{_plural(len(expired), 'subscription')} "
+                       f"{'has' if len(expired) == 1 else 'have'} already expired and "
+                       f"{'needs' if len(expired) == 1 else 'need'} immediate renewal.")
+        else:
+            summary = (f"{_plural(len(upcoming), 'subscription')} "
+                       f"{'is' if len(upcoming) == 1 else 'are'} due to expire within the next "
+                       f"{horizon} days.")
 
-        subject = (f"[OctoAssist] Software expiry — {len(rows)} item(s) need attention "
-                   f"({_dt.now(IST).strftime('%d-%b-%Y')})")
+        if expired:
+            subject = (f"[OctoAssist] Action required: {_plural(len(rows), 'software subscription')} "
+                       f"expired or expiring — {now_ist.strftime('%d %b %Y')}")
+        else:
+            subject = (f"[OctoAssist] Software subscription renewals due — "
+                       f"{_plural(len(rows), 'item')} expiring within {horizon} days")
+
+        next_step = ("Please review the items listed above and raise the renewal purchase orders "
+                     "with the respective vendors. Once a renewal is confirmed, update the "
+                     "expiry date in OctoAssist so the item drops off this reminder.")
 
         # ---- plaintext: fixed-width columns so it still lines up ----
-        head = f"{'Software':<34} {'Vendor':<18} {'Seats':>5} {'Expires':<12} {'Status':<18} PO"
+        head = (f"{'#':>3}  {'Software':<30} {'Vendor':<18} {'Seats':>5}  "
+                f"{'Expiry date':<12} {'Status':<19} {'Time frame':<16} PO reference")
         lines = [
-            "OCTOASSIST — SOFTWARE SUBSCRIPTION EXPIRY",
-            "=" * len(head),
-            f"Tenant: {tenant.name}   Horizon: next {horizon} days   "
-            f"Generated: {_dt.now(IST).strftime('%d-%b-%Y %H:%M IST')}",
-            f"{len(expired)} already expired, {len(upcoming)} expiring within {horizon} days.",
+            "Dear Team,",
+            "",
+            f"This is the daily software subscription summary from OctoAssist for "
+            f"{tenant.name}, generated on {now_ist.strftime('%A, %d %B %Y at %I:%M %p IST')}.",
+            "",
+            summary,
             "",
             head,
             "-" * len(head),
         ]
-        for s in rows:
-            lines.append(
-                f"{(s.software_name or '')[:34]:<34} "
-                f"{(s.vendor or '—')[:18]:<18} "
-                f"{(str(s.seats) if s.seats else '—'):>5} "
-                f"{s.expires_on.strftime('%d/%m/%Y'):<12} "
-                f"{_when(s):<18} "
-                f"{s.po_reference or '—'}"
-            )
-        lines += ["-" * len(head), "",
-                  "Manage these at /subscriptions in OctoAssist.", ""]
-        body_text = "\n".join(lines)
-
-        # ---- HTML table ----
-        def _esc(v: str) -> str:
-            return (str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
-
-        cells = []
-        for s in rows:
+        for i, s in enumerate(rows, 1):
             days = (s.expires_on - today).days
-            colour = "#b91c1c" if days < 0 else ("#b45309" if days <= 7 else "#1f2937")
+            lines.append(
+                f"{i:>3}  "
+                f"{(s.software_name or '')[:30]:<30} "
+                f"{(s.vendor or '-')[:18]:<18} "
+                f"{(str(s.seats) if s.seats else '-'):>5}  "
+                f"{_fmt_date(s.expires_on):<12} "
+                f"{_status(days):<19} "
+                f"{_timeframe(days):<16} "
+                f"{s.po_reference or '-'}"
+            )
+        lines += [
+            "-" * len(head),
+            "",
+            "Next steps",
+            next_step,
+            "",
+            f"Review and renew: {manage_url}",
+            "(OctoAssist > Settings > Software Subscriptions)",
+            "",
+            "This summary is sent once a day at 09:00 IST and only while at least one "
+            "subscription needs attention.",
+            "",
+            "Best regards,",
+            "IT Service Desk",
+            "OctoAssist",
+            "",
+            "This is an automated notification. Please do not reply to this email.",
+        ]
+        body_text = "\n".join(lines) + "\n"
+
+        # ---- HTML ----
+        td = "padding:9px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;vertical-align:top;"
+        cells = []
+        for i, s in enumerate(rows, 1):
+            days = (s.expires_on - today).days
+            if days < 0:
+                colour, badge_bg = "#b91c1c", "#fee2e2"
+            elif days <= 7:
+                colour, badge_bg = "#b45309", "#fef3c7"
+            else:
+                colour, badge_bg = "#166534", "#dcfce7"
+            stripe = "background:#ffffff;" if i % 2 else "background:#f9fafb;"
+            badge = (f"<span style='display:inline-block;padding:2px 8px;border-radius:10px;"
+                     f"background:{badge_bg};color:{colour};font-weight:600;font-size:12px;"
+                     f"white-space:nowrap;'>{_esc(_status(days))}</span>")
             cells.append(
-                "<tr>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;'>{_esc(s.software_name)}</td>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;'>{_esc(s.vendor or '—')}</td>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right;'>{_esc(s.seats or '—')}</td>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;'>{s.expires_on.strftime('%d/%m/%Y')}</td>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;color:{colour};font-weight:600;white-space:nowrap;'>{_esc(_when(s))}</td>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #e5e7eb;'>{_esc(s.po_reference or '—')}</td>"
+                f"<tr style='{stripe}'>"
+                f"<td style='{td}text-align:center;color:#6b7280;'>{i}</td>"
+                f"<td style='{td}font-weight:600;color:#111827;'>{_esc(s.software_name)}</td>"
+                f"<td style='{td}'>{_esc(s.vendor) if s.vendor else '&ndash;'}</td>"
+                f"<td style='{td}text-align:right;'>{_esc(s.seats) if s.seats else '&ndash;'}</td>"
+                f"<td style='{td}white-space:nowrap;'>{_fmt_date(s.expires_on)}</td>"
+                f"<td style='{td}'>{badge}</td>"
+                f"<td style='{td}white-space:nowrap;color:{colour};font-weight:600;'>{_esc(_timeframe(days))}</td>"
+                f"<td style='{td}'>{_esc(s.po_reference) if s.po_reference else '&ndash;'}</td>"
                 "</tr>"
             )
+        th = ("padding:10px 12px;text-align:left;background:#0c64c0;color:#ffffff;"
+              "font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;"
+              "white-space:nowrap;")
         header_cells = "".join(
-            f"<th style='padding:6px 10px;text-align:left;border-bottom:2px solid #0c64c0;"
-            f"font-size:12px;text-transform:uppercase;letter-spacing:.4px;'>{h}</th>"
-            for h in ("Software", "Vendor", "Seats", "Expires", "Status", "PO")
+            f"<th style='{th}{extra}'>{h}</th>"
+            for h, extra in (
+                ("#", "text-align:center;"), ("Software", ""), ("Vendor", ""),
+                ("Seats", "text-align:right;"), ("Expiry date", ""), ("Status", ""),
+                ("Time frame", ""), ("PO reference", ""),
+            )
         )
+        p = "margin:0 0 14px;font-size:15px;line-height:1.55;color:#1f2937;"
         body_html = (
-            "<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#1f2937;\">"
-            "<h2 style='margin:0 0 4px;font-size:18px;'>Software subscription expiry</h2>"
-            f"<p style='margin:0 0 14px;color:#6b7280;font-size:13px;'>"
-            f"{_esc(tenant.name)} &middot; horizon next {horizon} days &middot; "
-            f"{_dt.now(IST).strftime('%d-%b-%Y %H:%M IST')}<br>"
-            f"<strong>{len(expired)}</strong> already expired, "
-            f"<strong>{len(upcoming)}</strong> expiring within {horizon} days.</p>"
-            "<table style='border-collapse:collapse;font-size:13px;min-width:640px;'>"
+            "<div style=\"font-family:'Aptos Display','Aptos','Segoe UI',Arial,sans-serif;"
+            "color:#1f2937;max-width:900px;\">"
+            f"<p style='{p}'>Dear Team,</p>"
+            f"<p style='{p}'>This is the daily software subscription summary from OctoAssist for "
+            f"<strong>{_esc(tenant.name)}</strong>, generated on "
+            f"{now_ist.strftime('%A, %d %B %Y at %I:%M %p IST')}.</p>"
+            f"<p style='{p}'><strong>{_esc(summary)}</strong></p>"
+            "<table cellpadding='0' cellspacing='0' style='border-collapse:collapse;width:100%;"
+            "border:1px solid #e5e7eb;margin:4px 0 18px;'>"
             f"<thead><tr>{header_cells}</tr></thead><tbody>{''.join(cells)}</tbody></table>"
-            "<p style='margin:14px 0 0;color:#6b7280;font-size:12px;'>"
-            "Manage these at /subscriptions in OctoAssist.</p></div>"
+            f"<p style='{p}'><strong>Next steps</strong><br>{_esc(next_step)}</p>"
+            f"<p style='{p}'>Review and renew: <a href='{manage_url}' style='color:#0c64c0;'>"
+            f"{manage_url}</a><br>"
+            "<span style='color:#6b7280;font-size:13px;'>OctoAssist &rarr; Settings &rarr; "
+            "Software Subscriptions</span></p>"
+            "<p style='margin:0 0 18px;font-size:13px;color:#6b7280;'>This summary is sent once a "
+            "day at 09:00 IST and only while at least one subscription needs attention.</p>"
+            f"<p style='{p}'>Best regards,<br><strong>IT Service Desk</strong><br>OctoAssist</p>"
+            "<p style='margin:0;font-size:12px;color:#9ca3af;'>This is an automated notification. "
+            "Please do not reply to this email.</p>"
+            "</div>"
         )
 
         _fire(tenant, recipient, subject, body_text, body_html=body_html)
