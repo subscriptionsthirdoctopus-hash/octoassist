@@ -81,20 +81,24 @@ if (-not ($bindings | Where-Object { $_.protocol -eq 'http' })) {
 # ---------------------------------------------------------------- 2. web.config
 $webConfig = Join-Path $webroot 'web.config'
 if (-not (Test-Path -LiteralPath $webConfig)) { Fail "web.config not found at $webConfig" }
-$xmlText = Get-Content -LiteralPath $webConfig -Raw
-$hasRule = $xmlText -match 'OCTO-ACME'
-Write-Host "acme rule : $(if ($hasRule) {'already present'} else {'missing - will be added'})"
+$xmlText = [IO.File]::ReadAllText($webConfig)
+$hasAcme     = $xmlText -match 'name="ACME challenge passthrough"'
+$hasRedirect = $xmlText -match 'name="Redirect HTTP to HTTPS"'
+Write-Host "acme rule : $(if ($hasAcme) {'already present'} else {'missing - will be added'})"
+Write-Host "redirect  : $(if ($hasRedirect) {'already present'} else {'missing - will be added'})"
 
 if ($Check) { Write-Host ''; Write-Host 'Check only - nothing changed.' -ForegroundColor Green; exit 0 }
 
-if (-not $hasRule) {
+if (-not $hasAcme -or -not $hasRedirect) {
     $bk = "$webConfig.bak.$(Get-Date -Format yyyyMMdd-HHmmss)"
     Copy-Item -LiteralPath $webConfig -Destination $bk -Force
     Write-Host "backup    : $bk"
 
-    # Insert ahead of the catch-all reverse-proxy rule so the challenge files
-    # are served from disk. "None" + stopProcessing means: leave this request
-    # to IIS's static file handler and run no further rules.
+    # Both rules go ahead of the catch-all reverse-proxy rule. The ACME rule
+    # must come first: "None" + stopProcessing leaves the challenge file to
+    # IIS's static handler. The redirect then catches every other plain-HTTP
+    # request. Each rule is added independently so a web.config patched by
+    # an earlier version of this script (ACME rule only) gains the redirect.
     $acmeRule = @'
         <!-- OCTO-ACME: Let's Encrypt HTTP validation must be served from disk,
              not proxied to the app. Added by deploy/windows/Install-LetsEncrypt.ps1 -->
@@ -102,6 +106,9 @@ if (-not $hasRule) {
           <match url="^\.well-known/acme-challenge/.*" />
           <action type="None" />
         </rule>
+
+'@
+    $redirectRule = @'
         <!-- OCTO-ACME: everything else that arrives on plain HTTP is sent to
              HTTPS before it can reach the app, so opening port 80 for
              validation never exposes a login page over HTTP. -->
@@ -114,11 +121,20 @@ if (-not $hasRule) {
         </rule>
 
 '@
-    $m = [regex]::Match($xmlText, '(?m)^[ \t]*<rule name="')
-    if (-not $m.Success) { Fail 'Could not find the first <rule> in web.config - add the ACME rule by hand.' }
-    $xmlText = $xmlText.Insert($m.Index, $acmeRule)
+    if (-not $hasAcme) {
+        $m = [regex]::Match($xmlText, '(?m)^[ \t]*<rule name="')
+        if (-not $m.Success) { Fail 'Could not find the first <rule> in web.config - add the ACME rule by hand.' }
+        $xmlText = $xmlText.Insert($m.Index, $acmeRule)
+        Write-Host 'acme rule : added'
+    }
+    if (-not $hasRedirect) {
+        # Directly after the ACME rule, which is now guaranteed to exist.
+        $m = [regex]::Match($xmlText, '(?s)<rule name="ACME challenge passthrough".*?</rule>\r?\n')
+        if (-not $m.Success) { Fail 'Could not find the ACME rule to insert the redirect after.' }
+        $xmlText = $xmlText.Insert($m.Index + $m.Length, $redirectRule)
+        Write-Host 'redirect  : added'
+    }
     [IO.File]::WriteAllText($webConfig, $xmlText, (New-Object Text.UTF8Encoding($false)))
-    Write-Host 'acme rule : added'
 }
 
 # win-acme writes its own web.config inside the challenge folder; make sure the
