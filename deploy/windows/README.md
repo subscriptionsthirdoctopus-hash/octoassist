@@ -53,6 +53,15 @@ Get-Content "C:\ProgramData\OctoAssist\Server\.env"
 
 ## Adding HTTPS (recommended before pilot)
 
+**Public host name (e.g. `octoassist.customer.com`):** run
+`Install-LetsEncrypt.ps1 -Email <it-address>` in an elevated PowerShell. It
+installs win-acme, obtains a free Let's Encrypt certificate over HTTP
+validation (inbound TCP/80 must reach the server), binds it to the IIS site
+and registers automatic renewal. Written after the October 2026 eMudhra CA
+incident; see the script header.
+
+**Internal host name only:**
+
 1. Get an internal CA cert for `octoassist.tema.local` (or self-signed for testing).
 2. In IIS Manager, select the OctoAssist site → **Bindings** → **Add** → type `https`, port `443`, pick the cert.
 3. Replace the URL Rewrite rule's `HTTPS_OR_HTTP` map output to always emit `https`, or add a separate rule that 301-redirects port 80 to 443.
