@@ -9,8 +9,10 @@
 
     What it does, in order:
       1. Finds the IIS site (default name "OctoAssist") and its webroot.
-      2. Adds a rewrite rule so /.well-known/acme-challenge/ is served from
-         disk instead of being proxied to the app. Backs up web.config first.
+      2. Adds two rewrite rules ahead of the reverse proxy: serve
+         /.well-known/acme-challenge/ from disk, and 301-redirect every other
+         plain-HTTP request to HTTPS, so port 80 can never reach the app.
+         Backs up web.config first.
       3. Downloads the latest win-acme release into C:\win-acme.
       4. Runs win-acme unattended: HTTP validation on port 80, certificate for
          the host name, installed into the site's HTTPS binding (replacing the
@@ -22,8 +24,10 @@
       - Inbound TCP/80 must reach this server from the internet during
         validation and at each renewal (Let's Encrypt connects to
         http://<host>/.well-known/acme-challenge/...). If the perimeter
-        firewall only allows 443, ask the network team to allow 80 as well;
-        IIS already listens on it and the site redirects nothing sensitive.
+        firewall only allows 443, ask the network team to allow 80 as well.
+        With the redirect rule this script adds, port 80 serves only the
+        validation path and otherwise redirects to HTTPS, exactly as the
+        Third Octopus droplet and every public HTTPS site do.
       - DNS for the host name must point at this server.
 
         .\Install-LetsEncrypt.ps1 -Email it@temaindia.com
@@ -97,6 +101,16 @@ if (-not $hasRule) {
         <rule name="ACME challenge passthrough" stopProcessing="true">
           <match url="^\.well-known/acme-challenge/.*" />
           <action type="None" />
+        </rule>
+        <!-- OCTO-ACME: everything else that arrives on plain HTTP is sent to
+             HTTPS before it can reach the app, so opening port 80 for
+             validation never exposes a login page over HTTP. -->
+        <rule name="Redirect HTTP to HTTPS" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{HTTPS}" pattern="off" ignoreCase="true" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
         </rule>
 
 '@
