@@ -37,6 +37,18 @@ Only 443 is open on that host — no SSH from outside. Access is RDP on
 `apply-header-fix.sh` is the Linux equivalent of the header fix, kept for the
 droplet and any future Linux host.
 
+## Software subscription reminder email (Oct 2026) — source capture pending
+
+The "[OctoAssist] Software subscription" reminder TEMA receives each morning
+is sent by **their** build, not by the droplet: its wording (S.No / Expiry
+date / Status / Time frame, "Settings → Software Subscriptions") exists
+nowhere in this repository, and the droplet's digest mails zero tenants. The
+professional rewrite landed in `main` as PR #7 (`bb2147b`); to reach TEMA it
+has to be ported as a hand patch. Step one is
+`Collect-SubscriptionEmailSource.ps1` (read-only): run it over RDP, send back
+the ZIP, and the patch (`Patch-SubscriptionEmail.ps1`, marker
+`OCTO-SUBEMAIL`) is written against the captured file.
+
 Both scripts take a timestamped `.bak` beside the file they edit, are guarded by
 a marker so a second run is a no-op, and support `-Rollback`. Backups on the
 server as applied:
