@@ -1,0 +1,107 @@
+name: Deploy Server
+
+# One-click deploy of the server to the production droplet. It runs exactly
+# what an operator otherwise runs by hand from a Mac with the deploy key
+# (deploy/docker/README.md, "Operate"): copy this checkout to
+# /opt/octoassist, rebuild the app image, restart the app container, and
+# confirm /health answers — first on the droplet's loopback port, then on
+# the public hostname. Manual trigger only; nothing deploys on push.
+#
+# Needs one repository secret, DROPLET_SSH_KEY: the private key the droplet's
+# root account trusts (the ~/.ssh/octoassist_deploy key). Everything stateful
+# on the droplet is left alone: deploy/docker/.env, uploads/, backups/, bin/
+# and the Postgres volume.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to deploy"
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+env:
+  DROPLET_HOST: 68.183.246.16
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::Repository secret DROPLET_SSH_KEY is not set. Add the private key the droplet trusts (the octoassist_deploy key) under Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t ed25519,rsa -H "$DROPLET_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host droplet
+            HostName $DROPLET_HOST
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            ConnectTimeout 20
+          EOF
+          ssh droplet 'echo "connected to $(hostname) as $(whoami)"'
+
+      - name: Sync code to /opt/octoassist
+        run: |
+          # Whole tree, additive: never deletes anything on the droplet.
+          rsync -az \
+            --exclude '.git' --exclude '__pycache__' --exclude '.venv' \
+            --exclude '.env' --exclude 'uploads' --exclude 'backups' --exclude 'bin' \
+            ./ droplet:/opt/octoassist/
+          # The image inputs (server/Dockerfile copies these) are mirrored
+          # exactly, so a module removed from the repo leaves the image too.
+          rsync -az --delete --exclude '__pycache__' \
+            server/app/ droplet:/opt/octoassist/server/app/
+          rsync -az --delete --exclude '__pycache__' \
+            agent-py/ droplet:/opt/octoassist/agent-py/
+          ssh droplet 'cd /opt/octoassist && echo "synced: $(ls server/app | wc -l) entries in server/app"'
+
+      - name: Rebuild and restart the app
+        run: |
+          ssh droplet 'set -euo pipefail
+            cd /opt/octoassist/deploy/docker
+            echo "== building image"
+            docker compose build --quiet app
+            echo "== restarting app"
+            docker compose up -d app
+            echo "== waiting for /health on 127.0.0.1:8088"
+            for i in $(seq 1 18); do
+              if curl -fsS --max-time 5 http://127.0.0.1:8088/health >/dev/null 2>&1; then
+                echo "app healthy after $((i*5))s"
+                docker compose ps
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "::error::app did not become healthy within 90s"
+            docker compose ps
+            docker compose logs --tail=80 app
+            exit 1'
+
+      - name: Verify public health
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://octoassist.thirdoctopus.com/health || echo 000)
+          echo "https://octoassist.thirdoctopus.com/health -> HTTP $code"
+          [ "$code" = "200" ]
