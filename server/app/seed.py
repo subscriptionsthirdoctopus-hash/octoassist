@@ -144,6 +144,8 @@ def run(db: Session) -> None:
         ("karthik.iyer@thirdoctopus.com",  "Karthik Iyer",  "OctoAssist!Karthik#2026"),
         ("anjali.desai@thirdoctopus.com",  "Anjali Desai",  "OctoAssist!Anjali#2026"),
         ("pravin.kharat@thirdoctopus.com", "Pravin Kharat", "OctoAssist!Pravin#2026"),
+        ("ranjit.yadav@thirdoctopus.com",  "Ranjit Yadav",  "OctoAssist!Ranjit#2026"),
+        ("moin.shah@thirdoctopus.com",     "Moin Shah",     "OctoAssist!Moin#2026"),
     ]
     created = 0
     for email, full_name, pwd in DEFAULT_TECHNICIANS:
