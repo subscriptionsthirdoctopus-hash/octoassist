@@ -50,8 +50,35 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          # Normalise CRLF and surrounding whitespace, then write the key.
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Validate the secret before touching the droplet, without revealing it.
+          lines=$(wc -l < ~/.ssh/deploy_key)
+          first=$(head -c 40 ~/.ssh/deploy_key)
+          case "$first" in
+            ssh-ed25519*|ssh-rsa*|ecdsa-*)
+              echo "::error::DROPLET_SSH_KEY holds a PUBLIC key (starts with '${first%% *}'). Paste the PRIVATE key instead: the file without .pub, starting with '-----BEGIN ... PRIVATE KEY-----'."
+              exit 1 ;;
+            -----BEGIN*) ;;
+            *)
+              echo "::error::DROPLET_SSH_KEY does not look like a private key (no '-----BEGIN ... PRIVATE KEY-----' header, $lines line(s)). Paste the full contents of the private key file, including the BEGIN and END lines."
+              exit 1 ;;
+          esac
+          if [ "$lines" -lt 3 ]; then
+            echo "::error::DROPLET_SSH_KEY is on $lines line(s); the line breaks were lost when pasting. Re-copy with 'cat ~/.ssh/octoassist_deploy | pbcopy' and paste again."
+            exit 1
+          fi
+          if ! out=$(ssh-keygen -y -P '' -f ~/.ssh/deploy_key 2>&1); then
+            case "$out" in
+              *passphrase*)
+                echo "::error::DROPLET_SSH_KEY is protected by a passphrase, which an unattended deploy cannot enter. Create a passphrase-free deploy key (ssh-keygen -t ed25519 -N '' -f ~/.ssh/octoassist_deploy_ci), add its .pub to /root/.ssh/authorized_keys on the droplet, and store that private key as the secret." ;;
+              *)
+                echo "::error::DROPLET_SSH_KEY failed to parse as a private key ($lines lines): ${out%%$'\n'*}. Re-copy the whole private key file and paste it again." ;;
+            esac
+            exit 1
+          fi
+          echo "deploy key parsed OK: ${out%% *} key, fingerprint $(ssh-keygen -lf ~/.ssh/deploy_key | awk '{print $2}')"
           ssh-keyscan -t ed25519,rsa -H "$DROPLET_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           cat > ~/.ssh/config <<EOF
           Host droplet
