@@ -134,7 +134,7 @@ def run(db: Session) -> None:
         log.info("Seeded default Service Catalog Items")
 
 
-    # Seed 4 technician (agent) licences. Idempotent — only creates if the
+    # Seed technician (agent) licences. Idempotent — only creates if the
     # email isn't already present. Initial password follows a predictable
     # pattern so the admin can communicate it to each tech for first login;
     # they must change it themselves on first sign-in (manual flow for now).
@@ -143,6 +143,7 @@ def run(db: Session) -> None:
         ("priya.sharma@thirdoctopus.com",  "Priya Sharma",  "OctoAssist!Priya#2026"),
         ("karthik.iyer@thirdoctopus.com",  "Karthik Iyer",  "OctoAssist!Karthik#2026"),
         ("anjali.desai@thirdoctopus.com",  "Anjali Desai",  "OctoAssist!Anjali#2026"),
+        ("pravin.kharat@thirdoctopus.com", "Pravin Kharat", "OctoAssist!Pravin#2026"),
     ]
     created = 0
     for email, full_name, pwd in DEFAULT_TECHNICIANS:
